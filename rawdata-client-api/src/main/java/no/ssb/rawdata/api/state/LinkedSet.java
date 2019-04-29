@@ -6,6 +6,8 @@ import java.util.Set;
 
 public class LinkedSet {
 
+    @SafeVarargs
+    @SuppressWarnings("varargs")
     public static <E> Set<E> of(E... elements) {
         return new LinkedHashSet<>(List.of(elements));
     }

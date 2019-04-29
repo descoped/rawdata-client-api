@@ -22,6 +22,7 @@ public class PersistenceQueue<T> implements Closeable {
         noMoreUpStreamItemsAllowed = newNoMoreUpStreamItemsAllowed();
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T newNoMoreUpStreamItemsAllowed() {
         try {
             return (T) Class.forName(getClass().getGenericSuperclass().getTypeName()).getDeclaredConstructor(new Class[]{}).newInstance(new Object[]{});
