@@ -1,5 +1,6 @@
 package no.ssb.rawdata.api.util;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
@@ -26,9 +27,20 @@ public class FileAndClasspathReaderUtils {
             utf8Str = getResourceAsString(path, StandardCharsets.UTF_8);
         }
         if (utf8Str == null) {
+            utf8Str = getClassLoaderResourceAsString(path);
+        }
+        if (utf8Str == null) {
             throw new IllegalArgumentException("Resource not found: " + path);
         }
         return utf8Str;
+    }
+
+    public static String getClassLoaderResourceAsString(String path) {
+        try {
+            return new String(FileAndClasspathReaderUtils.class.getClassLoader().getResourceAsStream(path).readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static String getResourceAsString(String path, Charset charset) {
