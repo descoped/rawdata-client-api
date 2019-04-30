@@ -49,11 +49,19 @@ public interface RawdataClient extends Closeable {
     String firstPosition(String namespace);
 
     /**
+     * Get the last position for namespace
+     *
+     * @param namespace
+     * @return
+     */
+    String lastPosition(String namespace);
+
+    /**
      * Get the next position for namespace
      *
      * @return
      */
-    String nextPosition(String namespacev);
+    String nextPosition(String namespace);
 
     /**
      * Publish expected positions in a guaranteed sequence that will be written to the bucket
