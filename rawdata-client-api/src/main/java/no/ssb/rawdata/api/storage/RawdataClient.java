@@ -44,6 +44,7 @@ public interface RawdataClient extends Closeable {
     /**
      * Get the first position for namespace
      *
+     * @param namespace
      * @return
      */
     String firstPosition(String namespace);
@@ -59,9 +60,20 @@ public interface RawdataClient extends Closeable {
     /**
      * Get the next position for namespace
      *
+     * @param namespace
      * @return
      */
     String nextPosition(String namespace);
+
+    /**
+     * Find offset position
+     *
+     * @param namespace
+     * @param fromPosition The a given from position
+     * @param offset Number of positions ahead
+     * @return Offset position
+     */
+    String offsetPosition(String namespace, String fromPosition, int offset);
 
     /**
      * Publish expected positions in a guaranteed sequence that will be written to the bucket
