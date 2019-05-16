@@ -9,17 +9,18 @@ import java.util.Set;
 
 public interface StatePersistence extends Closeable {
 
-    Single<Boolean> expectedPagePositions(String namespace, Set<String> pagePositions);
-
     Single<Boolean> trackCompletedPositions(String namespace, Set<String> completedPositions);
 
     Maybe<String> getFirstPosition(String namespace);
 
     Maybe<String> getLastPosition(String namespace);
 
+    Single<Boolean> setNextPosition(String namespace, String nextPosition);
+
     Maybe<String> getNextPosition(String namespace);
 
     Maybe<String> getOffsetPosition(String namespace, String fromPositon, int offset);
 
     Flowable<CompletedPosition> readPositions(String namespace, String fromPosition, String toPosition);
+
 }

@@ -76,20 +76,12 @@ public interface RawdataClient extends Closeable {
     String offsetPosition(String namespace, String fromPosition, int offset);
 
     /**
-     * Publish expected positions in a guaranteed sequence that will be written to the bucket
-     *
-     * @param namespace
-     * @param expectedPositions
-     */
-    void publishExpectedPositions(String namespace, Set<String> expectedPositions);
-
-    /**
      * Publish completed positions in a guaranteed sequence that has been written to the bucket
      *
      * @param namespace
      * @param completedPositions
      */
-    void publishCompletedPositions(String namespace, Set<String> completedPositions);
+    void publish(String namespace, Set<String> completedPositions);
 
     /**
      * Subscribe to new completed positions. The subscriber is guaranteed to receive positions in an ordered sequence.
@@ -98,6 +90,6 @@ public interface RawdataClient extends Closeable {
      * @param fromPosition
      * @return
      */
-    Flowable<CompletedPosition> subscribe(String namespace, String fromPosition);
+    Flowable<CompletedPosition> subscription(String namespace, String fromPosition);
 
 }
