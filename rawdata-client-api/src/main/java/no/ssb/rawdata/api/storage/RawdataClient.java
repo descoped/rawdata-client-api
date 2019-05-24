@@ -1,7 +1,6 @@
 package no.ssb.rawdata.api.storage;
 
 import io.reactivex.Flowable;
-import no.ssb.rawdata.api.state.CompletedPosition;
 
 import java.io.Closeable;
 import java.util.Set;
@@ -9,7 +8,7 @@ import java.util.Set;
 /**
  * Rawdata Client provides I/O for the rawdata store.
  */
-public interface RawdataClient extends Closeable {
+public interface RawdataClient<T> extends Closeable {
 
     /**
      * Read file from bucket
@@ -90,6 +89,6 @@ public interface RawdataClient extends Closeable {
      * @param fromPosition
      * @return
      */
-    Flowable<CompletedPosition> subscription(String namespace, String fromPosition);
+    Flowable<T> subscription(String namespace, String fromPosition);
 
 }
