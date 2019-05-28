@@ -8,7 +8,7 @@
     <packaging>jar</packaging>
 
     <name>Rawdata Client API</name>
-    <description>Service Provider API</description>
+    <description>Rawdata Client API</description>
     <url>https://github.com/statisticsnorway/</url>
     <inceptionYear>2019</inceptionYear>
 
