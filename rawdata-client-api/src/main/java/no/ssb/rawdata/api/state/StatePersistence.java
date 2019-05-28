@@ -5,11 +5,11 @@ import io.reactivex.Maybe;
 import io.reactivex.Single;
 
 import java.io.Closeable;
-import java.util.Set;
+import java.util.List;
 
 public interface StatePersistence extends Closeable {
 
-    Single<Boolean> trackCompletedPositions(String namespace, Set<String> completedPositions);
+    Single<Boolean> trackCompletedPositions(String namespace, List<String> completedPositions);
 
     Maybe<String> getFirstPosition(String namespace);
 

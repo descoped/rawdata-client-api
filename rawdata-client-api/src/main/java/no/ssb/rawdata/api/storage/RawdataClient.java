@@ -3,7 +3,7 @@ package no.ssb.rawdata.api.storage;
 import io.reactivex.Flowable;
 
 import java.io.Closeable;
-import java.util.Set;
+import java.util.List;
 
 /**
  * Rawdata Client provides I/O for the rawdata store.
@@ -38,7 +38,7 @@ public interface RawdataClient<T> extends Closeable {
      * @param toPosition
      * @return
      */
-    Set<String> list(String namespace, String fromPosition, String toPosition);
+    List<String> list(String namespace, String fromPosition, String toPosition);
 
     /**
      * Get the first position for namespace
@@ -80,7 +80,7 @@ public interface RawdataClient<T> extends Closeable {
      * @param namespace
      * @param completedPositions
      */
-    void publish(String namespace, Set<String> completedPositions);
+    void publish(String namespace, List<String> completedPositions);
 
     /**
      * Subscribe to new completed positions. The subscriber is guaranteed to receive positions in an ordered sequence.
