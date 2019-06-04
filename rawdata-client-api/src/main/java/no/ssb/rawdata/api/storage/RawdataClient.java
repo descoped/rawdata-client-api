@@ -57,14 +57,6 @@ public interface RawdataClient<T> extends Closeable {
     String lastPosition(String namespace);
 
     /**
-     * Get the next position for namespace
-     *
-     * @param namespace
-     * @return
-     */
-    String nextPosition(String namespace);
-
-    /**
      * Find offset position
      *
      * @param namespace

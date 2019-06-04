@@ -15,10 +15,6 @@ public interface StatePersistence extends Closeable {
 
     Maybe<String> getLastPosition(String namespace);
 
-    Single<Boolean> setNextPosition(String namespace, String nextPosition);
-
-    Maybe<String> getNextPosition(String namespace);
-
     Maybe<String> getOffsetPosition(String namespace, String fromPositon, int offset);
 
     Flowable<CompletedPosition> readPositions(String namespace, String fromPosition, String toPosition);
