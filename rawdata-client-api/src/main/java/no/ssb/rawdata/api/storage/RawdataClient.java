@@ -1,9 +1,11 @@
 package no.ssb.rawdata.api.storage;
 
 import io.reactivex.Flowable;
+import no.ssb.rawdata.api.persistence.Disposable;
 
 import java.io.Closeable;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Rawdata Client provides I/O for the rawdata store.
@@ -82,5 +84,14 @@ public interface RawdataClient<T> extends Closeable {
      * @return
      */
     Flowable<T> subscription(String namespace, String fromPosition);
+
+    /**
+     *
+     *
+     * @param namespace
+     * @param fromPosition
+     * @param completedPosition
+     */
+    Disposable subscribe(String namespace, String fromPosition, Consumer<T> completedPosition);
 
 }
