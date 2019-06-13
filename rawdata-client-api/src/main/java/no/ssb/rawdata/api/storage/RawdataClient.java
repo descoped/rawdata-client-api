@@ -83,10 +83,11 @@ public interface RawdataClient<T> extends Closeable {
      * @param fromPosition
      * @return
      */
+    @Deprecated
     Flowable<T> subscription(String namespace, String fromPosition);
 
     /**
-     *
+     * Subscribe to new completed positions. The subscriber is guaranteed to receive positions in an ordered sequence.
      *
      * @param namespace
      * @param fromPosition

@@ -6,6 +6,9 @@ module no.ssb.rawdata.api {
     requires no.ssb.service.provider.api;
     requires io.reactivex.rxjava2;
     requires org.reactivestreams;
+    requires jackson.annotations;
+    requires com.fasterxml.jackson.core;
+    requires com.fasterxml.jackson.databind;
     requires java.sql;
     requires org.slf4j;
 
