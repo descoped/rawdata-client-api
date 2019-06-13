@@ -35,22 +35,20 @@ public class Subscription implements Disposable {
     }
 
     public Disposable subscribe(Consumer<CompletedPosition> completedPositionConsumer) {
-        AtomicReference<String> firstPositionHandled = new AtomicReference<>();
-        AtomicReference<String> fromPositionRef = new AtomicReference<>();
+        AtomicBoolean hasHandledFirstPosition = new AtomicBoolean();
+        AtomicReference<String> fromPositionRef = new AtomicReference<>(fromPosition);
 
         CompletableFuture<Void> future = CompletableFuture
                 .supplyAsync(() -> {
                     while (!endOfStream.get()) {
-                        String newFromPosition = statePersistence.getFirstPosition(namespace).blockingGet();
-
-                        if (newFromPosition == null) {
-                            nap(250L);
-                            continue;
-                        }
-
                         if (fromPositionRef.get() == null) {
-                            fromPositionRef.set(newFromPosition);
+                            String newFromPosition = statePersistence.getFirstPosition(namespace).blockingGet();
 
+                            if (newFromPosition == null) {
+                                nap(250L);
+                                continue;
+                            }
+                            fromPositionRef.set(newFromPosition);
                         }
 
                         String toPosition = statePersistence.getLastPosition(namespace).blockingGet();
@@ -58,10 +56,10 @@ public class Subscription implements Disposable {
                         Flowable<CompletedPosition> flowable = statePersistence.readPositions(namespace, fromPositionRef.get(), toPosition);
                         flowable.subscribe(
                                 onNext -> {
-                                    if (firstPositionHandled.get() == null) {
+                                    if (!hasHandledFirstPosition.get()) {
                                         completedPositionConsumer.accept(onNext);
                                         fromPositionRef.set(onNext.position);
-                                        firstPositionHandled.set(onNext.position);
+                                        hasHandledFirstPosition.set(true);
                                         return;
                                     }
 

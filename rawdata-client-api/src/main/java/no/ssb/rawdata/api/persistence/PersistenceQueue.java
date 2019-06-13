@@ -8,6 +8,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class PersistenceQueue<T> implements Closeable {
 
@@ -55,7 +56,12 @@ public class PersistenceQueue<T> implements Closeable {
                         return;
                     }
 
-                    T task = blockingQueue.take();
+                    T task = blockingQueue.poll(1L, TimeUnit.SECONDS);
+
+                    if (task == null) {
+                        continue;
+                    }
+
                     if (task == noMoreUpStreamItemsAllowed) {
                         blockingQueue.add(noMoreUpStreamItemsAllowed); // ensure that multiple subscribers get a complete signal
                         emitter.onComplete();
