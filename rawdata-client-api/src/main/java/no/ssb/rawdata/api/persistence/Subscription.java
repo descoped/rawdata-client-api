@@ -37,6 +37,7 @@ public class Subscription implements Disposable {
     public Disposable subscribe(Consumer<CompletedPosition> completedPositionConsumer) {
         AtomicReference<String> firstPositionHandled = new AtomicReference<>();
         AtomicReference<String> fromPositionRef = new AtomicReference<>();
+
         CompletableFuture<Void> future = CompletableFuture
                 .supplyAsync(() -> {
                     while (!endOfStream.get()) {
