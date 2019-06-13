@@ -58,11 +58,12 @@ public class FileSegments {
         jsonFileArray = objectMapper().createArrayNode();
     }
 
-    public void write(String filename, byte[] data) {
+    public FileSegments write(String filename, byte[] data) {
         ObjectNode jsonFileNode = objectMapper().createObjectNode();
         String base64encodedData = new String(Base64.getEncoder().encode(data), StandardCharsets.UTF_8);
         jsonFileNode.put(filename, base64encodedData);
         jsonFileArray.add(jsonFileNode);
+        return this;
     }
 
     public byte[] read(byte[] data, String filename) {
