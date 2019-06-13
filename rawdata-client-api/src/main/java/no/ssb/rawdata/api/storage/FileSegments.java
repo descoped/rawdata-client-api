@@ -6,9 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -16,84 +14,73 @@ import java.util.List;
 
 public class FileSegments {
 
-    static final ObjectMapper OBJECT_MAPPER;
-
-    static {
-        OBJECT_MAPPER = new ObjectMapper();
-    }
+    static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ArrayNode jsonFileArray;
 
-    public static ObjectMapper objectMapper() {
-        return OBJECT_MAPPER;
+    private FileSegments() {
+        jsonFileArray = OBJECT_MAPPER.createArrayNode();
     }
 
-    public static <T> T fromJson(InputStream source, Class<T> clazz) {
+    private FileSegments(byte[] data) {
         try {
-            String json = new String(source.readAllBytes(), StandardCharsets.UTF_8);
-            return objectMapper().readValue(json, clazz);
+            jsonFileArray = OBJECT_MAPPER.readValue(data, ArrayNode.class);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static String toJSON(Object value) {
-        try {
-            return objectMapper().writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+    public static FileSegments create() {
+        return new FileSegments();
     }
 
-    public static String toPrettyJSON(Object value) {
-        try {
-            return objectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-
-    public FileSegments() {
-        jsonFileArray = objectMapper().createArrayNode();
+    public static FileSegments parse(byte[] data) {
+        return new FileSegments(data);
     }
 
     public FileSegments write(String filename, byte[] data) {
-        ObjectNode jsonFileNode = objectMapper().createObjectNode();
+        ObjectNode jsonFileNode = OBJECT_MAPPER.createObjectNode();
         String base64encodedData = new String(Base64.getEncoder().encode(data), StandardCharsets.UTF_8);
         jsonFileNode.put(filename, base64encodedData);
         jsonFileArray.add(jsonFileNode);
         return this;
     }
 
-    public byte[] read(byte[] data, String filename) {
-        ArrayNode metadataArrayNode = fromJson(new ByteArrayInputStream(data), ArrayNode.class);
+    public byte[] read(String filename) {
         byte[] result = null;
-        for(int n = 0; n < metadataArrayNode.size(); n++) {
-            JsonNode fileEntry = metadataArrayNode.get(n);
+        for (int n = 0; n < jsonFileArray.size(); n++) {
+            JsonNode fileEntry = jsonFileArray.get(n);
             JsonNode jsonNode = fileEntry.get(filename);
             if (jsonNode != null) {
                 result = Base64.getDecoder().decode(jsonNode.asText().getBytes());
+                break;
             }
         }
         return result;
     }
 
-    public List<String> list(byte[] data) {
-        ArrayNode metadataArrayNode = fromJson(new ByteArrayInputStream(data), ArrayNode.class);
+    public List<String> list() {
         List<String> result = new ArrayList<>();
-        for(int n = 0; n < metadataArrayNode.size(); n++) {
-            JsonNode fileEntry = metadataArrayNode.get(n);
+        for (int n = 0; n < jsonFileArray.size(); n++) {
+            JsonNode fileEntry = jsonFileArray.get(n);
             result.add(fileEntry.fieldNames().next());
         }
         return result;
     }
 
     public String asJson() {
-        return toPrettyJSON(jsonFileArray);
+        try {
+            return OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonFileArray);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public byte[] toByteArray() {
-        return toJSON(jsonFileArray).getBytes();
+        try {
+            return OBJECT_MAPPER.writeValueAsString(jsonFileArray).getBytes();
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

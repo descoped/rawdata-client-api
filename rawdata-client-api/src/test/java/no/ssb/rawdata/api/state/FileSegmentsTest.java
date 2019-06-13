@@ -16,7 +16,7 @@ public class FileSegmentsTest {
 
     @Test
     public void testName() {
-        FileSegments fileSegments = new FileSegments();
+        FileSegments fileSegments = FileSegments.create();
         fileSegments.write("file1.txt", file1);
         fileSegments.write("file2.txt", file2);
         fileSegments.write("file3.txt", file3);
@@ -24,10 +24,13 @@ public class FileSegmentsTest {
         String json = fileSegments.asJson();
         System.out.printf("%s%n", json);
 
-        byte[] actualfile1 = fileSegments.read(json.getBytes(), "file1.txt");
+        byte[] actualfile1 = fileSegments.read("file1.txt");
         assertEquals(actualfile1, file1);
 
-        List<String> files = fileSegments.list(json.getBytes());
+        List<String> files = fileSegments.list();
         System.out.printf("%s%n", files.stream().collect(Collectors.joining(",")));
+
+        FileSegments parsed = FileSegments.parse(fileSegments.toByteArray());
+        assertEquals(fileSegments.toByteArray(), parsed.toByteArray());
     }
 }
