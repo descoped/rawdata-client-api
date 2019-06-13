@@ -92,4 +92,8 @@ public class FileSegments {
     public String asJson() {
         return toPrettyJSON(jsonFileArray);
     }
+
+    public byte[] toByteArray() {
+        return toJSON(jsonFileArray).getBytes();
+    }
 }
