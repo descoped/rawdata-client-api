@@ -38,7 +38,7 @@ public class Subscription implements Disposable {
         AtomicBoolean hasHandledFirstPosition = new AtomicBoolean();
         AtomicReference<String> fromPositionRef = new AtomicReference<>(fromPosition);
 
-        CompletableFuture<Void> future = CompletableFuture
+        CompletableFuture<Object> future = CompletableFuture
                 .supplyAsync(() -> {
                     while (!endOfStream.get()) {
                         if (fromPositionRef.get() == null) {
@@ -68,14 +68,19 @@ public class Subscription implements Disposable {
                                         fromPositionRef.set(onNext.position);
                                     }
                                 },
-                                onError -> onError.printStackTrace(),
+                                onError -> {
+                                    throw new RuntimeException(onError);
+                                },
                                 () -> {
                                 }
                         );
                         nap(250L);
                     }
                     return null;
-                }, executor);
+                }, executor)
+                .exceptionally(throwable -> {
+                    throw new RuntimeException(throwable);
+                });
 
         executor.submit(future::join);
         return this;
