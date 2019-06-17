@@ -6,6 +6,8 @@ import no.ssb.rawdata.api.state.StatePersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,6 +25,7 @@ public class Subscription implements Disposable {
     private final StatePersistence statePersistence;
     private final String namespace;
     private final String fromPosition;
+    private final AtomicReference<Throwable> failedException = new AtomicReference<>();
 
     public Subscription(PersistenceQueue<CompletedPosition> persistenceQueue,
                         StatePersistence statePersistence,
@@ -68,17 +71,29 @@ public class Subscription implements Disposable {
                                         fromPositionRef.set(onNext.position);
                                     }
                                 },
-                                onError -> {
-                                    throw new RuntimeException(onError);
-                                },
+                                failedException::set,
                                 () -> {
                                 }
                         );
+
+                        if (failedException.get() != null) {
+                            return null;
+                        }
+
                         nap(250L);
                     }
                     return null;
                 }, executor)
                 .exceptionally(throwable -> {
+                    if (!failedException.compareAndSet(null, throwable)) {
+                        LOG.error("Unable to store throwable in failedException, already set. Current exception: {}", captureStackTrace(throwable));
+                    }
+                    if (throwable instanceof RuntimeException) {
+                        throw (RuntimeException) throwable;
+                    }
+                    if (throwable instanceof Error) {
+                        throw (Error) throwable;
+                    }
                     throw new RuntimeException(throwable);
                 });
 
@@ -93,6 +108,14 @@ public class Subscription implements Disposable {
             throw new RuntimeException(e);
         }
     }
+
+    private static String captureStackTrace(Throwable e) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        return sw.toString();
+    }
+
 
     void shutdownAndAwaitTermination() {
         LOG.info("Shutdown Subscription..");
