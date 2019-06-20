@@ -7,22 +7,20 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
-public class FileSegments {
+public class StreamFileRepresentation {
 
     static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ArrayNode jsonFileArray;
 
-    private FileSegments() {
+    private StreamFileRepresentation() {
         jsonFileArray = OBJECT_MAPPER.createArrayNode();
     }
 
-    private FileSegments(byte[] data) {
+    private StreamFileRepresentation(byte[] data) {
         try {
             jsonFileArray = OBJECT_MAPPER.readValue(data, ArrayNode.class);
         } catch (IOException e) {
@@ -30,18 +28,17 @@ public class FileSegments {
         }
     }
 
-    public static FileSegments create() {
-        return new FileSegments();
+    public static StreamFileRepresentation create() {
+        return new StreamFileRepresentation();
     }
 
-    public static FileSegments parse(byte[] data) {
-        return new FileSegments(data);
+    public static StreamFileRepresentation parse(byte[] data) {
+        return new StreamFileRepresentation(data);
     }
 
-    public FileSegments write(String filename, byte[] data) {
+    public StreamFileRepresentation write(String filename, byte[] data) {
         ObjectNode jsonFileNode = OBJECT_MAPPER.createObjectNode();
-        String base64encodedData = new String(Base64.getEncoder().encode(data), StandardCharsets.UTF_8);
-        jsonFileNode.put(filename, base64encodedData);
+        jsonFileNode.put(filename, data);
         jsonFileArray.add(jsonFileNode);
         return this;
     }
@@ -52,7 +49,11 @@ public class FileSegments {
             JsonNode fileEntry = jsonFileArray.get(n);
             JsonNode jsonNode = fileEntry.get(filename);
             if (jsonNode != null) {
-                result = Base64.getDecoder().decode(jsonNode.asText().getBytes());
+                try {
+                    result = jsonNode.binaryValue();
+                } catch (IOException e) {
+                    throw new RuntimeException();
+                }
                 break;
             }
         }
