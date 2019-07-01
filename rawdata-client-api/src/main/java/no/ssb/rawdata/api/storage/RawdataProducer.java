@@ -1,5 +1,7 @@
 package no.ssb.rawdata.api.storage;
 
+import java.util.List;
+
 public interface RawdataProducer {
 
     /**
@@ -9,8 +11,8 @@ public interface RawdataProducer {
      */
     String lastPosition();
 
-    void write(RawdataMessageContent content);
+    RawdataMessageId write(RawdataMessageContent content);
 
-    void publish();
+    void publish(List<String> positions);
 
 }
