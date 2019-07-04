@@ -58,4 +58,8 @@ class MemoryRawdataProducer implements RawdataProducer {
             topic.unlock();
         }
     }
+
+    @Override
+    public void close() {
+    }
 }

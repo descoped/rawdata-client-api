@@ -24,4 +24,8 @@ public class MemoryRawdataClient implements RawdataClient {
                         )
                 );
     }
+
+    @Override
+    public void close() {
+    }
 }

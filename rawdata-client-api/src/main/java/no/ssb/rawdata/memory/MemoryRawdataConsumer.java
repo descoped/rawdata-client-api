@@ -70,4 +70,8 @@ class MemoryRawdataConsumer implements RawdataConsumer {
                 ", position=" + position.get() +
                 '}';
     }
+
+    @Override
+    public void close() {
+    }
 }

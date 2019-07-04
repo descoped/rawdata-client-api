@@ -2,7 +2,7 @@ package no.ssb.rawdata.api;
 
 import java.util.List;
 
-public interface RawdataProducer {
+public interface RawdataProducer extends AutoCloseable {
 
     /**
      * Get the last externalId in the stream

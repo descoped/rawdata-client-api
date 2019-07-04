@@ -1,6 +1,6 @@
 package no.ssb.rawdata.api;
 
-public interface RawdataClient {
+public interface RawdataClient extends AutoCloseable {
 
     RawdataProducer producer(String topic);
 
