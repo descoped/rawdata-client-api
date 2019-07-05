@@ -1,24 +1,51 @@
-package no.ssb.rawdata.memory;
+package no.ssb.rawdata.tck;
 
 import no.ssb.rawdata.api.RawdataClient;
+import no.ssb.rawdata.api.RawdataClientInitializer;
 import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataMessage;
+import no.ssb.rawdata.api.RawdataMessageContent;
 import no.ssb.rawdata.api.RawdataProducer;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.testng.Assert.assertEquals;
 
-public class MemoryRawdataClientTest {
+public class RawdataClientTck {
+
+    static String getConfiguredProvider() {
+        return "no.ssb.rawdata.memory.MemoryRawdataClientInitializer";
+    }
+
+    RawdataClient client;
+
+    @BeforeMethod
+    public void createRawdataClient() {
+        String configuredProvider = getConfiguredProvider();
+        ServiceLoader<RawdataClientInitializer> loader = ServiceLoader.load(RawdataClientInitializer.class);
+        client = loader.stream()
+                .filter(provider -> configuredProvider.equals(provider.type().getName()))
+                .findFirst()
+                .orElseThrow()
+                .get()
+                .initialize(Map.of());
+    }
+
+    @AfterMethod
+    public void closeRawdataClient() throws Exception {
+        client.close();
+    }
 
     @Test
     public void thatLastExternalIdOfEmptyTopicCanBeReadByProducer() {
-        RawdataClient client = new MemoryRawdataClient();
         RawdataProducer producer = client.producer("the-topic");
 
         assertEquals(producer.lastExternalId(), null);
@@ -26,16 +53,15 @@ public class MemoryRawdataClientTest {
 
     @Test
     public void thatLastExternalIdOfProducerCanBeRead() {
-        RawdataClient client = new MemoryRawdataClient();
         RawdataProducer producer = client.producer("the-topic");
 
-        producer.buffer(new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5])));
-        producer.buffer(new MemoryRawdataMessageContent("b", Map.of("payload", new byte[3])));
+        producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+        producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
         producer.publish("a", "b");
 
         assertEquals(producer.lastExternalId(), "b");
 
-        producer.buffer(new MemoryRawdataMessageContent("c", Map.of("payload", new byte[7])));
+        producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
         producer.publish("c");
 
         assertEquals(producer.lastExternalId(), "c");
@@ -43,12 +69,10 @@ public class MemoryRawdataClientTest {
 
     @Test
     public void thatSingleMessageCanBeProducedAndConsumerSynchronously() throws InterruptedException {
-        RawdataClient client = new MemoryRawdataClient();
         RawdataProducer producer = client.producer("the-topic");
         RawdataConsumer consumer = client.consumer("the-topic", "sub1");
 
-        MemoryRawdataMessageContent expected1 = new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5]));
-        producer.buffer(expected1);
+        RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
         producer.publish(expected1.externalId());
 
         RawdataMessage message = consumer.receive(1, TimeUnit.SECONDS);
@@ -57,14 +81,12 @@ public class MemoryRawdataClientTest {
 
     @Test
     public void thatSingleMessageCanBeProducedAndConsumerAsynchronously() {
-        RawdataClient client = new MemoryRawdataClient();
         RawdataProducer producer = client.producer("the-topic");
         RawdataConsumer consumer = client.consumer("the-topic", "sub1");
 
         CompletableFuture<? extends RawdataMessage> future = consumer.receiveAsync();
 
-        MemoryRawdataMessageContent expected1 = new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5]));
-        producer.buffer(expected1);
+        RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
         producer.publish(expected1.externalId());
 
         RawdataMessage message = future.join();
@@ -72,17 +94,13 @@ public class MemoryRawdataClientTest {
     }
 
     @Test
-    public void thatMultipleMessageCanBeProducedAndConsumerSynchronously() throws InterruptedException {
-        RawdataClient client = new MemoryRawdataClient();
+    public void thatMultipleMessagesCanBeProducedAndConsumerSynchronously() throws InterruptedException {
         RawdataProducer producer = client.producer("the-topic");
         RawdataConsumer consumer = client.consumer("the-topic", "sub1");
 
-        MemoryRawdataMessageContent expected1 = new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5]));
-        MemoryRawdataMessageContent expected2 = new MemoryRawdataMessageContent("b", Map.of("payload", new byte[3]));
-        MemoryRawdataMessageContent expected3 = new MemoryRawdataMessageContent("c", Map.of("payload", new byte[7]));
-        producer.buffer(expected1);
-        producer.buffer(expected2);
-        producer.buffer(expected3);
+        RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+        RawdataMessageContent expected2 = producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
+        RawdataMessageContent expected3 = producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
         producer.publish(expected1.externalId(), expected2.externalId(), expected3.externalId());
 
         RawdataMessage message1 = consumer.receive(1, TimeUnit.SECONDS);
@@ -94,19 +112,15 @@ public class MemoryRawdataClientTest {
     }
 
     @Test
-    public void thatMultipleMessageCanBeProducedAndConsumerAsynchronously() {
-        RawdataClient client = new MemoryRawdataClient();
+    public void thatMultipleMessagesCanBeProducedAndConsumerAsynchronously() {
         RawdataProducer producer = client.producer("the-topic");
         RawdataConsumer consumer = client.consumer("the-topic", "sub1");
 
         CompletableFuture<List<RawdataMessage>> future = receiveAsyncAddMessageAndRepeatRecursive(consumer, "c", new ArrayList<>());
 
-        MemoryRawdataMessageContent expected1 = new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5]));
-        MemoryRawdataMessageContent expected2 = new MemoryRawdataMessageContent("b", Map.of("payload", new byte[3]));
-        MemoryRawdataMessageContent expected3 = new MemoryRawdataMessageContent("c", Map.of("payload", new byte[7]));
-        producer.buffer(expected1);
-        producer.buffer(expected2);
-        producer.buffer(expected3);
+        RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+        RawdataMessageContent expected2 = producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
+        RawdataMessageContent expected3 = producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
         producer.publish(expected1.externalId(), expected2.externalId(), expected3.externalId());
 
         List<RawdataMessage> messages = future.join();
@@ -128,7 +142,6 @@ public class MemoryRawdataClientTest {
 
     @Test
     public void thatMessagesCanBeConsumedByMultipleConsumers() {
-        RawdataClient client = new MemoryRawdataClient();
         RawdataProducer producer = client.producer("the-topic");
         RawdataConsumer consumer1 = client.consumer("the-topic", "sub1");
         RawdataConsumer consumer2 = client.consumer("the-topic", "sub2");
@@ -136,12 +149,9 @@ public class MemoryRawdataClientTest {
         CompletableFuture<List<RawdataMessage>> future1 = receiveAsyncAddMessageAndRepeatRecursive(consumer1, "c", new ArrayList<>());
         CompletableFuture<List<RawdataMessage>> future2 = receiveAsyncAddMessageAndRepeatRecursive(consumer2, "c", new ArrayList<>());
 
-        MemoryRawdataMessageContent expected1 = new MemoryRawdataMessageContent("a", Map.of("payload", new byte[5]));
-        MemoryRawdataMessageContent expected2 = new MemoryRawdataMessageContent("b", Map.of("payload", new byte[3]));
-        MemoryRawdataMessageContent expected3 = new MemoryRawdataMessageContent("c", Map.of("payload", new byte[7]));
-        producer.buffer(expected1);
-        producer.buffer(expected2);
-        producer.buffer(expected3);
+        RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+        RawdataMessageContent expected2 = producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
+        RawdataMessageContent expected3 = producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
         producer.publish(expected1.externalId(), expected2.externalId(), expected3.externalId());
 
         List<RawdataMessage> messages1 = future1.join();

@@ -9,4 +9,12 @@ public interface RawdataMessageContent {
     Set<String> keys();
 
     byte[] get(String key);
+
+    interface Builder {
+        Builder externalId(String externalId);
+
+        Builder put(String key, byte[] payload);
+
+        RawdataMessageContent build();
+    }
 }
