@@ -25,7 +25,7 @@ public interface RawdataConsumer extends AutoCloseable {
      * @throws InterruptedException
      * @throws RawdataClosedException
      */
-    RawdataMessage receive(long timeout, TimeUnit timeUnit) throws InterruptedException, RawdataClosedException;
+    RawdataMessage receive(int timeout, TimeUnit timeUnit) throws InterruptedException, RawdataClosedException;
 
     /**
      * Asynchronously receive a message callback when a new message is available on this consumer.
