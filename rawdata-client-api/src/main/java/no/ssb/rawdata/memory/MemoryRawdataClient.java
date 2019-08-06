@@ -2,30 +2,54 @@ package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClient;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MemoryRawdataClient implements RawdataClient {
 
     final Map<String, MemoryRawdataTopic> topicByName = new ConcurrentHashMap<>();
     final Map<String, Map<String, MemoryRawdataConsumer>> subscriptionByNameByTopic = new ConcurrentHashMap<>();
+    final AtomicBoolean closed = new AtomicBoolean(false);
+    final List<MemoryRawdataProducer> producers = new CopyOnWriteArrayList<>();
+    final List<MemoryRawdataConsumer> consumers = new CopyOnWriteArrayList<>();
 
     @Override
     public MemoryRawdataProducer producer(String topicName) {
-        return new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)));
+        MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)));
+        this.producers.add(producer);
+        return producer;
     }
 
     @Override
     public MemoryRawdataConsumer consumer(String topicName, String subscription) {
-        return subscriptionByNameByTopic.computeIfAbsent(topicName, tn -> new ConcurrentHashMap<>())
+        MemoryRawdataConsumer consumer = subscriptionByNameByTopic.computeIfAbsent(topicName, tn -> new ConcurrentHashMap<>())
                 .computeIfAbsent(subscription, s ->
                         new MemoryRawdataConsumer(topicByName.computeIfAbsent(topicName, t ->
                                 new MemoryRawdataTopic(t)), s, new MemoryRawdataMessageId(topicName, -1)
                         )
                 );
+        consumers.add(consumer);
+        return consumer;
+    }
+
+    @Override
+    public boolean isClosed() {
+        return closed.get();
     }
 
     @Override
     public void close() {
+        for (MemoryRawdataProducer producer : producers) {
+            producer.close();
+        }
+        producers.clear();
+        for (MemoryRawdataConsumer consumer : consumers) {
+            consumer.close();
+        }
+        consumers.clear();
+        closed.set(true);
     }
 }

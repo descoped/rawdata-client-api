@@ -3,6 +3,7 @@ package no.ssb.rawdata.tck;
 import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClientInitializer;
 import no.ssb.rawdata.api.RawdataConsumer;
+import no.ssb.rawdata.api.RawdataContentNotBufferedException;
 import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataMessageContent;
 import no.ssb.rawdata.api.RawdataProducer;
@@ -65,6 +66,12 @@ public class RawdataClientTck {
         producer.publish("c");
 
         assertEquals(producer.lastExternalId(), "c");
+    }
+
+    @Test(expectedExceptions = RawdataContentNotBufferedException.class)
+    public void thatPublishNonBufferedMessagesThrowsException() {
+        RawdataProducer producer = client.producer("the-topic");
+        producer.publish("unbuffered-1");
     }
 
     @Test

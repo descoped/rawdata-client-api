@@ -6,4 +6,5 @@ public interface RawdataClient extends AutoCloseable {
 
     RawdataConsumer consumer(String topic, String subscription);
 
+    boolean isClosed();
 }

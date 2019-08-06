@@ -82,9 +82,13 @@ class MemoryRawdataTopic {
         return true;
     }
 
-    void tryLock() {
+    boolean tryLock() {
+        return lock.tryLock();
+    }
+
+    void tryLock(int timeout, TimeUnit unit) {
         try {
-            if (!lock.tryLock(5, TimeUnit.SECONDS)) {
+            if (!lock.tryLock(timeout, unit)) {
                 throw new RuntimeException("timeout while waiting for lock");
             }
         } catch (InterruptedException e) {
