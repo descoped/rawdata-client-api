@@ -1,8 +1,6 @@
 package no.ssb.rawdata.api;
 
-import java.util.Map;
+import no.ssb.service.provider.api.ProviderInitializer;
 
-public interface RawdataClientInitializer {
-
-    RawdataClient initialize(Map<String, String> configuration);
+public interface RawdataClientInitializer extends ProviderInitializer<RawdataClient> {
 }

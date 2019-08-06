@@ -1,10 +1,10 @@
 package no.ssb.rawdata.api;
 
 import no.ssb.rawdata.memory.MemoryRawdataClient;
+import no.ssb.service.provider.api.ProviderConfigurator;
 import org.testng.annotations.Test;
 
 import java.util.Map;
-import java.util.ServiceLoader;
 
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
@@ -13,8 +13,7 @@ public class RawdataClientProviderTest {
 
     @Test
     public void thatRawdataClientIsAvailableThroughServiceProviderMechanism() {
-        ServiceLoader<RawdataClientInitializer> loader = ServiceLoader.load(RawdataClientInitializer.class);
-        RawdataClient client = loader.stream().findFirst().orElseThrow().get().initialize(Map.of());
+        RawdataClient client = ProviderConfigurator.configure(Map.of(), "memory", RawdataClientInitializer.class);
         assertNotNull(client);
         assertTrue(client instanceof MemoryRawdataClient);
     }
