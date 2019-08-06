@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 public interface RawdataConsumer extends AutoCloseable {
 
     /**
-     * @return the topic from which this consumer will consumer messages from.
+     * @return the topic from which this consumer will consume messages from.
      */
     String topic();
 
