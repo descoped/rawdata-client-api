@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -97,21 +99,45 @@ class MemoryRawdataProducer implements RawdataProducer {
 
     @Override
     public List<? extends RawdataMessageId> publish(String... externalIds) throws RawdataClosedException, RawdataContentNotBufferedException {
+        try {
+            List<CompletableFuture<? extends RawdataMessageId>> futures = publishAsync(externalIds);
+            List<MemoryRawdataMessageId> result = new ArrayList<>();
+            for (CompletableFuture<? extends RawdataMessageId> future : futures) {
+                result.add((MemoryRawdataMessageId) future.join());
+            }
+            return result;
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RawdataContentNotBufferedException) {
+                throw (RawdataContentNotBufferedException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw e;
+        }
+    }
+
+    @Override
+    public List<CompletableFuture<? extends RawdataMessageId>> publishAsync(String... externalIds) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            List<MemoryRawdataMessageId> messageIds = new ArrayList<>();
+            List<CompletableFuture<? extends RawdataMessageId>> futures = new ArrayList<>();
             for (String externalId : externalIds) {
                 MemoryRawdataMessageContent content = buffer.remove(externalId);
                 if (content == null) {
                     throw new RawdataContentNotBufferedException(String.format("externalId %s has not been buffered", externalId));
                 }
                 MemoryRawdataMessageId messageId = topic.write(content);
-                messageIds.add(messageId);
+                futures.add(CompletableFuture.completedFuture(messageId));
             }
-            return messageIds;
+            return futures;
         } finally {
             topic.unlock();
         }

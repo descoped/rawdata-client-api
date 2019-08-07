@@ -41,6 +41,16 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     }
 
     @Override
+    public boolean hasMessageAvailable() {
+        topic.tryLock(5, TimeUnit.SECONDS);
+        try {
+            return topic.hasNext(position.get());
+        } finally {
+            topic.unlock();
+        }
+    }
+
+    @Override
     public MemoryRawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
         long expireTimeNano = System.nanoTime() + unit.toNanos(timeout);
         topic.tryLock(5, TimeUnit.SECONDS);

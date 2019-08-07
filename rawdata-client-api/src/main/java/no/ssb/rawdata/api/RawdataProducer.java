@@ -1,6 +1,7 @@
 package no.ssb.rawdata.api;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public interface RawdataProducer extends AutoCloseable {
 
@@ -67,6 +68,15 @@ public interface RawdataProducer extends AutoCloseable {
      *                                            was not buffered before calling publish.
      */
     List<? extends RawdataMessageId> publish(String... externalIds) throws RawdataClosedException, RawdataContentNotBufferedException;
+
+    /**
+     * Asynchronously publish all buffered content that matches any of the external-ids here provided, then remove those contents from
+     * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
+     *
+     * @param externalIds a list of external-ids
+     * @return a list of completable futures representing each of the asynchronous operations.
+     */
+    List<CompletableFuture<? extends RawdataMessageId>> publishAsync(String... externalIds);
 
     /**
      * Returns whether or not the producer is closed.
