@@ -19,13 +19,6 @@ public interface RawdataConsumer extends AutoCloseable {
     String subscription();
 
     /**
-     * Whether or not there is at least one message available for consumption on the subscription.
-     *
-     * @return Whether there is at least one message available for consumption
-     */
-    boolean hasMessageAvailable();
-
-    /**
      * @param timeout
      * @param timeUnit
      * @return
