@@ -18,6 +18,11 @@ class PostgresTransaction implements Transaction {
     }
 
     @Override
+    public Connection connection() {
+        return connection;
+    }
+
+    @Override
     public CompletableFuture<TransactionStatistics> commit() throws PersistenceException {
         try {
             return CompletableFuture.completedFuture(statistics);

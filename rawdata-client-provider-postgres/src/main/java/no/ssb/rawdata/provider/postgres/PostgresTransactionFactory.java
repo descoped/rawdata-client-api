@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import no.ssb.rawdata.provider.postgres.tx.Transaction;
 import no.ssb.rawdata.provider.postgres.tx.TransactionFactory;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +32,11 @@ public class PostgresTransactionFactory implements TransactionFactory {
         } catch (SQLException e) {
             throw new PersistenceException(e);
         }
+    }
+
+    @Override
+    public DataSource dataSource() {
+        return dataSource;
     }
 
     @Override
