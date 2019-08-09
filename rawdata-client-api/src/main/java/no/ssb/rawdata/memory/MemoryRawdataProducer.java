@@ -15,6 +15,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 class MemoryRawdataProducer implements RawdataProducer {
 
@@ -24,8 +25,11 @@ class MemoryRawdataProducer implements RawdataProducer {
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    MemoryRawdataProducer(MemoryRawdataTopic topic) {
+    private Consumer<MemoryRawdataProducer> closeAction;
+
+    MemoryRawdataProducer(MemoryRawdataTopic topic, Consumer<MemoryRawdataProducer> closeAction) {
         this.topic = topic;
+        this.closeAction = closeAction;
     }
 
     @Override
@@ -150,6 +154,7 @@ class MemoryRawdataProducer implements RawdataProducer {
 
     @Override
     public void close() {
+        closeAction.accept(this);
         closed.set(true);
     }
 }

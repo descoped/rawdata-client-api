@@ -18,7 +18,9 @@ public class MemoryRawdataClient implements RawdataClient {
 
     @Override
     public MemoryRawdataProducer producer(String topicName) {
-        MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)));
+        MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)), p -> {
+            producers.remove(p);
+        });
         this.producers.add(producer);
         return producer;
     }
@@ -28,8 +30,11 @@ public class MemoryRawdataClient implements RawdataClient {
         MemoryRawdataConsumer consumer = subscriptionByNameByTopic.computeIfAbsent(topicName, tn -> new ConcurrentHashMap<>())
                 .computeIfAbsent(subscription, s ->
                         new MemoryRawdataConsumer(topicByName.computeIfAbsent(topicName, t ->
-                                new MemoryRawdataTopic(t)), s, new MemoryRawdataMessageId(topicName, -1)
-                        )
+                                new MemoryRawdataTopic(t)), s,
+                                c -> {
+                                    subscriptionByNameByTopic.get(c.topic()).remove(c.subscription());
+                                    consumers.remove(c);
+                                })
                 );
         consumers.add(consumer);
         return consumer;

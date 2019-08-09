@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 class MemoryRawdataConsumer implements RawdataConsumer {
 
@@ -15,19 +16,25 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     final MemoryRawdataTopic topic;
     final AtomicReference<MemoryRawdataMessageId> position = new AtomicReference<>();
     final AtomicBoolean closed = new AtomicBoolean(false);
+    final Consumer<MemoryRawdataConsumer> closeAction;
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, String subscription, MemoryRawdataMessageId initialPosition) {
+    MemoryRawdataConsumer(MemoryRawdataTopic topic, String subscription, Consumer<MemoryRawdataConsumer> closeAction) {
         this.subscription = subscription;
         this.topic = topic;
+        this.closeAction = closeAction;
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
+            MemoryRawdataMessageId initialPosition = topic.getCheckpoint(subscription);
+            if (initialPosition == null) {
+                initialPosition = new MemoryRawdataMessageId(topic(), -1);
+            }
             if (!topic.isLegalPosition(initialPosition)) {
                 throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.index, topic.topic));
             }
+            this.position.set(initialPosition);
         } finally {
             topic.unlock();
         }
-        this.position.set(initialPosition);
     }
 
     @Override
@@ -56,7 +63,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
                 topic.awaitProduction(durationNano, TimeUnit.NANOSECONDS);
             }
             MemoryRawdataMessage message = topic.readNext(position.get());
-            position.set(message.id()); // auto-acknowledge
+            position.set(message.id());
             return message;
         } finally {
             topic.unlock();
@@ -103,6 +110,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     @Override
     public void close() {
+        closeAction.accept(this);
         closed.set(true);
         if (topic.tryLock()) {
             try {

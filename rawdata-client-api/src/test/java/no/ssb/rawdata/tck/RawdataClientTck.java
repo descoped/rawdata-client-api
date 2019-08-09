@@ -189,4 +189,28 @@ public class RawdataClientTck {
         consumer.acknowledgeAccumulative(messageB.id());
         assertEquals(consumer.lastAcknowledgedMessageId(), messageB.id());
     }
+
+    @Test
+    public void thatConsumerResumingFromMiddleOfTopicWorks() throws Exception {
+        try (RawdataProducer producer = client.producer("the-topic")) {
+            producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+            producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
+            producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
+            producer.buffer(producer.builder().externalId("d").put("payload", new byte[7]));
+            producer.publish("a", "b", "c", "d");
+        }
+        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
+            RawdataMessage messageA = consumer.receive(1, TimeUnit.SECONDS);
+            assertEquals(messageA.content().externalId(), "a");
+            RawdataMessage messageB = consumer.receive(1, TimeUnit.SECONDS);
+            assertEquals(messageB.content().externalId(), "b");
+            consumer.acknowledgeAccumulative(messageB.id());
+        }
+        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
+            RawdataMessage messageC = consumer.receive(1, TimeUnit.SECONDS);
+            assertEquals(messageC.content().externalId(), "c");
+            RawdataMessage messageD = consumer.receive(1, TimeUnit.SECONDS);
+            assertEquals(messageD.content().externalId(), "d");
+        }
+    }
 }
