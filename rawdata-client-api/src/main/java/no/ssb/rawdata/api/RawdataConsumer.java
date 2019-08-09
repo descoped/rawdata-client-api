@@ -35,12 +35,6 @@ public interface RawdataConsumer extends AutoCloseable {
     CompletableFuture<? extends RawdataMessage> receiveAsync();
 
     /**
-     * @return Last acknowledged message id
-     * @throws RawdataClosedException
-     */
-    RawdataMessageId lastAcknowledgedMessageId() throws RawdataClosedException;
-
-    /**
      * Acknowledge all messages up to and including the message identified by the given message-id. This allows for a
      * safe checkpoint on this subscription in case of failure where no message before (and including) the last
      * acknowledged message will be redelivered when continuing consumption on this subscription.

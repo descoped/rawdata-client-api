@@ -6,7 +6,6 @@ import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataContentNotBufferedException;
 import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataMessageContent;
-import no.ssb.rawdata.api.RawdataMessageId;
 import no.ssb.rawdata.api.RawdataProducer;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
@@ -20,7 +19,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNull;
 
 public class RawdataClientTck {
 
@@ -172,52 +170,6 @@ public class RawdataClientTck {
         assertEquals(messages2.get(0).content(), expected1);
         assertEquals(messages2.get(1).content(), expected2);
         assertEquals(messages2.get(2).content(), expected3);
-    }
-
-    @Test
-    public void thatConsumerAcknowledgeWorksForLastMessage() throws Exception {
-        try (RawdataProducer producer = client.producer("the-topic")) {
-            producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
-            producer.publish("a");
-        }
-        RawdataMessageId id;
-        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
-            RawdataMessage message = consumer.receive(1, TimeUnit.SECONDS);
-            assertEquals(message.content().externalId(), "a");
-            id = message.id();
-            consumer.acknowledgeAccumulative(id);
-        }
-        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
-            assertEquals(consumer.lastAcknowledgedMessageId(), id);
-            assertNull(consumer.receive(10, TimeUnit.MILLISECONDS));
-        }
-    }
-
-    @Test
-    public void thatConsumerLastAcknowledgedMessageIdIsEmptyForNewSubscription() throws Exception {
-        RawdataConsumer consumer = client.consumer("the-topic", "some-new-subscription");
-        assertNull(consumer.lastAcknowledgedMessageId());
-    }
-
-    @Test
-    public void thatConsumerLastAcknowledgedMessageIdWorksAcrossConsumers() throws Exception {
-        try (RawdataProducer producer = client.producer("the-topic")) {
-            producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
-            producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
-            producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
-            producer.publish("a", "b", "c");
-        }
-        RawdataMessageId b;
-        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
-            consumer.receive(1, TimeUnit.SECONDS);
-            b = consumer.receive(1, TimeUnit.SECONDS).id();
-            consumer.acknowledgeAccumulative(b);
-            consumer.receive(1, TimeUnit.SECONDS); // consume one more attempting to provoke ack bugs
-            assertEquals(consumer.lastAcknowledgedMessageId(), b);
-        }
-        try (RawdataConsumer consumer = client.consumer("the-topic", "sub1")) {
-            assertEquals(consumer.lastAcknowledgedMessageId(), b);
-        }
     }
 
     @Test
