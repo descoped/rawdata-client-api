@@ -1,22 +1,10 @@
-import no.ssb.rawdata.api.state.StatePersistenceInitializer;
-import no.ssb.rawdata.api.storage.RawdataClientInitializer;
+import no.ssb.rawdata.api.RawdataClientInitializer;
+import no.ssb.rawdata.memory.MemoryRawdataClientInitializer;
 
 module no.ssb.rawdata.api {
-    requires no.ssb.config;
-    requires no.ssb.service.provider.api;
-    requires io.reactivex.rxjava2;
-    requires org.reactivestreams;
-    requires jackson.annotations;
-    requires com.fasterxml.jackson.core;
-    requires com.fasterxml.jackson.databind;
-    requires java.sql;
-    requires org.slf4j;
+    requires transitive no.ssb.service.provider.api;
 
-    uses StatePersistenceInitializer;
-    uses RawdataClientInitializer;
+    exports no.ssb.rawdata.api;
 
-    exports no.ssb.rawdata.api.persistence;
-    exports no.ssb.rawdata.api.state;
-    exports no.ssb.rawdata.api.storage;
-    exports no.ssb.rawdata.api.util;
+    provides RawdataClientInitializer with MemoryRawdataClientInitializer;
 }
