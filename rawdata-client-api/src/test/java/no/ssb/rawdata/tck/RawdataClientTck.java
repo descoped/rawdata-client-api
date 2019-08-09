@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 
 public class RawdataClientTck {
 
@@ -170,5 +171,22 @@ public class RawdataClientTck {
         assertEquals(messages2.get(0).content(), expected1);
         assertEquals(messages2.get(1).content(), expected2);
         assertEquals(messages2.get(2).content(), expected3);
+    }
+
+    @Test
+    public void thatConsumerLastAcknowledgedMessageIdWorks() throws Exception {
+        RawdataConsumer consumer = client.consumer("the-topic", "sub1");
+        assertNull(consumer.lastAcknowledgedMessageId());
+        try (RawdataProducer producer = client.producer("the-topic")) {
+            RawdataMessageContent expected1 = producer.buffer(producer.builder().externalId("a").put("payload", new byte[5]));
+            RawdataMessageContent expected2 = producer.buffer(producer.builder().externalId("b").put("payload", new byte[3]));
+            RawdataMessageContent expected3 = producer.buffer(producer.builder().externalId("c").put("payload", new byte[7]));
+            producer.publish(expected1.externalId(), expected2.externalId(), expected3.externalId());
+        }
+        RawdataMessage messageA = consumer.receive(1, TimeUnit.SECONDS);
+        RawdataMessage messageB = consumer.receive(1, TimeUnit.SECONDS);
+        RawdataMessage messageC = consumer.receive(1, TimeUnit.SECONDS);
+        consumer.acknowledgeAccumulative(messageB.id());
+        assertEquals(consumer.lastAcknowledgedMessageId(), messageB.id());
     }
 }

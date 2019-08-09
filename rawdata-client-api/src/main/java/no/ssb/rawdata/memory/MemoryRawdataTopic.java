@@ -2,6 +2,8 @@ package no.ssb.rawdata.memory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -13,6 +15,7 @@ class MemoryRawdataTopic {
     final List<MemoryRawdataMessage> data = new ArrayList<>(); // protected by lock
     final ReentrantLock lock = new ReentrantLock();
     final Condition condition = lock.newCondition();
+    final Map<String, MemoryRawdataMessageId> checkpointBySubscription = new ConcurrentHashMap<>();
 
     MemoryRawdataTopic(String topic) {
         this.topic = topic;
@@ -106,6 +109,14 @@ class MemoryRawdataTopic {
 
     void signalProduction() {
         condition.signalAll();
+    }
+
+    void checkpoint(String subscription, MemoryRawdataMessageId id) {
+        checkpointBySubscription.put(subscription, id);
+    }
+
+    MemoryRawdataMessageId getCheckpoint(String subscription) {
+        return checkpointBySubscription.get(subscription);
     }
 
     @Override

@@ -75,11 +75,16 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     }
 
     @Override
+    public RawdataMessageId lastAcknowledgedMessageId() throws RawdataClosedException {
+        return topic.getCheckpoint(subscription);
+    }
+
+    @Override
     public void acknowledgeAccumulative(RawdataMessageId id) throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        // do nothing due to auto-acknowledge feature of receive()
+        topic.checkpoint(subscription, (MemoryRawdataMessageId) id);
     }
 
     @Override
