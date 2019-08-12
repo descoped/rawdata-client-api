@@ -8,23 +8,23 @@ import java.util.Set;
 
 public class MemoryRawdataMessageContent implements RawdataMessage {
 
-    private final String externalId;
+    private final String position;
     private final Map<String, byte[]> data;
 
-    public MemoryRawdataMessageContent(String externalId, Map<String, byte[]> data) {
-        if (externalId == null) {
-            throw new IllegalArgumentException("externalId cannot be null");
+    public MemoryRawdataMessageContent(String position, Map<String, byte[]> data) {
+        if (position == null) {
+            throw new IllegalArgumentException("position cannot be null");
         }
         if (data == null) {
             throw new IllegalArgumentException("data cannot be null");
         }
-        this.externalId = externalId;
+        this.position = position;
         this.data = data;
     }
 
     @Override
     public String position() {
-        return externalId;
+        return position;
     }
 
     @Override
@@ -42,19 +42,19 @@ public class MemoryRawdataMessageContent implements RawdataMessage {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MemoryRawdataMessageContent that = (MemoryRawdataMessageContent) o;
-        return externalId.equals(that.externalId) &&
+        return position.equals(that.position) &&
                 data.equals(that.data);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(externalId, data);
+        return Objects.hash(position, data);
     }
 
     @Override
     public String toString() {
         return "MemoryRawdataMessageContent{" +
-                "externalId='" + externalId + '\'' +
+                "position='" + position + '\'' +
                 '}';
     }
 }

@@ -56,12 +56,12 @@ class MemoryRawdataProducer implements RawdataProducer {
             throw new RawdataClosedException();
         }
         return new RawdataMessage.Builder() {
-            String externalId;
+            String position;
             Map<String, byte[]> data = new LinkedHashMap<>();
 
             @Override
-            public RawdataMessage.Builder position(String id) {
-                this.externalId = id;
+            public RawdataMessage.Builder position(String position) {
+                this.position = position;
                 return this;
             }
 
@@ -73,7 +73,7 @@ class MemoryRawdataProducer implements RawdataProducer {
 
             @Override
             public MemoryRawdataMessageContent build() {
-                return new MemoryRawdataMessageContent(externalId, data);
+                return new MemoryRawdataMessageContent(position, data);
             }
         };
     }
@@ -94,10 +94,10 @@ class MemoryRawdataProducer implements RawdataProducer {
 
     @Override
     public void publish(String... positions) throws RawdataClosedException, RawdataContentNotBufferedException {
-        for (String externalId : positions) {
-            MemoryRawdataMessageContent content = buffer.remove(externalId);
+        for (String position : positions) {
+            MemoryRawdataMessageContent content = buffer.remove(position);
             if (content == null) {
-                throw new RawdataContentNotBufferedException(String.format("externalId %s has not been buffered", externalId));
+                throw new RawdataContentNotBufferedException(String.format("position %s has not been buffered", position));
             }
             topic.tryLock(5, TimeUnit.SECONDS);
             try {

@@ -45,12 +45,12 @@ public interface RawdataProducer extends AutoCloseable {
     RawdataMessage buffer(RawdataMessage message) throws RawdataClosedException;
 
     /**
-     * Publish all buffered content that matches any of the external-ids here provided, then remove those contents from
+     * Publish all buffered content that matches any of the positions here provided, then remove those contents from
      * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
      *
-     * @param positions a list of external-ids
+     * @param positions a list of positions
      * @throws RawdataClosedException             if the producer was closed before or during this call.
-     * @throws RawdataContentNotBufferedException if one or more of the external-ids provided by the externalIds param
+     * @throws RawdataContentNotBufferedException if one or more of the positions provided by the positions param
      *                                            was not buffered before calling publish.
      */
     default void publish(List<String> positions) throws RawdataClosedException, RawdataContentNotBufferedException {
@@ -58,21 +58,21 @@ public interface RawdataProducer extends AutoCloseable {
     }
 
     /**
-     * Publish all buffered content that matches any of the external-ids here provided, then remove those contents from
+     * Publish all buffered content that matches any of the positions here provided, then remove those contents from
      * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
      *
-     * @param positions a list of external-ids
+     * @param positions a list of positions
      * @throws RawdataClosedException             if the producer was closed before or during this call.
-     * @throws RawdataContentNotBufferedException if one or more of the external-ids provided by the externalIds param
+     * @throws RawdataContentNotBufferedException if one or more of the positions provided by the positions param
      *                                            was not buffered before calling publish.
      */
     void publish(String... positions) throws RawdataClosedException, RawdataContentNotBufferedException;
 
     /**
-     * Asynchronously publish all buffered content that matches any of the external-ids here provided, then remove those contents from
+     * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from
      * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
      *
-     * @param positions a list of external-ids
+     * @param positions a list of positions
      * @return a completable futures representing the completeness of the async-function.
      */
     default CompletableFuture<Void> publishAsync(List<String> positions) {
@@ -80,7 +80,7 @@ public interface RawdataProducer extends AutoCloseable {
     }
 
     /**
-     * Asynchronously publish all buffered content that matches any of the external-ids here provided, then remove those contents from
+     * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from
      * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
      *
      * @param positions a list of positions

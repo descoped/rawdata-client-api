@@ -40,9 +40,9 @@ public class MemoryRawdataClient implements RawdataClient {
         return consumer;
     }
 
-    MemoryRawdataMessageId findMessageId(String topicName, String externalId) {
+    MemoryRawdataMessageId findMessageId(String topicName, String position) {
         /*
-         * Perform a full topic scan from start in an attempt to find the message with the given externalId
+         * Perform a full topic scan from start in an attempt to find the message with the given position
          */
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
@@ -50,7 +50,7 @@ public class MemoryRawdataClient implements RawdataClient {
             MemoryRawdataMessageId pos = new MemoryRawdataMessageId(topicName, -1);
             while (topic.hasNext(pos)) {
                 MemoryRawdataMessage message = topic.readNext(pos);
-                if (externalId.equals(message.content().position())) {
+                if (position.equals(message.content().position())) {
                     return message.id();
                 }
                 pos = message.id();
