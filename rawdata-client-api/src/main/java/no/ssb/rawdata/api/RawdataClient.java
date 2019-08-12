@@ -34,19 +34,7 @@ public interface RawdataClient extends AutoCloseable {
      * @param initialPosition the position to be set as current position when creating the consumer
      * @return a consumer that can be used to read the topic stream.
      */
-    RawdataConsumer consumer(String topic, RawdataMessageId initialPosition);
-
-    /**
-     * Get the internal message-id for the first message that matches the given externalId on the provided topic.
-     *
-     * @param topic      the name of the topic from where to look for the message containing the external message id.
-     *                   Must be the context-specific short-name of the topic that is independent of any technology or
-     *                   implementation specific schemes which should be configured when loading the rawdata client
-     *                   provider.
-     * @param externalId the external-id to match the content of message on the topic against.
-     * @return the internal message-id of the first matching message, or null or no match could be found.
-     */
-    RawdataMessageId findMessageId(String topic, String externalId);
+    RawdataConsumer consumer(String topic, String initialPosition);
 
     /**
      * Returns whether or not the client is closed.

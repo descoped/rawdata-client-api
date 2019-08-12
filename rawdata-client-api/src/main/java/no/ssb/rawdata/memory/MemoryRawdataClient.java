@@ -1,7 +1,6 @@
 package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClient;
-import no.ssb.rawdata.api.RawdataMessageId;
 
 import java.util.List;
 import java.util.Map;
@@ -27,18 +26,21 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public MemoryRawdataConsumer consumer(String topicName, RawdataMessageId initialPosition) {
+    public MemoryRawdataConsumer consumer(String topicName, String initialPosition) {
+        MemoryRawdataMessageId initialMessageId = null;
+        if (initialPosition != null) {
+            initialMessageId = findMessageId(topicName, initialPosition);
+        }
         MemoryRawdataConsumer consumer = new MemoryRawdataConsumer(
                 topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)),
-                initialPosition,
+                initialMessageId,
                 c -> consumers.remove(c)
         );
         consumers.add(consumer);
         return consumer;
     }
 
-    @Override
-    public RawdataMessageId findMessageId(String topicName, String externalId) {
+    MemoryRawdataMessageId findMessageId(String topicName, String externalId) {
         /*
          * Perform a full topic scan from start in an attempt to find the message with the given externalId
          */
@@ -48,7 +50,7 @@ public class MemoryRawdataClient implements RawdataClient {
             MemoryRawdataMessageId pos = new MemoryRawdataMessageId(topicName, -1);
             while (topic.hasNext(pos)) {
                 MemoryRawdataMessage message = topic.readNext(pos);
-                if (externalId.equals(message.content().externalId())) {
+                if (externalId.equals(message.content().position())) {
                     return message.id();
                 }
                 pos = message.id();

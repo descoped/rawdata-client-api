@@ -2,7 +2,6 @@ package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
-import no.ssb.rawdata.api.RawdataMessageId;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -17,7 +16,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     final AtomicReference<MemoryRawdataMessageId> position = new AtomicReference<>();
     final AtomicBoolean closed = new AtomicBoolean(false);
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, RawdataMessageId initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
+    MemoryRawdataConsumer(MemoryRawdataTopic topic, MemoryRawdataMessageId initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
         this.topic = topic;
         this.closeAction = closeAction;
         if (initialPosition == null) {
@@ -25,13 +24,13 @@ class MemoryRawdataConsumer implements RawdataConsumer {
         }
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            if (!topic.isLegalPosition((MemoryRawdataMessageId) initialPosition)) {
-                throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", ((MemoryRawdataMessageId) initialPosition).index, topic.topic));
+            if (!topic.isLegalPosition(initialPosition)) {
+                throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.index, topic.topic));
             }
         } finally {
             topic.unlock();
         }
-        this.position.set((MemoryRawdataMessageId) initialPosition);
+        this.position.set(initialPosition);
     }
 
     @Override
@@ -40,7 +39,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     }
 
     @Override
-    public MemoryRawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
+    public MemoryRawdataMessageContent receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
         long expireTimeNano = System.nanoTime() + unit.toNanos(timeout);
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
@@ -56,14 +55,14 @@ class MemoryRawdataConsumer implements RawdataConsumer {
             }
             MemoryRawdataMessage message = topic.readNext(position.get());
             position.set(message.id());
-            return message;
+            return message.content();
         } finally {
             topic.unlock();
         }
     }
 
     @Override
-    public CompletableFuture<MemoryRawdataMessage> receiveAsync() {
+    public CompletableFuture<MemoryRawdataMessageContent> receiveAsync() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return receive(5, TimeUnit.MINUTES);

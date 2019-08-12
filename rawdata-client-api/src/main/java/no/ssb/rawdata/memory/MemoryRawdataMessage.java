@@ -1,10 +1,8 @@
 package no.ssb.rawdata.memory;
 
-import no.ssb.rawdata.api.RawdataMessage;
-
 import java.util.Objects;
 
-public class MemoryRawdataMessage implements RawdataMessage {
+public class MemoryRawdataMessage {
     private final MemoryRawdataMessageId id;
     private final MemoryRawdataMessageContent content;
 
@@ -19,12 +17,10 @@ public class MemoryRawdataMessage implements RawdataMessage {
         this.content = content;
     }
 
-    @Override
     public MemoryRawdataMessageId id() {
         return id;
     }
 
-    @Override
     public MemoryRawdataMessageContent content() {
         return content;
     }

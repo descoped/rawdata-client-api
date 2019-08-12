@@ -2,16 +2,12 @@ package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataContentNotBufferedException;
-import no.ssb.rawdata.api.RawdataMessageContent;
-import no.ssb.rawdata.api.RawdataMessageId;
+import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataProducer;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,7 +34,7 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public String lastExternalId() throws RawdataClosedException {
+    public String lastPosition() throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
@@ -48,29 +44,29 @@ class MemoryRawdataProducer implements RawdataProducer {
             if (lastMessageId == null) {
                 return null;
             }
-            return topic.read(lastMessageId).content().externalId();
+            return topic.read(lastMessageId).content().position();
         } finally {
             topic.unlock();
         }
     }
 
     @Override
-    public RawdataMessageContent.Builder builder() throws RawdataClosedException {
+    public RawdataMessage.Builder builder() throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        return new RawdataMessageContent.Builder() {
+        return new RawdataMessage.Builder() {
             String externalId;
             Map<String, byte[]> data = new LinkedHashMap<>();
 
             @Override
-            public RawdataMessageContent.Builder externalId(String externalId) {
-                this.externalId = externalId;
+            public RawdataMessage.Builder position(String id) {
+                this.externalId = id;
                 return this;
             }
 
             @Override
-            public RawdataMessageContent.Builder put(String key, byte[] payload) {
+            public RawdataMessage.Builder put(String key, byte[] payload) {
                 data.put(key, payload);
                 return this;
             }
@@ -83,68 +79,41 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public MemoryRawdataMessageContent buffer(RawdataMessageContent.Builder builder) throws RawdataClosedException {
+    public MemoryRawdataMessageContent buffer(RawdataMessage.Builder builder) throws RawdataClosedException {
         return buffer(builder.build());
     }
 
     @Override
-    public MemoryRawdataMessageContent buffer(RawdataMessageContent content) throws RawdataClosedException {
+    public MemoryRawdataMessageContent buffer(RawdataMessage message) throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        buffer.put(content.externalId(), (MemoryRawdataMessageContent) content);
-        return (MemoryRawdataMessageContent) content;
+        buffer.put(message.position(), (MemoryRawdataMessageContent) message);
+        return (MemoryRawdataMessageContent) message;
     }
 
     @Override
-    public List<? extends RawdataMessageId> publish(List<String> externalIds) throws RawdataClosedException, RawdataContentNotBufferedException {
-        return publish(externalIds.toArray(new String[externalIds.size()]));
-    }
-
-    @Override
-    public List<? extends RawdataMessageId> publish(String... externalIds) throws RawdataClosedException, RawdataContentNotBufferedException {
-        try {
-            List<CompletableFuture<? extends RawdataMessageId>> futures = publishAsync(externalIds);
-            List<MemoryRawdataMessageId> result = new ArrayList<>();
-            for (CompletableFuture<? extends RawdataMessageId> future : futures) {
-                result.add((MemoryRawdataMessageId) future.join());
+    public void publish(String... positions) throws RawdataClosedException, RawdataContentNotBufferedException {
+        for (String externalId : positions) {
+            MemoryRawdataMessageContent content = buffer.remove(externalId);
+            if (content == null) {
+                throw new RawdataContentNotBufferedException(String.format("externalId %s has not been buffered", externalId));
             }
-            return result;
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RawdataContentNotBufferedException) {
-                throw (RawdataContentNotBufferedException) cause;
+            topic.tryLock(5, TimeUnit.SECONDS);
+            try {
+                topic.write(content);
+            } finally {
+                topic.unlock();
             }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            throw e;
         }
     }
 
     @Override
-    public List<CompletableFuture<? extends RawdataMessageId>> publishAsync(String... externalIds) {
+    public CompletableFuture<Void> publishAsync(String... positions) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            List<CompletableFuture<? extends RawdataMessageId>> futures = new ArrayList<>();
-            for (String externalId : externalIds) {
-                MemoryRawdataMessageContent content = buffer.remove(externalId);
-                if (content == null) {
-                    throw new RawdataContentNotBufferedException(String.format("externalId %s has not been buffered", externalId));
-                }
-                MemoryRawdataMessageId messageId = topic.write(content);
-                futures.add(CompletableFuture.completedFuture(messageId));
-            }
-            return futures;
-        } finally {
-            topic.unlock();
-        }
+        return CompletableFuture.runAsync(() -> publish(positions));
     }
 
     @Override

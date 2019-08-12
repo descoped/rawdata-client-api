@@ -44,7 +44,7 @@ class MemoryRawdataTopic {
     }
 
     private MemoryRawdataMessageContent copy(MemoryRawdataMessageContent original) {
-        return new MemoryRawdataMessageContent(original.externalId(),
+        return new MemoryRawdataMessageContent(original.position(),
                 original.keys().stream().collect(Collectors.toMap(
                         k -> k, k -> {
                             byte[] src = original.get(k);

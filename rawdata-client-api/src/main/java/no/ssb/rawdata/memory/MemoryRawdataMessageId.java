@@ -1,10 +1,8 @@
 package no.ssb.rawdata.memory;
 
-import no.ssb.rawdata.api.RawdataMessageId;
-
 import java.util.Objects;
 
-class MemoryRawdataMessageId implements RawdataMessageId {
+class MemoryRawdataMessageId {
     final String topic;
     final int index;
 

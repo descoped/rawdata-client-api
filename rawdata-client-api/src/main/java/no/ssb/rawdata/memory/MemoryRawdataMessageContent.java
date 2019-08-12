@@ -1,12 +1,12 @@
 package no.ssb.rawdata.memory;
 
-import no.ssb.rawdata.api.RawdataMessageContent;
+import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public class MemoryRawdataMessageContent implements RawdataMessageContent {
+public class MemoryRawdataMessageContent implements RawdataMessage {
 
     private final String externalId;
     private final Map<String, byte[]> data;
@@ -23,7 +23,7 @@ public class MemoryRawdataMessageContent implements RawdataMessageContent {
     }
 
     @Override
-    public String externalId() {
+    public String position() {
         return externalId;
     }
 
