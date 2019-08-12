@@ -12,39 +12,31 @@ import java.util.function.Consumer;
 
 class MemoryRawdataConsumer implements RawdataConsumer {
 
-    final String subscription;
     final MemoryRawdataTopic topic;
+    final Consumer<MemoryRawdataConsumer> closeAction;
     final AtomicReference<MemoryRawdataMessageId> position = new AtomicReference<>();
     final AtomicBoolean closed = new AtomicBoolean(false);
-    final Consumer<MemoryRawdataConsumer> closeAction;
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, String subscription, Consumer<MemoryRawdataConsumer> closeAction) {
-        this.subscription = subscription;
+    MemoryRawdataConsumer(MemoryRawdataTopic topic, RawdataMessageId initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
         this.topic = topic;
         this.closeAction = closeAction;
+        if (initialPosition == null) {
+            initialPosition = new MemoryRawdataMessageId(topic(), -1);
+        }
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            MemoryRawdataMessageId initialPosition = topic.getCheckpoint(subscription);
-            if (initialPosition == null) {
-                initialPosition = new MemoryRawdataMessageId(topic(), -1);
+            if (!topic.isLegalPosition((MemoryRawdataMessageId) initialPosition)) {
+                throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", ((MemoryRawdataMessageId) initialPosition).index, topic.topic));
             }
-            if (!topic.isLegalPosition(initialPosition)) {
-                throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.index, topic.topic));
-            }
-            this.position.set(initialPosition);
         } finally {
             topic.unlock();
         }
+        this.position.set((MemoryRawdataMessageId) initialPosition);
     }
 
     @Override
     public String topic() {
         return topic.topic;
-    }
-
-    @Override
-    public String subscription() {
-        return subscription;
     }
 
     @Override
@@ -82,18 +74,9 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     }
 
     @Override
-    public void acknowledgeAccumulative(RawdataMessageId id) throws RawdataClosedException {
-        if (isClosed()) {
-            throw new RawdataClosedException();
-        }
-        topic.checkpoint(subscription, (MemoryRawdataMessageId) id);
-    }
-
-    @Override
     public String toString() {
         return "MemoryRawdataConsumer{" +
-                "subscription='" + subscription + '\'' +
-                ", position=" + position +
+                "position=" + position +
                 ", closed=" + closed +
                 '}';
     }

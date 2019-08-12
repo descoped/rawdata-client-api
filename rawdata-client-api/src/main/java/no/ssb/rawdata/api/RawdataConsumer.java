@@ -9,40 +9,30 @@ import java.util.concurrent.TimeUnit;
 public interface RawdataConsumer extends AutoCloseable {
 
     /**
-     * @return the topic from which this consumer will consume messages from.
+     * @return the name of the topic from which this consumer will consume messages from.
      */
     String topic();
 
     /**
-     * @return the name of the subscription on which this consumer is subscribed.
-     */
-    String subscription();
-
-    /**
-     * @param timeout
-     * @param timeUnit
-     * @return
-     * @throws InterruptedException
-     * @throws RawdataClosedException
-     */
-    RawdataMessage receive(int timeout, TimeUnit timeUnit) throws InterruptedException, RawdataClosedException;
-
-    /**
-     * Asynchronously receive a message callback when a new message is available on this consumer.
+     * Receive the next message after the current position, or null if no message is available before the timeout. If
+     * successful, the current position for this consumer is updated to that of the returned message.
      *
-     * @return a CompletableFuture representing the asynchronous operation.
+     * @param timeout the timeout in units as specified by the unit parameter.
+     * @param unit    the unit of the timeout, e.g. TimeUnit.SECONDS
+     * @return the next available message before the timeout occurs, or null if no next message is available before the
+     * timeout.
+     * @throws InterruptedException   if the calling thread is interrupted while waiting on an available message.
+     * @throws RawdataClosedException if method is called after this instance has been closed.
+     */
+    RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException;
+
+    /**
+     * Asynchronously receive a message callback when the next message after the current position is available. The
+     * current position is also updated to that of the returned message right before calling the callback.
+     *
+     * @return a CompletableFuture representing the next available message.
      */
     CompletableFuture<? extends RawdataMessage> receiveAsync();
-
-    /**
-     * Acknowledge all messages up to and including the message identified by the given message-id. This allows for a
-     * safe checkpoint on this subscription in case of failure where no message before (and including) the last
-     * acknowledged message will be redelivered when continuing consumption on this subscription.
-     *
-     * @param id
-     * @throws RawdataClosedException
-     */
-    void acknowledgeAccumulative(RawdataMessageId id) throws RawdataClosedException;
 
     /**
      * Returns whether or not the consumer is closed.
