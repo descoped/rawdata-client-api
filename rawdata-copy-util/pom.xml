@@ -64,6 +64,25 @@
             <groupId>no.ssb.rawdata</groupId>
             <artifactId>rawdata-client-provider-lmdb</artifactId>
             <version>0.1-SNAPSHOT</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>no.ssb.rawdata</groupId>
+            <artifactId>rawdata-client-provider-pulsar</artifactId>
+            <version>0.2</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>no.ssb.rawdata</groupId>
+            <artifactId>rawdata-client-provider-postgres</artifactId>
+            <version>0.1</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>no.ssb.rawdata</groupId>
+            <artifactId>rawdata-client-provider-gcs</artifactId>
+            <version>0.1-SNAPSHOT</version>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>org.testng</groupId>
