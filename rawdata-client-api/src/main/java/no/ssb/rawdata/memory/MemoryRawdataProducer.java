@@ -1,8 +1,8 @@
 package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClosedException;
-import no.ssb.rawdata.api.RawdataContentNotBufferedException;
 import no.ssb.rawdata.api.RawdataMessage;
+import no.ssb.rawdata.api.RawdataNotBufferedException;
 import no.ssb.rawdata.api.RawdataProducer;
 
 import java.util.LinkedHashMap;
@@ -31,23 +31,6 @@ class MemoryRawdataProducer implements RawdataProducer {
     @Override
     public String topic() {
         return topic.topic;
-    }
-
-    @Override
-    public String lastPosition() throws RawdataClosedException {
-        if (isClosed()) {
-            throw new RawdataClosedException();
-        }
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            MemoryRawdataMessageId lastMessageId = topic.lastMessageId();
-            if (lastMessageId == null) {
-                return null;
-            }
-            return topic.read(lastMessageId).content().position();
-        } finally {
-            topic.unlock();
-        }
     }
 
     @Override
@@ -93,11 +76,11 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public void publish(String... positions) throws RawdataClosedException, RawdataContentNotBufferedException {
+    public void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException {
         for (String position : positions) {
             MemoryRawdataMessageContent content = buffer.remove(position);
             if (content == null) {
-                throw new RawdataContentNotBufferedException(String.format("position %s has not been buffered", position));
+                throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
             }
             topic.tryLock(5, TimeUnit.SECONDS);
             try {

@@ -37,6 +37,15 @@ public interface RawdataClient extends AutoCloseable {
     RawdataConsumer consumer(String topic, String initialPosition);
 
     /**
+     * Will read the last message in the stream and extract the id from the message.
+     *
+     * @param topic the name of the topic to read the last message position from.
+     * @return the id of the last message in the stream
+     * @throws RawdataClosedException if the producer was closed before or is closed during this call.
+     */
+    String lastPosition(String topic) throws RawdataClosedException;
+
+    /**
      * Returns whether or not the client is closed.
      *
      * @return whether the client is closed.

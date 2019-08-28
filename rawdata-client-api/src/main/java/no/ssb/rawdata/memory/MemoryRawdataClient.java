@@ -1,6 +1,8 @@
 package no.ssb.rawdata.memory;
 
+import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClient;
+import no.ssb.rawdata.api.RawdataClosedException;
 
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,9 @@ public class MemoryRawdataClient implements RawdataClient {
 
     @Override
     public MemoryRawdataProducer producer(String topicName) {
+        if (isClosed()) {
+            throw new RawdataClosedException();
+        }
         MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)), p -> {
             producers.remove(p);
         });
@@ -27,6 +32,9 @@ public class MemoryRawdataClient implements RawdataClient {
 
     @Override
     public MemoryRawdataConsumer consumer(String topicName, String initialPosition) {
+        if (isClosed()) {
+            throw new RawdataClosedException();
+        }
         MemoryRawdataMessageId initialMessageId = null;
         if (initialPosition != null) {
             initialMessageId = findMessageId(topicName, initialPosition);
@@ -47,7 +55,7 @@ public class MemoryRawdataClient implements RawdataClient {
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            MemoryRawdataMessageId pos = new MemoryRawdataMessageId(topicName, -1);
+            MemoryRawdataMessageId pos = new MemoryRawdataMessageId(topicName, new ULID.Value(0, 0));
             while (topic.hasNext(pos)) {
                 MemoryRawdataMessage message = topic.readNext(pos);
                 if (position.equals(message.content().position())) {
@@ -56,6 +64,24 @@ public class MemoryRawdataClient implements RawdataClient {
                 pos = message.id();
             }
             return null;
+        } finally {
+            topic.unlock();
+        }
+    }
+
+    @Override
+    public String lastPosition(String topicName) throws RawdataClosedException {
+        if (isClosed()) {
+            throw new RawdataClosedException();
+        }
+        MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
+        topic.tryLock(5, TimeUnit.SECONDS);
+        try {
+            MemoryRawdataMessageId lastMessageId = topic.lastMessageId();
+            if (lastMessageId == null) {
+                return null;
+            }
+            return topic.read(lastMessageId).content().position();
         } finally {
             topic.unlock();
         }

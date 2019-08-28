@@ -35,6 +35,15 @@ public interface RawdataConsumer extends AutoCloseable {
     CompletableFuture<? extends RawdataMessage> receiveAsync();
 
     /**
+     * Seek to a specific time in the stream. The stream will be positioned at the first message with matching timestamp
+     * or at the message immediately after if no message match the timestamp. The position will be inclusive, so that
+     * the next message returned by receive will be the message that the stream is positioned at.
+     *
+     * @param timestamp the timestamp in milliseconds from epoch (1970)
+     */
+    void seek(long timestamp);
+
+    /**
      * Returns whether or not the consumer is closed.
      *
      * @return whether the consumer is closed.

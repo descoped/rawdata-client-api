@@ -11,14 +11,6 @@ public interface RawdataProducer extends AutoCloseable {
     String topic();
 
     /**
-     * Will read the last message in the stream and extract the id from the message.
-     *
-     * @return the id of the last message in the stream
-     * @throws RawdataClosedException if the producer was closed before or is closed during this call.
-     */
-    String lastPosition() throws RawdataClosedException;
-
-    /**
      * Constructs a builder that can be used to build the content of a message.
      *
      * @return the builder
@@ -50,10 +42,10 @@ public interface RawdataProducer extends AutoCloseable {
      *
      * @param positions a list of positions
      * @throws RawdataClosedException             if the producer was closed before or during this call.
-     * @throws RawdataContentNotBufferedException if one or more of the positions provided by the positions param
+     * @throws RawdataNotBufferedException if one or more of the positions provided by the positions param
      *                                            was not buffered before calling publish.
      */
-    default void publish(List<String> positions) throws RawdataClosedException, RawdataContentNotBufferedException {
+    default void publish(List<String> positions) throws RawdataClosedException, RawdataNotBufferedException {
         publish(positions.toArray(new String[positions.size()]));
     }
 
@@ -63,10 +55,10 @@ public interface RawdataProducer extends AutoCloseable {
      *
      * @param positions a list of positions
      * @throws RawdataClosedException             if the producer was closed before or during this call.
-     * @throws RawdataContentNotBufferedException if one or more of the positions provided by the positions param
+     * @throws RawdataNotBufferedException if one or more of the positions provided by the positions param
      *                                            was not buffered before calling publish.
      */
-    void publish(String... positions) throws RawdataClosedException, RawdataContentNotBufferedException;
+    void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException;
 
     /**
      * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from

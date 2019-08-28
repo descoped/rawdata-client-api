@@ -1,5 +1,6 @@
 package no.ssb.rawdata.memory;
 
+import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
 
@@ -20,15 +21,16 @@ class MemoryRawdataConsumer implements RawdataConsumer {
         this.topic = topic;
         this.closeAction = closeAction;
         if (initialPosition == null) {
-            initialPosition = new MemoryRawdataMessageId(topic(), -1);
-        }
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            if (!topic.isLegalPosition(initialPosition)) {
-                throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.index, topic.topic));
+            initialPosition = new MemoryRawdataMessageId(topic(), new ULID.Value(0, 0));
+        } else {
+            topic.tryLock(5, TimeUnit.SECONDS);
+            try {
+                if (!topic.isLegalPosition(initialPosition)) {
+                    throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.ulid, topic.topic));
+                }
+            } finally {
+                topic.unlock();
             }
-        } finally {
-            topic.unlock();
         }
         this.position.set(initialPosition);
     }
@@ -70,6 +72,16 @@ class MemoryRawdataConsumer implements RawdataConsumer {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    @Override
+    public void seek(long timestamp) {
+        topic.tryLock(5, TimeUnit.SECONDS);
+        try {
+            position.set(topic.findPositionOfTimestamp(timestamp));
+        } finally {
+            topic.unlock();
+        }
     }
 
     @Override
