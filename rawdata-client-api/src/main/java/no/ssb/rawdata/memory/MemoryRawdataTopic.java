@@ -58,19 +58,28 @@ class MemoryRawdataTopic {
         );
     }
 
-    boolean hasNext(ULID.Value id) {
+    boolean hasNext(MemoryCursor cursor) {
         checkHasLock();
-        return data.higherKey(id) != null;
+        if (cursor.startKey == null) {
+            return !data.isEmpty();
+        }
+        if (cursor.inclusive) {
+            return data.ceilingEntry(cursor.startKey) != null;
+        } else {
+            return data.higherKey(cursor.startKey) != null;
+        }
     }
 
-    RawdataMessage readNext(ULID.Value ulid) {
+    RawdataMessage readNext(MemoryCursor cursor) {
         checkHasLock();
-        return ofNullable(data.higherEntry(ulid)).map(Map.Entry::getValue).orElse(null);
-    }
-
-    public RawdataMessage read(ULID.Value ulid) {
-        checkHasLock();
-        return data.get(ulid);
+        if (cursor.startKey == null) {
+            return data.firstEntry().getValue();
+        }
+        if (cursor.inclusive) {
+            return ofNullable(data.ceilingEntry(cursor.startKey)).map(Map.Entry::getValue).orElse(null);
+        } else {
+            return ofNullable(data.higherEntry(cursor.startKey)).map(Map.Entry::getValue).orElse(null);
+        }
     }
 
     boolean tryLock() {

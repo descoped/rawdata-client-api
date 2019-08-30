@@ -33,13 +33,13 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public RawdataConsumer consumer(String topic, ULID.Value initialPosition) {
+    public RawdataConsumer consumer(String topic, ULID.Value initialPosition, boolean inclusive) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
         MemoryRawdataConsumer consumer = new MemoryRawdataConsumer(
                 topicByName.computeIfAbsent(topic, t -> new MemoryRawdataTopic(t)),
-                initialPosition,
+                new MemoryCursor(initialPosition, inclusive, true),
                 c -> consumers.remove(c)
         );
         consumers.add(consumer);

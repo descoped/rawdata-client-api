@@ -1,6 +1,5 @@
 package no.ssb.rawdata.memory;
 
-import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataMessage;
@@ -15,14 +14,14 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     final MemoryRawdataTopic topic;
     final Consumer<MemoryRawdataConsumer> closeAction;
-    final AtomicReference<ULID.Value> position = new AtomicReference<>();
+    final AtomicReference<MemoryCursor> position = new AtomicReference<>();
     final AtomicBoolean closed = new AtomicBoolean(false);
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, ULID.Value initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
+    MemoryRawdataConsumer(MemoryRawdataTopic topic, MemoryCursor initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
         this.topic = topic;
         this.closeAction = closeAction;
         if (initialPosition == null) {
-            initialPosition = RawdataConsumer.beginningOfTime();
+            initialPosition = new MemoryCursor(RawdataConsumer.beginningOfTime(), true, true);
         }
         this.position.set(initialPosition);
     }
@@ -48,7 +47,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
                 topic.awaitProduction(durationNano, TimeUnit.NANOSECONDS);
             }
             RawdataMessage message = topic.readNext(position.get());
-            position.set(message.ulid());
+            position.set(new MemoryCursor(message.ulid(), false, true));
             return message;
         } finally {
             topic.unlock();
@@ -68,7 +67,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     @Override
     public void seek(long timestamp) {
-        position.set(RawdataConsumer.beginningOfTime(timestamp));
+        position.set(new MemoryCursor(RawdataConsumer.beginningOfTime(timestamp), true, true));
     }
 
     @Override
