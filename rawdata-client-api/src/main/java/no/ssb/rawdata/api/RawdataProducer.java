@@ -22,19 +22,10 @@ public interface RawdataProducer extends AutoCloseable {
      * Buffer the content of a message, preparing it for publication to rawdata using one of the publish methods.
      *
      * @param builder a builder used to build the message that will be buffered
-     * @return the content that was buffered
+     * @return this instance
      * @throws RawdataClosedException if the producer was closed before this call.
      */
-    RawdataMessage buffer(RawdataMessage.Builder builder) throws RawdataClosedException;
-
-    /**
-     * Buffer the content of a message, preparing it for publication to rawdata using one of the publish methods.
-     *
-     * @param message the content that will be buffered
-     * @return the content parameter which is the content that was buffered
-     * @throws RawdataClosedException if the producer was closed before this call.
-     */
-    RawdataMessage buffer(RawdataMessage message) throws RawdataClosedException;
+    RawdataProducer buffer(RawdataMessage.Builder builder) throws RawdataClosedException;
 
     /**
      * Publish all buffered content that matches any of the positions here provided, then remove those contents from

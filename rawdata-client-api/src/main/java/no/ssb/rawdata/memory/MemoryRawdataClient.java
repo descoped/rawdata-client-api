@@ -3,6 +3,8 @@ package no.ssb.rawdata.memory;
 import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClosedException;
+import no.ssb.rawdata.api.RawdataConsumer;
+import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -31,57 +33,39 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public MemoryRawdataConsumer consumer(String topicName, String initialPosition) {
+    public RawdataConsumer consumer(String topic, ULID.Value initialPosition) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        MemoryRawdataMessageId initialMessageId = null;
-        if (initialPosition != null) {
-            initialMessageId = findMessageId(topicName, initialPosition);
-        }
         MemoryRawdataConsumer consumer = new MemoryRawdataConsumer(
-                topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)),
-                initialMessageId,
+                topicByName.computeIfAbsent(topic, t -> new MemoryRawdataTopic(t)),
+                initialPosition,
                 c -> consumers.remove(c)
         );
         consumers.add(consumer);
         return consumer;
     }
 
-    MemoryRawdataMessageId findMessageId(String topicName, String position) {
-        /*
-         * Perform a full topic scan from start in an attempt to find the message with the given position
-         */
+    @Override
+    public ULID.Value ulidOfPosition(String topicName, String position) {
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            MemoryRawdataMessageId pos = new MemoryRawdataMessageId(topicName, new ULID.Value(0, 0));
-            while (topic.hasNext(pos)) {
-                MemoryRawdataMessage message = topic.readNext(pos);
-                if (position.equals(message.content().position())) {
-                    return message.id();
-                }
-                pos = message.id();
-            }
-            return null;
+            return topic.ulidOf(position);
         } finally {
             topic.unlock();
         }
     }
 
     @Override
-    public String lastPosition(String topicName) throws RawdataClosedException {
+    public RawdataMessage lastMessage(String topicName) throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            MemoryRawdataMessageId lastMessageId = topic.lastMessageId();
-            if (lastMessageId == null) {
-                return null;
-            }
-            return topic.read(lastMessageId).content().position();
+            return topic.lastMessage();
         } finally {
             topic.unlock();
         }

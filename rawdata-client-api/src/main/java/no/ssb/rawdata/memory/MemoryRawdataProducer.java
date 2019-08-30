@@ -1,27 +1,32 @@
 package no.ssb.rawdata.memory;
 
+import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataNotBufferedException;
 import no.ssb.rawdata.api.RawdataProducer;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 class MemoryRawdataProducer implements RawdataProducer {
 
-    private final MemoryRawdataTopic topic;
+    final ULID ulid = new ULID();
 
-    private final Map<String, MemoryRawdataMessageContent> buffer = new ConcurrentHashMap<>();
+    final AtomicReference<ULID.Value> prevUlid = new AtomicReference<>(ulid.nextValue());
 
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    final MemoryRawdataTopic topic;
 
-    private Consumer<MemoryRawdataProducer> closeAction;
+    final Map<String, MemoryRawdataMessage.Builder> buffer = new ConcurrentHashMap<>();
+
+    final AtomicBoolean closed = new AtomicBoolean(false);
+
+    Consumer<MemoryRawdataProducer> closeAction;
 
     MemoryRawdataProducer(MemoryRawdataTopic topic, Consumer<MemoryRawdataProducer> closeAction) {
         this.topic = topic;
@@ -38,57 +43,52 @@ class MemoryRawdataProducer implements RawdataProducer {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        return new RawdataMessage.Builder() {
-            String position;
-            Map<String, byte[]> data = new LinkedHashMap<>();
-
-            @Override
-            public RawdataMessage.Builder position(String position) {
-                this.position = position;
-                return this;
-            }
-
-            @Override
-            public RawdataMessage.Builder put(String key, byte[] payload) {
-                data.put(key, payload);
-                return this;
-            }
-
-            @Override
-            public MemoryRawdataMessageContent build() {
-                return new MemoryRawdataMessageContent(position, data);
-            }
-        };
+        return new MemoryRawdataMessage.Builder();
     }
 
     @Override
-    public MemoryRawdataMessageContent buffer(RawdataMessage.Builder builder) throws RawdataClosedException {
-        return buffer(builder.build());
-    }
-
-    @Override
-    public MemoryRawdataMessageContent buffer(RawdataMessage message) throws RawdataClosedException {
+    public RawdataProducer buffer(RawdataMessage.Builder _builder) throws RawdataClosedException {
+        MemoryRawdataMessage.Builder builder = (MemoryRawdataMessage.Builder) _builder;
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        buffer.put(message.position(), (MemoryRawdataMessageContent) message);
-        return (MemoryRawdataMessageContent) message;
+        buffer.put(builder.position, builder);
+        return this;
     }
 
     @Override
     public void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException {
-        for (String position : positions) {
-            MemoryRawdataMessageContent content = buffer.remove(position);
-            if (content == null) {
-                throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
+        topic.tryLock(5, TimeUnit.SECONDS);
+        try {
+            for (String position : positions) {
+                MemoryRawdataMessage.Builder builder = buffer.remove(position);
+                if (builder == null) {
+                    throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
+                }
+                if (builder.ulid == null) {
+                    ULID.Value value = nextMonotonicUlid(ulid, prevUlid.get());
+                    builder.ulid(value);
+                }
+                MemoryRawdataMessage message = builder.build();
+                prevUlid.set(message.ulid());
+                topic.write(message);
             }
-            topic.tryLock(5, TimeUnit.SECONDS);
-            try {
-                topic.write(content);
-            } finally {
-                topic.unlock();
-            }
+        } finally {
+            topic.unlock();
         }
+    }
+
+    static ULID.Value nextMonotonicUlid(ULID generator, ULID.Value previousUlid) {
+        // spin until time ticks
+        ULID.Value value;
+        do {
+            value = generator.nextStrictlyMonotonicValue(previousUlid, System.currentTimeMillis()).orElse(null);
+        } while (value == null);
+        if (previousUlid.timestamp() != value.timestamp()) {
+            // start at lsb 1, to avoid inclusive/exclusive semantics when searching
+            value = new ULID.Value((value.timestamp() << 16) & 0xFFFFFFFFFFFF0000L, 1L);
+        }
+        return value;
     }
 
     @Override

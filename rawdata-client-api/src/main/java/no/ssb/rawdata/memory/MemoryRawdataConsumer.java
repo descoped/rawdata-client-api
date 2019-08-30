@@ -3,6 +3,7 @@ package no.ssb.rawdata.memory;
 import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
+import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -14,23 +15,14 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     final MemoryRawdataTopic topic;
     final Consumer<MemoryRawdataConsumer> closeAction;
-    final AtomicReference<MemoryRawdataMessageId> position = new AtomicReference<>();
+    final AtomicReference<ULID.Value> position = new AtomicReference<>();
     final AtomicBoolean closed = new AtomicBoolean(false);
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, MemoryRawdataMessageId initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
+    MemoryRawdataConsumer(MemoryRawdataTopic topic, ULID.Value initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
         this.topic = topic;
         this.closeAction = closeAction;
         if (initialPosition == null) {
-            initialPosition = new MemoryRawdataMessageId(topic(), new ULID.Value(0, 0));
-        } else {
-            topic.tryLock(5, TimeUnit.SECONDS);
-            try {
-                if (!topic.isLegalPosition(initialPosition)) {
-                    throw new IllegalArgumentException(String.format("the provided initial position %s is not legal in topic %s", initialPosition.ulid, topic.topic));
-                }
-            } finally {
-                topic.unlock();
-            }
+            initialPosition = new ULID.Value(0, 0);
         }
         this.position.set(initialPosition);
     }
@@ -41,7 +33,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
     }
 
     @Override
-    public MemoryRawdataMessageContent receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
+    public RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
         long expireTimeNano = System.nanoTime() + unit.toNanos(timeout);
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
@@ -55,16 +47,16 @@ class MemoryRawdataConsumer implements RawdataConsumer {
                 }
                 topic.awaitProduction(durationNano, TimeUnit.NANOSECONDS);
             }
-            MemoryRawdataMessage message = topic.readNext(position.get());
-            position.set(message.id());
-            return message.content();
+            RawdataMessage message = topic.readNext(position.get());
+            position.set(message.ulid());
+            return message;
         } finally {
             topic.unlock();
         }
     }
 
     @Override
-    public CompletableFuture<MemoryRawdataMessageContent> receiveAsync() {
+    public CompletableFuture<RawdataMessage> receiveAsync() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return receive(5, TimeUnit.MINUTES);
@@ -76,12 +68,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     @Override
     public void seek(long timestamp) {
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            position.set(topic.findPositionOfTimestamp(timestamp));
-        } finally {
-            topic.unlock();
-        }
+        position.set(new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 0L));
     }
 
     @Override

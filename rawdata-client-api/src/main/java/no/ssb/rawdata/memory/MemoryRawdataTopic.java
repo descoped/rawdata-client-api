@@ -1,12 +1,12 @@
 package no.ssb.rawdata.memory;
 
 import de.huxhorn.sulky.ulid.ULID;
+import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -15,10 +15,8 @@ import static java.util.Optional.ofNullable;
 
 class MemoryRawdataTopic {
 
-    final ULID ulid = new ULID();
-    final AtomicReference<ULID.Value> previousUlid = new AtomicReference<>(ulid.nextValue(System.currentTimeMillis()));
     final String topic;
-    final NavigableMap<ULID.Value, MemoryRawdataMessage> data = new ConcurrentSkipListMap<>(); // protected by lock
+    final NavigableMap<ULID.Value, RawdataMessage> data = new ConcurrentSkipListMap<>(); // protected by lock
     final ReentrantLock lock = new ReentrantLock();
     final Condition condition = lock.newCondition();
 
@@ -26,12 +24,12 @@ class MemoryRawdataTopic {
         this.topic = topic;
     }
 
-    MemoryRawdataMessageId lastMessageId() {
+    RawdataMessage lastMessage() {
         checkHasLock();
         if (data.isEmpty()) {
             return null;
         }
-        return data.lastEntry().getValue().id();
+        return data.lastEntry().getValue();
     }
 
     private void checkHasLock() {
@@ -40,22 +38,15 @@ class MemoryRawdataTopic {
         }
     }
 
-    MemoryRawdataMessageId write(MemoryRawdataMessageContent content) {
+    void write(RawdataMessage message) {
         checkHasLock();
-        ULID.Value prev;
-        ULID.Value key;
-        do {
-            prev = this.previousUlid.get();
-            key = ulid.nextStrictlyMonotonicValue(prev, System.currentTimeMillis()).orElseThrow();
-        } while (!previousUlid.compareAndSet(prev, key));
-        MemoryRawdataMessageId id = new MemoryRawdataMessageId(topic, key);
-        data.put(key, new MemoryRawdataMessage(id, copy(content))); // use copy to fake serialization and deserialization
+        RawdataMessage copy = copy(message); // fake serialization and deserialization
+        data.put(copy.ulid(), copy);
         signalProduction();
-        return id;
     }
 
-    private MemoryRawdataMessageContent copy(MemoryRawdataMessageContent original) {
-        return new MemoryRawdataMessageContent(original.position(),
+    private RawdataMessage copy(RawdataMessage original) {
+        return new MemoryRawdataMessage(original.ulid(), original.sequenceNumber(), original.position(),
                 original.keys().stream().collect(Collectors.toMap(
                         k -> k, k -> {
                             byte[] src = original.get(k);
@@ -67,23 +58,19 @@ class MemoryRawdataTopic {
         );
     }
 
-    boolean hasNext(MemoryRawdataMessageId id) {
+    boolean hasNext(ULID.Value id) {
         checkHasLock();
-        return data.higherKey(id.ulid) != null;
+        return data.higherKey(id) != null;
     }
 
-    MemoryRawdataMessage readNext(MemoryRawdataMessageId id) {
+    RawdataMessage readNext(ULID.Value ulid) {
         checkHasLock();
-        return ofNullable(data.higherEntry(id.ulid)).map(Map.Entry::getValue).orElse(null);
+        return ofNullable(data.higherEntry(ulid)).map(Map.Entry::getValue).orElse(null);
     }
 
-    public MemoryRawdataMessage read(MemoryRawdataMessageId id) {
+    public RawdataMessage read(ULID.Value ulid) {
         checkHasLock();
-        return data.get(id.ulid);
-    }
-
-    boolean isLegalPosition(MemoryRawdataMessageId id) {
-        return data.containsKey(id.ulid);
+        return data.get(ulid);
     }
 
     boolean tryLock() {
@@ -119,9 +106,19 @@ class MemoryRawdataTopic {
                 '}';
     }
 
-    public MemoryRawdataMessageId findPositionOfTimestamp(long timestamp) {
-        ULID.Value ulidValue = ulid.nextValue(timestamp);
-        ULID.Value lowerBound = new ULID.Value(ulidValue.getMostSignificantBits() & 0xFFFFFFFFFFFF0000L, 0L); // first value with timestamp
-        return new MemoryRawdataMessageId(topic, lowerBound);
+    ULID.Value ulidOf(String position) {
+        checkHasLock();
+
+        /*
+         * Perform a full topic scan from start in an attempt to find the message with the given position
+         */
+
+        for (Map.Entry<ULID.Value, RawdataMessage> entry : data.entrySet()) {
+            if (position.equals(entry.getValue().position())) {
+                return entry.getKey();
+            }
+        }
+
+        return null;
     }
 }
