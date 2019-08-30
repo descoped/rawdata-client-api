@@ -22,7 +22,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
         this.topic = topic;
         this.closeAction = closeAction;
         if (initialPosition == null) {
-            initialPosition = new ULID.Value(0, 0);
+            initialPosition = RawdataConsumer.beginningOfTime();
         }
         this.position.set(initialPosition);
     }
@@ -68,7 +68,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     @Override
     public void seek(long timestamp) {
-        position.set(new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 0L));
+        position.set(RawdataConsumer.beginningOfTime(timestamp));
     }
 
     @Override

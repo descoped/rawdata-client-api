@@ -66,7 +66,7 @@ class MemoryRawdataProducer implements RawdataProducer {
                     throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
                 }
                 if (builder.ulid == null) {
-                    ULID.Value value = nextMonotonicUlid(ulid, prevUlid.get());
+                    ULID.Value value = RawdataProducer.nextMonotonicUlid(ulid, prevUlid.get());
                     builder.ulid(value);
                 }
                 MemoryRawdataMessage message = builder.build();
@@ -76,19 +76,6 @@ class MemoryRawdataProducer implements RawdataProducer {
         } finally {
             topic.unlock();
         }
-    }
-
-    static ULID.Value nextMonotonicUlid(ULID generator, ULID.Value previousUlid) {
-        // spin until time ticks
-        ULID.Value value;
-        do {
-            value = generator.nextStrictlyMonotonicValue(previousUlid, System.currentTimeMillis()).orElse(null);
-        } while (value == null);
-        if (previousUlid.timestamp() != value.timestamp()) {
-            // start at lsb 1, to avoid inclusive/exclusive semantics when searching
-            value = new ULID.Value((value.timestamp() << 16) & 0xFFFFFFFFFFFF0000L, 1L);
-        }
-        return value;
     }
 
     @Override

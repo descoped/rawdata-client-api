@@ -1,5 +1,7 @@
 package no.ssb.rawdata.api;
 
+import de.huxhorn.sulky.ulid.ULID;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -49,4 +51,23 @@ public interface RawdataConsumer extends AutoCloseable {
      * @return whether the consumer is closed.
      */
     boolean isClosed();
+
+    /**
+     * Return the ULID.Value that represents beginning of a given timestamp.
+     *
+     * @param timestamp the timestamp component of the returned ulid.
+     * @return the beginning-of-time ulid
+     */
+    static ULID.Value beginningOfTime(long timestamp) {
+        return new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 0L);
+    }
+
+    /**
+     * Return the ULID.Value that represents beginning of all time.
+     *
+     * @return the beginning-of-time ulid
+     */
+    static ULID.Value beginningOfTime() {
+        return new ULID.Value(0, 0);
+    }
 }
