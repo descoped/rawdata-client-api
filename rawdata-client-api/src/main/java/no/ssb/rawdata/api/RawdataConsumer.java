@@ -58,7 +58,7 @@ public interface RawdataConsumer extends AutoCloseable {
      * @param timestamp the timestamp component of the returned ulid.
      * @return the beginning-of-time ulid
      */
-    static ULID.Value beginningOfTime(long timestamp) {
+    static ULID.Value beginningOf(long timestamp) {
         return new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 0L);
     }
 

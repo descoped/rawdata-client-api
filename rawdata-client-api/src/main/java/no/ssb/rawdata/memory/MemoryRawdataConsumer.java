@@ -67,7 +67,7 @@ class MemoryRawdataConsumer implements RawdataConsumer {
 
     @Override
     public void seek(long timestamp) {
-        position.set(new MemoryCursor(RawdataConsumer.beginningOfTime(timestamp), true, true));
+        position.set(new MemoryCursor(RawdataConsumer.beginningOf(timestamp), true, true));
     }
 
     @Override
