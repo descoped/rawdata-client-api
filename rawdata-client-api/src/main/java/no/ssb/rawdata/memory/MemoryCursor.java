@@ -1,10 +1,11 @@
 package no.ssb.rawdata.memory;
 
 import de.huxhorn.sulky.ulid.ULID;
+import no.ssb.rawdata.api.RawdataCursor;
 
 import java.util.Objects;
 
-public class MemoryCursor {
+public class MemoryCursor implements RawdataCursor {
 
     /**
      * Need not exactly match an existing ulid-value.

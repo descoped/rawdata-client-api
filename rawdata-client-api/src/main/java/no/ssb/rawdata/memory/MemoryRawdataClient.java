@@ -4,6 +4,7 @@ import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
+import no.ssb.rawdata.api.RawdataCursor;
 import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.List;
@@ -33,13 +34,13 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public RawdataConsumer consumer(String topic, ULID.Value initialPosition, boolean inclusive) {
+    public RawdataConsumer consumer(String topic, RawdataCursor cursor) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
         MemoryRawdataConsumer consumer = new MemoryRawdataConsumer(
                 topicByName.computeIfAbsent(topic, t -> new MemoryRawdataTopic(t)),
-                new MemoryCursor(initialPosition, inclusive, true),
+                (MemoryCursor) cursor,
                 c -> consumers.remove(c)
         );
         consumers.add(consumer);
@@ -47,11 +48,16 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public ULID.Value ulidOfPosition(String topicName, String position) {
+    public RawdataCursor cursorOf(String topicName, ULID.Value ulid, boolean inclusive) {
+        return new MemoryCursor(ulid, inclusive, true);
+    }
+
+    @Override
+    public MemoryCursor cursorOf(String topicName, String position, boolean inclusive) {
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            return topic.ulidOf(position);
+            return new MemoryCursor(topic.ulidOf(position), inclusive, true);
         } finally {
             topic.unlock();
         }
