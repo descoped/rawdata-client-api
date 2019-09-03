@@ -2,6 +2,8 @@ package no.ssb.rawdata.api;
 
 import de.huxhorn.sulky.ulid.ULID;
 
+import java.time.Duration;
+
 public interface RawdataClient extends AutoCloseable {
 
     /**
@@ -40,7 +42,8 @@ public interface RawdataClient extends AutoCloseable {
 
     /**
      * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null).
+     * if the given initial position is null). The consumer will not include the initial-position itself when reading
+     * the stream.
      *
      * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
      *                        the topic that is independent of any technology or implementation specific schemes which
@@ -69,16 +72,21 @@ public interface RawdataClient extends AutoCloseable {
 
     /**
      * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null).
+     * if the given initial position is null). The consumer will not include the initial-position itself when reading
+     * the stream.
      *
      * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
      *                        the topic that is independent of any technology or implementation specific schemes which
      *                        should be configured when loading the rawdata client provider.
      * @param initialPosition the position to be set as current position when creating the consumer
+     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
+     *                        initialPosition was originally written to the stream.
+     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
+     *                        approxTimestamp + tolerance)
      * @return a consumer that can be used to read the topic stream.
      */
-    default RawdataConsumer consumer(String topic, String initialPosition) {
-        return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, false));
+    default RawdataConsumer consumer(String topic, String initialPosition, long approxTimestamp, Duration tolerance) {
+        return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, false, approxTimestamp, tolerance));
     }
 
     /**
@@ -90,31 +98,40 @@ public interface RawdataClient extends AutoCloseable {
      *                        should be configured when loading the rawdata client provider.
      * @param initialPosition the position to be set as current position when creating the consumer
      * @param inclusive       whether or not to include the message at the initial-position when reading the stream
+     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
+     *                        initialPosition was originally written to the stream.
+     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
+     *                        approxTimestamp + tolerance)
      * @return a consumer that can be used to read the topic stream.
      */
-    default RawdataConsumer consumer(String topic, String initialPosition, boolean inclusive) {
-        return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, inclusive));
+    default RawdataConsumer consumer(String topic, String initialPosition, boolean inclusive, long approxTimestamp, Duration tolerance) {
+        return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, inclusive, approxTimestamp, tolerance));
     }
 
     /**
-     * Find the ulid of the first message that matches the given position in the topic.
+     * Find the first message that matches the given ulid in the topic, and return a cursor representing that.
      *
      * @param topic     the topic
      * @param ulid      the ulid representing the starting point in the stream
      * @param inclusive whether the starting point should be included when iterating from the returned cursor
-     * @return the ulid if a match is found, null otherwise
+     * @return a cursor starting at the given ulid if a match is found, null otherwise
      */
     RawdataCursor cursorOf(String topic, ULID.Value ulid, boolean inclusive);
 
     /**
-     * Find the ulid of the first message that matches the given position in the topic.
+     * Find the first message that matches the given position in the topic, and return a cursor representing that. The
+     * position will be searched within the range as defined by approxTimestamp and tolerance.
      *
-     * @param topic     the topic
-     * @param position  the position to find
-     * @param inclusive whether the starting point should be included when iterating from the returned cursor
-     * @return the ulid if a match is found, null otherwise
+     * @param topic           the topic
+     * @param position        the position to find
+     * @param inclusive       whether the starting point should be included when iterating from the returned cursor
+     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
+     *                        initialPosition was originally written to the stream.
+     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
+     *                        approxTimestamp + tolerance)
+     * @return a cursor starting at the given position if a match is found, null otherwise
      */
-    RawdataCursor cursorOf(String topic, String position, boolean inclusive);
+    RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance);
 
     /**
      * Will read and return the last message in the stream.

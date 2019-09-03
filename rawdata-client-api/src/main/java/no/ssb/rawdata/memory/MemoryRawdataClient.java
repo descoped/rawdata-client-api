@@ -7,6 +7,7 @@ import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataCursor;
 import no.ssb.rawdata.api.RawdataMessage;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,10 +54,11 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
-    public MemoryCursor cursorOf(String topicName, String position, boolean inclusive) {
+    public RawdataCursor cursorOf(String topicName, String position, boolean inclusive, long approxTimestamp, Duration tolerance) {
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
+            // TODO Implement a more efficient scan through only elements using approxTimestamp and tolerance
             return new MemoryCursor(topic.ulidOf(position), inclusive, true);
         } finally {
             topic.unlock();
