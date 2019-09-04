@@ -6,6 +6,7 @@ import no.ssb.rawdata.api.RawdataClosedException;
 import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataCursor;
 import no.ssb.rawdata.api.RawdataMessage;
+import no.ssb.rawdata.api.RawdataNoSuchPositionException;
 
 import java.time.Duration;
 import java.util.List;
@@ -14,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static java.util.Optional.ofNullable;
 
 public class MemoryRawdataClient implements RawdataClient {
 
@@ -58,8 +61,11 @@ public class MemoryRawdataClient implements RawdataClient {
         MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            // TODO Implement a more efficient scan through only elements using approxTimestamp and tolerance
-            return new MemoryCursor(topic.ulidOf(position), inclusive, true);
+            ULID.Value lowerBound = RawdataConsumer.beginningOf(approxTimestamp - tolerance.toMillis());
+            ULID.Value upperBound = RawdataConsumer.beginningOf(approxTimestamp + tolerance.toMillis());
+            return ofNullable(topic.ulidOf(position, lowerBound, upperBound))
+                    .map(ulid -> new MemoryCursor(ulid, inclusive, true))
+                    .orElseThrow(() -> new RawdataNoSuchPositionException(String.format("Position not found: %s", position)));
         } finally {
             topic.unlock();
         }

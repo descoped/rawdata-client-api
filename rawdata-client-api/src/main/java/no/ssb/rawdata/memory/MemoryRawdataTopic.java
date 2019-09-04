@@ -115,14 +115,14 @@ class MemoryRawdataTopic {
                 '}';
     }
 
-    ULID.Value ulidOf(String position) {
+    ULID.Value ulidOf(String position, ULID.Value lowerBound, ULID.Value upperBound) {
         checkHasLock();
 
         /*
-         * Perform a full topic scan from start in an attempt to find the message with the given position
+         * Perform a topic scan looking for the given position, starting at lowerBound (inclusive) and ending at upperBound (exclusive)
          */
 
-        for (Map.Entry<ULID.Value, RawdataMessage> entry : data.entrySet()) {
+        for (Map.Entry<ULID.Value, RawdataMessage> entry : data.subMap(lowerBound, true, upperBound, false).entrySet()) {
             if (position.equals(entry.getValue().position())) {
                 return entry.getKey();
             }

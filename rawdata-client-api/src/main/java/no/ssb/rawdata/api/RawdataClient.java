@@ -130,8 +130,9 @@ public interface RawdataClient extends AutoCloseable {
      * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
      *                        approxTimestamp + tolerance)
      * @return a cursor starting at the given position if a match is found, null otherwise
+     * @throws RawdataNoSuchPositionException if the position cannot be found within the bounds of the approcTimestamp +- tolerance
      */
-    RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance);
+    RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException;
 
     /**
      * Will read and return the last message in the stream.
