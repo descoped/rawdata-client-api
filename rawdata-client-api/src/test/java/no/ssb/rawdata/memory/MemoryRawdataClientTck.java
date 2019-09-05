@@ -1,4 +1,4 @@
-package no.ssb.rawdata.tck;
+package no.ssb.rawdata.memory;
 
 import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClientInitializer;
@@ -23,7 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 
-public class RawdataClientTck {
+public class MemoryRawdataClientTck {
 
     RawdataClient client;
 
