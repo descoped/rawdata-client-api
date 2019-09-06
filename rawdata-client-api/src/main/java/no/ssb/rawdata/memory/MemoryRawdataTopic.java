@@ -46,7 +46,7 @@ class MemoryRawdataTopic {
     }
 
     private RawdataMessage copy(RawdataMessage original) {
-        return new MemoryRawdataMessage(original.ulid(), original.sequenceNumber(), original.position(),
+        return new MemoryRawdataMessage(original.ulid(), original.orderingGroup(), original.sequenceNumber(), original.position(),
                 original.keys().stream().collect(Collectors.toMap(
                         k -> k, k -> {
                             byte[] src = original.get(k);
