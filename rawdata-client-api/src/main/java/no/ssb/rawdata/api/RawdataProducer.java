@@ -2,8 +2,10 @@ package no.ssb.rawdata.api;
 
 import de.huxhorn.sulky.ulid.ULID;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public interface RawdataProducer extends AutoCloseable {
 
@@ -52,6 +54,30 @@ public interface RawdataProducer extends AutoCloseable {
      *                                     was not buffered before calling publish.
      */
     void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException;
+
+    /**
+     * Publish messages for all provided builders.
+     *
+     * @param builders the builders
+     * @throws RawdataClosedException if the producer was closed before or during this call.
+     */
+    default void publishBuilders(RawdataMessage.Builder... builders) throws RawdataClosedException {
+        for (RawdataMessage.Builder builder : builders) {
+            buffer(builder);
+        }
+        publish(Arrays.stream(builders).map(RawdataMessage.Builder::position).collect(Collectors.toList()));
+    }
+
+    /**
+     * Publish messages for all provided builders.
+     *
+     * @param builders the builders
+     * @throws RawdataClosedException if the producer was closed before or during this call.
+     */
+    default void publishBuilders(List<RawdataMessage.Builder> builders) throws RawdataClosedException {
+        builders.forEach(this::buffer);
+        publish(builders.stream().map(RawdataMessage.Builder::position).collect(Collectors.toList()));
+    }
 
     /**
      * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from
