@@ -3,6 +3,7 @@ package no.ssb.rawdata.memory;
 import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataMessage;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -68,16 +69,28 @@ class MemoryRawdataMessage implements RawdataMessage {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MemoryRawdataMessage that = (MemoryRawdataMessage) o;
-        return sequenceNumber == that.sequenceNumber &&
-                ulid.equals(that.ulid) &&
+        return ulid.equals(that.ulid) &&
                 orderingGroup.equals(that.orderingGroup) &&
+                sequenceNumber == that.sequenceNumber &&
                 position.equals(that.position) &&
-                data.equals(that.data);
+                this.data.keySet().equals(that.data.keySet()) &&
+                this.data.keySet().stream().allMatch(key -> Arrays.equals(this.data.get(key), that.data.get(key)));
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(ulid, orderingGroup, sequenceNumber, position, data);
+    }
+
+    @Override
+    public String toString() {
+        return "MemoryRawdataMessage{" +
+                "ulid=" + ulid +
+                ", orderingGroup='" + orderingGroup + '\'' +
+                ", sequenceNumber=" + sequenceNumber +
+                ", position='" + position + '\'' +
+                ", data.keys=" + data.keySet() +
+                '}';
     }
 
     static class Builder implements RawdataMessage.Builder {
