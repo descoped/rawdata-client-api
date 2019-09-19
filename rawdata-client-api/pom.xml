@@ -76,6 +76,21 @@
 
     <profiles>
         <profile>
+            <id>ssb-bip</id>
+            <distributionManagement>
+                <repository>
+                    <id>ssb-bip-releases</id>
+                    <name>SSB Nexus Releases</name>
+                    <url>https://nexus.infra.ssbmod.net/repository/maven-releases/</url>
+                </repository>
+                <snapshotRepository>
+                    <id>ssb-bip-snapshots</id>
+                    <name>SSB Snapshot Repository</name>
+                    <url>https://nexus.infra.ssbmod.net/repository/maven-snapshots/</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+        <profile>
             <id>release</id>
             <build>
                 <plugins>
