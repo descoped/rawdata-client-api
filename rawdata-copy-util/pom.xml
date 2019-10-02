@@ -58,7 +58,7 @@
         <dependency>
             <groupId>no.ssb.rawdata</groupId>
             <artifactId>rawdata-client-provider-lmdb</artifactId>
-            <version>0.1-SNAPSHOT</version>
+            <version>0.3-SNAPSHOT</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
