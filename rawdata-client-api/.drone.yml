@@ -18,18 +18,15 @@ steps:
   - name: test
     image: maven:3.6.0-jdk-11-slim
     commands:
-      - mvn test -P ssb-bip --update-snapshots --batch-mode --global-settings settings.xml
+      - mvn test -P ssb-bip,coverage --update-snapshots --batch-mode --global-settings settings.xml
 
   - name: publish-maven
     image: maven:3.6.0-jdk-11-slim
     commands:
-      - mvn clean deploy -P ssb-bip, -DskipTests=true --batch-mode --global-settings settings.xml
+      - mvn clean deploy -P ssb-bip -DskipTests=true --batch-mode --global-settings settings.xml
     when:
       event:
         exclude: pull_request
-      branch:
-        - master
-        - develop
 
   - name: slack
     image: plugins/slack
