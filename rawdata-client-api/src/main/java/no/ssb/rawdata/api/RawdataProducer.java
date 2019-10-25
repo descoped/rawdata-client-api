@@ -1,6 +1,8 @@
 package no.ssb.rawdata.api;
 
 import de.huxhorn.sulky.ulid.ULID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.List;
@@ -8,6 +10,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public interface RawdataProducer extends AutoCloseable {
+
+    Logger LOG = LoggerFactory.getLogger(RawdataProducer.class);
 
     /**
      * @return the topic on which this producer will publish messages.
@@ -122,13 +126,22 @@ public interface RawdataProducer extends AutoCloseable {
         ULID.Value value;
         do {
             long timestamp = System.currentTimeMillis();
-            if (previousUlid.timestamp() > timestamp) {
-                throw new IllegalStateException("Previous timestamp is in the future");
-            } else if (previousUlid.timestamp() != timestamp) {
+            long diff = timestamp - previousUlid.timestamp();
+            if (diff < 0) {
+                if (diff < (5 * 1000)) {
+                    throw new IllegalStateException(String.format("Previous timestamp is in the future. Diff %d ms", -diff));
+                }
+                LOG.debug("Previous timestamp is in the future. Diff {} ms", -diff);
+                try {
+                    Thread.sleep(-diff);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            } else if (diff > 0) {
                 // start at lsb 1, to avoid inclusive/exclusive semantics when searching
                 return new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 1L);
             }
-            // previousUlid.timestamp() == timestamp
+            // diff == 0
             value = generator.nextStrictlyMonotonicValue(previousUlid, timestamp).orElse(null);
         } while (value == null);
         return value;
