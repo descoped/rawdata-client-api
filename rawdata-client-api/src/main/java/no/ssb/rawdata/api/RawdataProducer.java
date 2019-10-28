@@ -128,7 +128,7 @@ public interface RawdataProducer extends AutoCloseable {
             long timestamp = System.currentTimeMillis();
             long diff = timestamp - previousUlid.timestamp();
             if (diff < 0) {
-                if (-diff < (30 * 1000)) {
+                if (diff < -(30 * 1000)) {
                     throw new IllegalStateException(String.format("Previous timestamp is in the future. Diff %d ms", -diff));
                 }
                 LOG.debug("Previous timestamp is in the future, waiting for time to catch up. Diff {} ms", -diff);
