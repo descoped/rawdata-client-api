@@ -91,6 +91,11 @@ public class MemoryRawdataClient implements RawdataClient {
     }
 
     @Override
+    public MemoryRawdataMetadataClient metadata(String topic) {
+        return new MemoryRawdataMetadataClient(topic);
+    }
+
+    @Override
     public void close() {
         for (MemoryRawdataProducer producer : producers) {
             producer.close();

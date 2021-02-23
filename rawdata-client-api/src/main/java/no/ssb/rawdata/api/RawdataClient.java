@@ -149,4 +149,12 @@ public interface RawdataClient extends AutoCloseable {
      * @return whether the client is closed.
      */
     boolean isClosed();
+
+    /**
+     * Return a metadata-client that can be used for reading and writing metadata for the given topic.
+     *
+     * @param topic the topic that the metadata-client will be associated with.
+     * @return a metadata-client for the given topic.
+     */
+    RawdataMetadataClient metadata(String topic);
 }

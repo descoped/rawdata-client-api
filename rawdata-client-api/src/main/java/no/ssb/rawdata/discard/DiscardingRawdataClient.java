@@ -44,4 +44,9 @@ public class DiscardingRawdataClient implements RawdataClient {
     @Override
     public void close() {
     }
+
+    @Override
+    public DiscardingRawdataMetadataClient metadata(String topic) {
+        return new DiscardingRawdataMetadataClient(topic);
+    }
 }

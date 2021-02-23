@@ -5,6 +5,7 @@ import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClientInitializer;
 import no.ssb.rawdata.api.RawdataConsumer;
 import no.ssb.rawdata.api.RawdataMessage;
+import no.ssb.rawdata.api.RawdataMetadataClient;
 import no.ssb.rawdata.api.RawdataNoSuchPositionException;
 import no.ssb.rawdata.api.RawdataNotBufferedException;
 import no.ssb.rawdata.api.RawdataProducer;
@@ -13,6 +14,7 @@ import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -332,5 +334,24 @@ public class MemoryRawdataClientTck {
         try (RawdataProducer producer = client.producer("the-topic")) {
         }
         client.cursorOf("the-topic", "d", true, System.currentTimeMillis(), Duration.ofMinutes(1));
+    }
+
+    @Test
+    public void thatMetadataCanBeWrittenListedAndRead() {
+        RawdataMetadataClient metadata = client.metadata("the-topic");
+        assertEquals(metadata.topic(), "the-topic");
+        assertEquals(metadata.keys().size(), 0);
+        metadata.put("key-1", "Value-1".getBytes(StandardCharsets.UTF_8));
+        metadata.put("key-2", "Value-2".getBytes(StandardCharsets.UTF_8));
+        assertEquals(metadata.keys().size(), 2);
+        assertEquals(new String(metadata.get("key-1"), StandardCharsets.UTF_8), "Value-1");
+        assertEquals(new String(metadata.get("key-2"), StandardCharsets.UTF_8), "Value-2");
+        metadata.put("key-2", "Overwritten-Value-2".getBytes(StandardCharsets.UTF_8));
+        assertEquals(metadata.keys().size(), 2);
+        assertEquals(new String(metadata.get("key-2"), StandardCharsets.UTF_8), "Overwritten-Value-2");
+        metadata.remove("key-1");
+        assertEquals(metadata.keys().size(), 1);
+        metadata.remove("key-2");
+        assertEquals(metadata.keys().size(), 0);
     }
 }
