@@ -1,11 +1,8 @@
 package no.ssb.rawdata.discard;
 
-import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataProducer;
 
-import java.util.Collections;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 class DiscardingRawdataProducer implements RawdataProducer {
@@ -23,67 +20,7 @@ class DiscardingRawdataProducer implements RawdataProducer {
 
     @Override
     public RawdataMessage.Builder builder() {
-        return new RawdataMessage.Builder() {
-            @Override
-            public RawdataMessage.Builder orderingGroup(String group) {
-                return this;
-            }
-
-            @Override
-            public String orderingGroup() {
-                return null;
-            }
-
-            @Override
-            public RawdataMessage.Builder sequenceNumber(long sequenceNumber) {
-                return this;
-            }
-
-            @Override
-            public long sequenceNumber() {
-                return 0;
-            }
-
-            @Override
-            public RawdataMessage.Builder ulid(ULID.Value ulid) {
-                return this;
-            }
-
-            @Override
-            public ULID.Value ulid() {
-                return null;
-            }
-
-            @Override
-            public RawdataMessage.Builder position(String position) {
-                return this;
-            }
-
-            @Override
-            public String position() {
-                return null;
-            }
-
-            @Override
-            public RawdataMessage.Builder put(String key, byte[] payload) {
-                return this;
-            }
-
-            @Override
-            public Set<String> keys() {
-                return Collections.emptySet();
-            }
-
-            @Override
-            public byte[] get(String key) {
-                return new byte[0];
-            }
-
-            @Override
-            public RawdataMessage build() {
-                return null;
-            }
-        };
+        return RawdataMessage.builder();
     }
 
     @Override

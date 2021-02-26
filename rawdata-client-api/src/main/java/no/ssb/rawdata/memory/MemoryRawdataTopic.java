@@ -46,16 +46,17 @@ class MemoryRawdataTopic {
     }
 
     private RawdataMessage copy(RawdataMessage original) {
-        return new MemoryRawdataMessage(original.ulid(), original.orderingGroup(), original.sequenceNumber(), original.position(),
-                original.keys().stream().collect(Collectors.toMap(
+        return original.copy()
+                .data(original.keys().stream().collect(Collectors.toMap(
                         k -> k, k -> {
                             byte[] src = original.get(k);
                             byte[] dest = new byte[src.length];
                             System.arraycopy(src, 0, dest, 0, src.length);
                             return src;
                         }
-                ))
-        );
+                        ))
+                )
+                .build();
     }
 
     boolean hasNext(MemoryCursor cursor) {

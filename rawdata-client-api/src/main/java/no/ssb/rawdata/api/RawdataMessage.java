@@ -10,6 +10,12 @@ import java.util.stream.Collectors;
 
 public interface RawdataMessage {
 
+    static RawdataMessage.Builder builder() {
+        return new RawdataDefaultMessage.Builder();
+    }
+
+    RawdataMessage.Builder copy();
+
     /**
      * A unique lexicographically sortable identifier for the message. Sorting by this id, will also sort the messages
      * by time, making it convenient
@@ -152,6 +158,22 @@ public interface RawdataMessage {
          * @return this builder
          */
         Builder put(String key, byte[] payload);
+
+        /**
+         * Put all values from provided map into internal builder map.
+         *
+         * @param data the data
+         * @return this builder
+         */
+        default Builder data(Map<String, byte[]> data) {
+            data.forEach(this::put);
+            return this;
+        }
+
+        /**
+         * Get the data map
+         */
+        Map<String, byte[]> data();
 
         /**
          * @return The keys added to this builder through put so far.

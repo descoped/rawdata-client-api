@@ -1,15 +1,15 @@
-package no.ssb.rawdata.memory;
+package no.ssb.rawdata.api;
 
 import de.huxhorn.sulky.ulid.ULID;
-import no.ssb.rawdata.api.RawdataMessage;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-class MemoryRawdataMessage implements RawdataMessage {
+class RawdataDefaultMessage implements RawdataMessage {
 
     final ULID.Value ulid;
     final String orderingGroup;
@@ -17,7 +17,7 @@ class MemoryRawdataMessage implements RawdataMessage {
     final String position;
     final Map<String, byte[]> data;
 
-    MemoryRawdataMessage(ULID.Value ulid, String orderingGroup, long sequenceNumber, String position, Map<String, byte[]> data) {
+    RawdataDefaultMessage(ULID.Value ulid, String orderingGroup, long sequenceNumber, String position, Map<String, byte[]> data) {
         if (ulid == null) {
             throw new IllegalArgumentException("ulid cannot be null");
         }
@@ -32,6 +32,11 @@ class MemoryRawdataMessage implements RawdataMessage {
         this.sequenceNumber = sequenceNumber;
         this.position = position;
         this.data = data;
+    }
+
+    @Override
+    public RawdataMessage.Builder copy() {
+        return new Builder(this);
     }
 
     @Override
@@ -68,7 +73,7 @@ class MemoryRawdataMessage implements RawdataMessage {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        MemoryRawdataMessage that = (MemoryRawdataMessage) o;
+        RawdataDefaultMessage that = (RawdataDefaultMessage) o;
         return ulid.equals(that.ulid) &&
                 orderingGroup.equals(that.orderingGroup) &&
                 sequenceNumber == that.sequenceNumber &&
@@ -99,6 +104,17 @@ class MemoryRawdataMessage implements RawdataMessage {
         long sequenceNumber = 0;
         String position;
         Map<String, byte[]> data = new LinkedHashMap<>();
+
+        Builder() {
+        }
+
+        Builder(RawdataDefaultMessage source) {
+            orderingGroup = source.orderingGroup;
+            ulid = source.ulid;
+            sequenceNumber = source.sequenceNumber;
+            position = source.position;
+            data.putAll(source.data);
+        }
 
         @Override
         public RawdataMessage.Builder ulid(ULID.Value ulid) {
@@ -152,6 +168,11 @@ class MemoryRawdataMessage implements RawdataMessage {
         }
 
         @Override
+        public Map<String, byte[]> data() {
+            return Collections.unmodifiableMap(data);
+        }
+
+        @Override
         public Set<String> keys() {
             return data.keySet();
         }
@@ -162,8 +183,8 @@ class MemoryRawdataMessage implements RawdataMessage {
         }
 
         @Override
-        public MemoryRawdataMessage build() {
-            return new MemoryRawdataMessage(ulid, orderingGroup, sequenceNumber, position, data);
+        public RawdataDefaultMessage build() {
+            return new RawdataDefaultMessage(ulid, orderingGroup, sequenceNumber, position, data);
         }
     }
 }

@@ -30,9 +30,7 @@ public class MemoryRawdataClient implements RawdataClient {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t)), p -> {
-            producers.remove(p);
-        });
+        MemoryRawdataProducer producer = new MemoryRawdataProducer(topicByName.computeIfAbsent(topicName, MemoryRawdataTopic::new), producers::remove);
         this.producers.add(producer);
         return producer;
     }
@@ -43,9 +41,9 @@ public class MemoryRawdataClient implements RawdataClient {
             throw new RawdataClosedException();
         }
         MemoryRawdataConsumer consumer = new MemoryRawdataConsumer(
-                topicByName.computeIfAbsent(topic, t -> new MemoryRawdataTopic(t)),
+                topicByName.computeIfAbsent(topic, MemoryRawdataTopic::new),
                 (MemoryCursor) cursor,
-                c -> consumers.remove(c)
+                consumers::remove
         );
         consumers.add(consumer);
         return consumer;
@@ -58,7 +56,7 @@ public class MemoryRawdataClient implements RawdataClient {
 
     @Override
     public RawdataCursor cursorOf(String topicName, String position, boolean inclusive, long approxTimestamp, Duration tolerance) {
-        MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
+        MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, MemoryRawdataTopic::new);
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
             ULID.Value lowerBound = RawdataConsumer.beginningOf(approxTimestamp - tolerance.toMillis());
@@ -76,7 +74,7 @@ public class MemoryRawdataClient implements RawdataClient {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, t -> new MemoryRawdataTopic(t));
+        MemoryRawdataTopic topic = topicByName.computeIfAbsent(topicName, MemoryRawdataTopic::new);
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
             return topic.lastMessage();

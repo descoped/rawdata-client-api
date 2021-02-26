@@ -22,7 +22,7 @@ class MemoryRawdataProducer implements RawdataProducer {
 
     final MemoryRawdataTopic topic;
 
-    final Map<String, MemoryRawdataMessage.Builder> buffer = new ConcurrentHashMap<>();
+    final Map<String, RawdataMessage.Builder> buffer = new ConcurrentHashMap<>();
 
     final AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -43,16 +43,15 @@ class MemoryRawdataProducer implements RawdataProducer {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        return new MemoryRawdataMessage.Builder();
+        return RawdataMessage.builder();
     }
 
     @Override
-    public RawdataProducer buffer(RawdataMessage.Builder _builder) throws RawdataClosedException {
-        MemoryRawdataMessage.Builder builder = (MemoryRawdataMessage.Builder) _builder;
+    public RawdataProducer buffer(RawdataMessage.Builder builder) throws RawdataClosedException {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        buffer.put(builder.position, builder);
+        buffer.put(builder.position(), builder);
         return this;
     }
 
@@ -61,15 +60,15 @@ class MemoryRawdataProducer implements RawdataProducer {
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
             for (String position : positions) {
-                MemoryRawdataMessage.Builder builder = buffer.remove(position);
+                RawdataMessage.Builder builder = buffer.remove(position);
                 if (builder == null) {
                     throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
                 }
-                if (builder.ulid == null) {
+                if (builder.ulid() == null) {
                     ULID.Value value = RawdataProducer.nextMonotonicUlid(ulid, prevUlid.get());
                     builder.ulid(value);
                 }
-                MemoryRawdataMessage message = builder.build();
+                RawdataMessage message = builder.build();
                 prevUlid.set(message.ulid());
                 topic.write(message);
             }
