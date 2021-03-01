@@ -52,6 +52,9 @@ public interface RawdataConsumer extends AutoCloseable {
      */
     boolean isClosed();
 
+    @Override
+    void close();
+
     /**
      * Return the ULID.Value that represents beginning of a given timestamp.
      *

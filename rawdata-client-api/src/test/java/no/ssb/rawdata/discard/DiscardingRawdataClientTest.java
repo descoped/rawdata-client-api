@@ -4,6 +4,7 @@ import de.huxhorn.sulky.ulid.ULID;
 import no.ssb.rawdata.api.RawdataClient;
 import no.ssb.rawdata.api.RawdataClientInitializer;
 import no.ssb.rawdata.api.RawdataConsumer;
+import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataMetadataClient;
 import no.ssb.rawdata.api.RawdataProducer;
 import no.ssb.service.provider.api.ProviderConfigurator;
@@ -45,8 +46,11 @@ public class DiscardingRawdataClientTest {
     @Test
     public void thatProducerMethodsAcceptAndDiscardAll() throws Exception {
         try (RawdataProducer producer = client.producer("the-topic")) {
-            producer.buffer(producer.builder().ulid(new ULID.Value(0, 0)).position("p1").put("k", new byte[0]));
-            producer.publish("p1");
+            producer.publish(RawdataMessage.builder()
+                    .ulid(new ULID.Value(0, 0))
+                    .position("p1")
+                    .put("k", new byte[0])
+                    .build());
             assertEquals(producer.topic(), "the-topic");
             assertFalse(producer.isClosed());
         }
@@ -55,8 +59,11 @@ public class DiscardingRawdataClientTest {
     @Test
     public void thatConsumerReturnEmpty() throws Exception {
         try (RawdataProducer producer = client.producer("the-topic")) {
-            producer.buffer(producer.builder().ulid(new ULID.Value(0, 0)).position("p1").put("k", new byte[0]));
-            producer.publish("p1");
+            producer.publish(RawdataMessage.builder()
+                    .ulid(new ULID.Value(0, 0))
+                    .position("p1")
+                    .put("k", new byte[0])
+                    .build());
         }
         try (RawdataConsumer consumer = client.consumer("the-topic")) {
             assertNull(consumer.receive(0, TimeUnit.MILLISECONDS));

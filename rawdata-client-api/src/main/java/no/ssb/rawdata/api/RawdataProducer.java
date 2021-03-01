@@ -4,10 +4,8 @@ import de.huxhorn.sulky.ulid.ULID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 public interface RawdataProducer extends AutoCloseable {
 
@@ -19,89 +17,40 @@ public interface RawdataProducer extends AutoCloseable {
     String topic();
 
     /**
-     * Constructs a builder that can be used to build the content of a message.
+     * Publish messages. Published content will be assigned an ulid if it is missing from any of the provided messages.
      *
-     * @return the builder
-     * @throws RawdataClosedException if the producer was closed before this call.
-     */
-    RawdataMessage.Builder builder() throws RawdataClosedException;
-
-    /**
-     * Buffer the content of a message, preparing it for publication to rawdata using one of the publish methods.
-     *
-     * @param builder a builder used to build the message that will be buffered
-     * @return this instance
-     * @throws RawdataClosedException if the producer was closed before this call.
-     */
-    RawdataProducer buffer(RawdataMessage.Builder builder) throws RawdataClosedException;
-
-    /**
-     * Publish all buffered content that matches any of the positions here provided, then remove those contents from
-     * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
-     *
-     * @param positions a list of positions
-     * @throws RawdataClosedException      if the producer was closed before or during this call.
-     * @throws RawdataNotBufferedException if one or more of the positions provided by the positions param
-     *                                     was not buffered before calling publish.
-     */
-    default void publish(List<String> positions) throws RawdataClosedException, RawdataNotBufferedException {
-        publish(positions.toArray(new String[positions.size()]));
-    }
-
-    /**
-     * Publish all buffered content that matches any of the positions here provided, then remove those contents from
-     * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
-     *
-     * @param positions a list of positions
-     * @throws RawdataClosedException      if the producer was closed before or during this call.
-     * @throws RawdataNotBufferedException if one or more of the positions provided by the positions param
-     *                                     was not buffered before calling publish.
-     */
-    void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException;
-
-    /**
-     * Publish messages for all provided builders.
-     *
-     * @param builders the builders
+     * @param messages a list of messages
      * @throws RawdataClosedException if the producer was closed before or during this call.
      */
-    default void publishBuilders(RawdataMessage.Builder... builders) throws RawdataClosedException {
-        for (RawdataMessage.Builder builder : builders) {
-            buffer(builder);
-        }
-        publish(Arrays.stream(builders).map(RawdataMessage.Builder::position).collect(Collectors.toList()));
+    default void publish(List<RawdataMessage> messages) throws RawdataClosedException {
+        publish(messages.toArray(new RawdataMessage[0]));
     }
 
     /**
-     * Publish messages for all provided builders.
+     * Publish messages. Published content will be assigned an ulid if it is missing from any of the provided messages.
      *
-     * @param builders the builders
+     * @param messages a list of messages
      * @throws RawdataClosedException if the producer was closed before or during this call.
      */
-    default void publishBuilders(List<RawdataMessage.Builder> builders) throws RawdataClosedException {
-        builders.forEach(this::buffer);
-        publish(builders.stream().map(RawdataMessage.Builder::position).collect(Collectors.toList()));
+    void publish(RawdataMessage... messages) throws RawdataClosedException;
+
+    /**
+     * Asynchronously publish all messages. Published content will be assigned an ulid if it is missing from any of the provided messages.
+     *
+     * @param messages a list of messages
+     * @return a completable futures representing the completeness of the async-function.
+     */
+    default CompletableFuture<Void> publishAsync(List<RawdataMessage> messages) {
+        return publishAsync(messages.toArray(new RawdataMessage[messages.size()]));
     }
 
     /**
-     * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from
-     * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
+     * Asynchronously publish all messages. Published content will be assigned an ulid if it is missing from any of the provided messages.
      *
-     * @param positions a list of positions
+     * @param messages a list of messages
      * @return a completable futures representing the completeness of the async-function.
      */
-    default CompletableFuture<Void> publishAsync(List<String> positions) {
-        return publishAsync(positions.toArray(new String[positions.size()]));
-    }
-
-    /**
-     * Asynchronously publish all buffered content that matches any of the positions here provided, then remove those contents from
-     * the buffer. Published content will be assigned a message-id that is available in the returned list of messages.
-     *
-     * @param positions a list of positions
-     * @return a completable futures representing the completeness of the async-function.
-     */
-    CompletableFuture<Void> publishAsync(String... positions);
+    CompletableFuture<Void> publishAsync(RawdataMessage... messages);
 
     /**
      * Returns whether or not the producer is closed.
@@ -109,6 +58,9 @@ public interface RawdataProducer extends AutoCloseable {
      * @return whether the producer is closed.
      */
     boolean isClosed();
+
+    @Override
+    void close();
 
     /**
      * Generate a new unique ulid. If the newly generated ulid has a new timestamp than the previous one, then the very

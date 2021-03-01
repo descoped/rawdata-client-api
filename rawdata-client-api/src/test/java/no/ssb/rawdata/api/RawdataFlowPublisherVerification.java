@@ -20,11 +20,10 @@ public class RawdataFlowPublisherVerification extends FlowPublisherVerification<
         RawdataClient rawdataClient = new MemoryRawdataClientInitializer().initialize(Map.of());
         try (RawdataProducer producer = rawdataClient.producer(topic)) {
             for (int i = 0; i < Math.min(l, 1000); i++) {
-                producer.buffer(RawdataMessage.builder()
+                producer.publish(RawdataMessage.builder()
                         .position("p-" + (i + 1))
                         .put("key", ("Value of element # " + (i + 1)).getBytes(StandardCharsets.UTF_8))
-                );
-                producer.publish("p-" + (i + 1));
+                        .build());
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

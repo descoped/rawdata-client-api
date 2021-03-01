@@ -6,9 +6,7 @@ import no.ssb.rawdata.api.RawdataMessage;
 import no.ssb.rawdata.api.RawdataNotBufferedException;
 import no.ssb.rawdata.api.RawdataProducer;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,8 +19,6 @@ class MemoryRawdataProducer implements RawdataProducer {
     final AtomicReference<ULID.Value> prevUlid = new AtomicReference<>(ulid.nextValue());
 
     final MemoryRawdataTopic topic;
-
-    final Map<String, RawdataMessage.Builder> buffer = new ConcurrentHashMap<>();
 
     final AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -39,38 +35,19 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public RawdataMessage.Builder builder() throws RawdataClosedException {
-        if (isClosed()) {
-            throw new RawdataClosedException();
-        }
-        return RawdataMessage.builder();
-    }
-
-    @Override
-    public RawdataProducer buffer(RawdataMessage.Builder builder) throws RawdataClosedException {
-        if (isClosed()) {
-            throw new RawdataClosedException();
-        }
-        buffer.put(builder.position(), builder);
-        return this;
-    }
-
-    @Override
-    public void publish(String... positions) throws RawdataClosedException, RawdataNotBufferedException {
+    public void publish(RawdataMessage... messages) throws RawdataClosedException, RawdataNotBufferedException {
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
-            for (String position : positions) {
-                RawdataMessage.Builder builder = buffer.remove(position);
-                if (builder == null) {
-                    throw new RawdataNotBufferedException(String.format("position %s has not been buffered", position));
+            for (RawdataMessage message : messages) {
+                if (message == null) {
+                    throw new NullPointerException("on of the messages was null");
                 }
-                if (builder.ulid() == null) {
-                    ULID.Value value = RawdataProducer.nextMonotonicUlid(ulid, prevUlid.get());
-                    builder.ulid(value);
+                ULID.Value ulid = message.ulid();
+                if (ulid == null) {
+                    ulid = RawdataProducer.nextMonotonicUlid(this.ulid, prevUlid.get());
                 }
-                RawdataMessage message = builder.build();
-                prevUlid.set(message.ulid());
-                topic.write(message);
+                prevUlid.set(ulid);
+                topic.write(ulid, message);
             }
         } finally {
             topic.unlock();
@@ -78,11 +55,11 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public CompletableFuture<Void> publishAsync(String... positions) {
+    public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
         if (isClosed()) {
             throw new RawdataClosedException();
         }
-        return CompletableFuture.runAsync(() -> publish(positions));
+        return CompletableFuture.runAsync(() -> publish(messages));
     }
 
     @Override

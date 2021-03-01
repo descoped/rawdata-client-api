@@ -18,9 +18,6 @@ class RawdataDefaultMessage implements RawdataMessage {
     final Map<String, byte[]> data;
 
     RawdataDefaultMessage(ULID.Value ulid, String orderingGroup, long sequenceNumber, String position, Map<String, byte[]> data) {
-        if (ulid == null) {
-            throw new IllegalArgumentException("ulid cannot be null");
-        }
         if (position == null) {
             throw new IllegalArgumentException("position cannot be null");
         }

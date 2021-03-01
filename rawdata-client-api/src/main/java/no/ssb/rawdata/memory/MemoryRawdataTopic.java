@@ -38,15 +38,16 @@ class MemoryRawdataTopic {
         }
     }
 
-    void write(RawdataMessage message) {
+    void write(ULID.Value ulid, RawdataMessage message) {
         checkHasLock();
-        RawdataMessage copy = copy(message); // fake serialization and deserialization
+        RawdataMessage copy = copy(ulid, message); // fake serialization and deserialization
         data.put(copy.ulid(), copy);
         signalProduction();
     }
 
-    private RawdataMessage copy(RawdataMessage original) {
+    private RawdataMessage copy(ULID.Value ulid, RawdataMessage original) {
         return original.copy()
+                .ulid(ulid)
                 .data(original.keys().stream().collect(Collectors.toMap(
                         k -> k, k -> {
                             byte[] src = original.get(k);

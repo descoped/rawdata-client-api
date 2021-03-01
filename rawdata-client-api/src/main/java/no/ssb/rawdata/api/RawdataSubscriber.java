@@ -8,7 +8,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-class RawdataSubscriber implements Flow.Subscriber<RawdataMessage.Builder> {
+class RawdataSubscriber implements Flow.Subscriber<RawdataMessage> {
 
     final Supplier<RawdataProducer> producerSupplier;
     final AtomicReference<RawdataProducer> producerRef = new AtomicReference<>();
@@ -52,10 +52,9 @@ class RawdataSubscriber implements Flow.Subscriber<RawdataMessage.Builder> {
     }
 
     @Override
-    public void onNext(RawdataMessage.Builder item) {
+    public void onNext(RawdataMessage item) {
         RawdataProducer producer = producerRef.get();
-        producer.buffer(item);
-        producer.publish(item.position());
+        producer.publish(item);
         if (received.incrementAndGet() % 5L == 0L) {
             subscriptionRef.get().request(5);
         }

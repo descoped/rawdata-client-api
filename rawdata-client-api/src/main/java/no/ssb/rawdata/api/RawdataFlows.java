@@ -11,19 +11,19 @@ public class RawdataFlows {
         return new RawdataPublisher(consumer);
     }
 
-    public static Flow.Subscriber<RawdataMessage.Builder> subscriber(Supplier<RawdataProducer> producer) {
+    public static Flow.Subscriber<RawdataMessage> subscriber(Supplier<RawdataProducer> producer) {
         return new RawdataSubscriber(producer);
     }
 
-    public static Flow.Subscriber<RawdataMessage.Builder> subscriber(Supplier<RawdataProducer> producer, Consumer<RawdataProducer> onComplete) {
+    public static Flow.Subscriber<RawdataMessage> subscriber(Supplier<RawdataProducer> producer, Consumer<RawdataProducer> onComplete) {
         return new RawdataSubscriber(producer, onComplete);
     }
 
-    public static Flow.Subscriber<RawdataMessage.Builder> subscriber(Supplier<RawdataProducer> producer, BiConsumer<Throwable, RawdataProducer> onError) {
+    public static Flow.Subscriber<RawdataMessage> subscriber(Supplier<RawdataProducer> producer, BiConsumer<Throwable, RawdataProducer> onError) {
         return new RawdataSubscriber(producer, onError);
     }
 
-    public static Flow.Subscriber<RawdataMessage.Builder> subscriber(Supplier<RawdataProducer> producer, Consumer<RawdataProducer> onComplete, BiConsumer<Throwable, RawdataProducer> onError) {
+    public static Flow.Subscriber<RawdataMessage> subscriber(Supplier<RawdataProducer> producer, Consumer<RawdataProducer> onComplete, BiConsumer<Throwable, RawdataProducer> onError) {
         return new RawdataSubscriber(producer, onComplete, onError);
     }
 }

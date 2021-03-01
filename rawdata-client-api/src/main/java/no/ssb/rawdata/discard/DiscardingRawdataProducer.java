@@ -19,23 +19,13 @@ class DiscardingRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public RawdataMessage.Builder builder() {
-        return RawdataMessage.builder();
-    }
-
-    @Override
-    public RawdataProducer buffer(RawdataMessage.Builder _builder) {
-        return this;
-    }
-
-    @Override
-    public void publish(String... positions) {
+    public void publish(RawdataMessage... messages) {
     }
 
     static final CompletableFuture<Void> COMPLETED = CompletableFuture.completedFuture(null);
 
     @Override
-    public CompletableFuture<Void> publishAsync(String... positions) {
+    public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
         return COMPLETED;
     }
 
