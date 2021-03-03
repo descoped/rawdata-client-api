@@ -150,6 +150,9 @@ public interface RawdataClient extends AutoCloseable {
      */
     boolean isClosed();
 
+    @Override
+    void close();
+
     /**
      * Return a metadata-client that can be used for reading and writing metadata for the given topic.
      *
