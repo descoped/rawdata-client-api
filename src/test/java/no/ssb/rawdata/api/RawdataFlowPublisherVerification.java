@@ -17,7 +17,7 @@ public class RawdataFlowPublisherVerification extends FlowPublisherVerification<
     @Override
     public Flow.Publisher<RawdataMessage> createFlowPublisher(long l) {
         String topic = "RawdataFlowPublisherVerification";
-        RawdataClient rawdataClient = new MemoryRawdataClientInitializer().initialize(Map.of());
+        no.ssb.rawdata.api.RawdataClient rawdataClient = new MemoryRawdataClientInitializer().initialize(Map.of());
         try (RawdataProducer producer = rawdataClient.producer(topic)) {
             for (int i = 0; i < Math.min(l, 1000); i++) {
                 producer.publish(RawdataMessage.builder()

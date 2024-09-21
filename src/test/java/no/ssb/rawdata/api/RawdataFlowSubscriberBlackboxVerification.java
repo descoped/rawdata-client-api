@@ -16,7 +16,7 @@ public class RawdataFlowSubscriberBlackboxVerification extends FlowSubscriberBla
 
     @Override
     public Flow.Subscriber<RawdataMessage> createFlowSubscriber() {
-        RawdataClient rawdataClient = new MemoryRawdataClientInitializer().initialize(Map.of());
+        no.ssb.rawdata.api.RawdataClient rawdataClient = new MemoryRawdataClientInitializer().initialize(Map.of());
         RawdataProducer producer = rawdataClient.producer("RawdataFlowSubscriberBlackboxVerification");
         return RawdataFlows.subscriber(() -> producer);
     }
