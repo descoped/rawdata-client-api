@@ -15,12 +15,12 @@ public class RawdataClientProviderTest {
     @Test
     public void thatMemoryAndNoneRawdataClientsAreAvailableThroughServiceProviderMechanism() {
         {
-            RawdataClient client = ProviderConfigurator.configure(Map.of(), "memory", RawdataClientInitializer.class);
+            no.ssb.rawdata.api.RawdataClient client = ProviderConfigurator.configure(Map.of(), "memory", RawdataClientInitializer.class);
             assertNotNull(client);
             assertTrue(client instanceof MemoryRawdataClient);
         }
         {
-            RawdataClient client = ProviderConfigurator.configure(Map.of(), "discard", RawdataClientInitializer.class);
+            no.ssb.rawdata.api.RawdataClient client = ProviderConfigurator.configure(Map.of(), "discard", RawdataClientInitializer.class);
             assertNotNull(client);
             assertTrue(client instanceof DiscardingRawdataClient);
         }
