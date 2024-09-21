@@ -9,7 +9,7 @@
 
     <name>Rawdata Client API</name>
     <description>Rawdata Client API</description>
-    <url>https://github.com/statisticsnorway/</url>
+    <url>https://github.com/descoped/</url>
     <inceptionYear>2019</inceptionYear>
 
     <properties>
@@ -42,9 +42,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/statisticsnorway/rawdata-client-api.git</connection>
-        <developerConnection>scm:git:git@github.com:statisticsnorway/rawdata-client-api.git</developerConnection>
-        <url>https://github.com/statisticsnorway/rawdata-client-api/tree/master</url>
+        <connection>scm:git:git://github.com/descoped/rawdata-client-api.git</connection>
+        <developerConnection>scm:git:git@github.com:descoped/rawdata-client-api.git</developerConnection>
+        <url>https://github.com/descoped/rawdata-client-api/tree/master</url>
         <tag>HEAD</tag>
     </scm>
 
