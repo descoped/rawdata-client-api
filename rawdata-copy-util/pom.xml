@@ -57,24 +57,6 @@
         </dependency>
         <dependency>
             <groupId>no.ssb.rawdata</groupId>
-            <artifactId>rawdata-client-provider-lmdb</artifactId>
-            <version>0.3-SNAPSHOT</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>no.ssb.rawdata</groupId>
-            <artifactId>rawdata-client-provider-pulsar</artifactId>
-            <version>0.4-SNAPSHOT</version>
-            <scope>runtime</scope>
-        </dependency>
-        <!--        <dependency>-->
-        <!--            <groupId>no.ssb.rawdata</groupId>-->
-        <!--            <artifactId>rawdata-client-streams-provider-kafka</artifactId>-->
-        <!--            <version>0.4-SNAPSHOT</version>-->
-        <!--            <scope>runtime</scope>-->
-        <!--        </dependency>-->
-        <dependency>
-            <groupId>no.ssb.rawdata</groupId>
             <artifactId>rawdata-client-provider-postgres</artifactId>
             <version>0.13-SNAPSHOT</version>
             <scope>runtime</scope>
