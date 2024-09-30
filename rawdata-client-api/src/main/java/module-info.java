@@ -1,6 +1,3 @@
-import io.descoped.rawdata.discard.DiscardingRawdataClientInitializer;
-import io.descoped.rawdata.memory.MemoryRawdataClientInitializer;
-
 module io.descoped.rawdata.api {
     requires transitive io.descoped.service.provider.api;
     requires transitive de.huxhorn.sulky.ulid;
@@ -8,5 +5,7 @@ module io.descoped.rawdata.api {
 
     exports io.descoped.rawdata.api;
 
-    provides RawdataClientInitializer with MemoryRawdataClientInitializer, DiscardingRawdataClientInitializer;
+    provides io.descoped.rawdata.api.RawdataClientInitializer with
+            io.descoped.rawdata.memory.MemoryRawdataClientInitializer,
+            io.descoped.rawdata.discard.DiscardingRawdataClientInitializer;
 }
