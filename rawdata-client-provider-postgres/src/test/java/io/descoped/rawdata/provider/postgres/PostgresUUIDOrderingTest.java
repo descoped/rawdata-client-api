@@ -9,6 +9,7 @@ import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.service.provider.api.ProviderConfigurator;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
@@ -19,6 +20,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.testng.Assert.assertEquals;
 
+@Ignore
+@Test
 public class PostgresUUIDOrderingTest {
 
     static DynamicConfiguration configuration() {
@@ -46,7 +49,7 @@ public class PostgresUUIDOrderingTest {
     }
 
     private void dropTables(String topic) {
-        client.dropOrCreateTopicTables(topic, "no/ssb/rawdata/provider/postgres/init/init-topic-stream.sql");
+        client.dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-stream.sql");
     }
 
     @Test

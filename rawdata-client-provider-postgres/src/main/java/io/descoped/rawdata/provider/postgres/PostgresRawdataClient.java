@@ -136,13 +136,13 @@ class PostgresRawdataClient implements RawdataClient {
 
     void createTopicIfNotExists(String topic) {
         if (!transactionFactory.checkIfTableTopicExists(topic, "positions") || !transactionFactory.checkIfTableTopicExists(topic, "content")) {
-            dropOrCreateTopicTables(topic, "no/ssb/rawdata/provider/postgres/init/init-topic-stream.sql");
+            dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-stream.sql");
         }
     }
 
     void createTopicMetadataIfNotExists(String topic) {
         if (!transactionFactory.checkIfTableTopicExists(topic, "metadata")) {
-            dropOrCreateTopicTables(topic, "no/ssb/rawdata/provider/postgres/init/init-topic-metadata.sql");
+            dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-metadata.sql");
         }
     }
 

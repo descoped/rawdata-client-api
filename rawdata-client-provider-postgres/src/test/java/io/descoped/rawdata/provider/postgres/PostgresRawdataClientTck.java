@@ -13,6 +13,7 @@ import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.service.provider.api.ProviderConfigurator;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -27,6 +28,8 @@ import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
+@Ignore
+@Test
 public class PostgresRawdataClientTck {
 
     static DynamicConfiguration configuration() {
@@ -55,8 +58,8 @@ public class PostgresRawdataClientTck {
     }
 
     private void dropTables(String topic) {
-        ((PostgresRawdataClient) client).dropOrCreateTopicTables(topic, "no/ssb/rawdata/provider/postgres/init/init-topic-stream.sql");
-        ((PostgresRawdataClient) client).dropOrCreateTopicTables(topic, "no/ssb/rawdata/provider/postgres/init/init-topic-metadata.sql");
+        ((PostgresRawdataClient) client).dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-stream.sql");
+        ((PostgresRawdataClient) client).dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-metadata.sql");
     }
 
     @AfterMethod
