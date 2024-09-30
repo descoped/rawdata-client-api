@@ -1,0 +1,2 @@
+io.descoped.rawdata.memory.MemoryRawdataClientInitializer
+io.descoped.rawdata.discard.DiscardingRawdataClientInitializer
