@@ -1,4 +1,4 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
 public class PersistenceException extends RuntimeException {
 

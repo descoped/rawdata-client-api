@@ -1,16 +1,16 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
 import de.huxhorn.sulky.ulid.ULID;
-import no.ssb.config.DynamicConfiguration;
-import no.ssb.config.StoreBasedDynamicConfiguration;
-import no.ssb.rawdata.api.RawdataClient;
-import no.ssb.rawdata.api.RawdataClientInitializer;
-import no.ssb.rawdata.api.RawdataConsumer;
-import no.ssb.rawdata.api.RawdataMessage;
-import no.ssb.rawdata.api.RawdataMetadataClient;
-import no.ssb.rawdata.api.RawdataNoSuchPositionException;
-import no.ssb.rawdata.api.RawdataProducer;
-import no.ssb.service.provider.api.ProviderConfigurator;
+import io.descoped.config.DynamicConfiguration;
+import io.descoped.config.StoreBasedDynamicConfiguration;
+import io.descoped.rawdata.api.RawdataClient;
+import io.descoped.rawdata.api.RawdataClientInitializer;
+import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataMessage;
+import io.descoped.rawdata.api.RawdataMetadataClient;
+import io.descoped.rawdata.api.RawdataNoSuchPositionException;
+import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.service.provider.api.ProviderConfigurator;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;

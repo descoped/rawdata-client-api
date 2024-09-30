@@ -1,7 +1,7 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
 import de.huxhorn.sulky.ulid.ULID;
-import no.ssb.rawdata.api.RawdataCursor;
+import io.descoped.rawdata.api.RawdataCursor;
 
 import java.util.Objects;
 

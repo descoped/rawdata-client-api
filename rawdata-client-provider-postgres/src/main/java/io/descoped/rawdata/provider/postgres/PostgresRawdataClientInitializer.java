@@ -1,11 +1,11 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import no.ssb.rawdata.api.RawdataClient;
-import no.ssb.rawdata.api.RawdataClientInitializer;
-import no.ssb.rawdata.provider.postgres.tx.TransactionFactory;
-import no.ssb.service.provider.api.ProviderName;
+import io.descoped.rawdata.api.RawdataClient;
+import io.descoped.rawdata.api.RawdataClientInitializer;
+import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
+import io.descoped.service.provider.api.ProviderName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,11 +64,12 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
             );
 
             try {
-                Class<? extends TransactionFactory> transactionFactoryClass = (Class<? extends TransactionFactory>) Class.forName("no.ssb.rawdata.provider.postgres.H2TransactionFactory");
+                Class<? extends TransactionFactory> transactionFactoryClass = (Class<? extends TransactionFactory>) Class.forName("io.descoped.rawdata.provider.postgres.H2TransactionFactory");
                 TransactionFactory transactionFactory = transactionFactoryClass.getDeclaredConstructor(HikariDataSource.class).newInstance(dataSource);
                 return new PostgresRawdataClient(transactionFactory, consumerPrefetchSize, dbPrefetchPollIntervalWhenEmptyMilliseconds);
 
-            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException |
+                     InvocationTargetException | NoSuchMethodException e) {
                 throw new RuntimeException(e);
             }
         }

@@ -1,6 +1,6 @@
-package no.ssb.rawdata.provider.postgres.tx;
+package io.descoped.rawdata.provider.postgres.tx;
 
-import no.ssb.rawdata.provider.postgres.PersistenceException;
+import io.descoped.rawdata.provider.postgres.PersistenceException;
 
 import javax.sql.DataSource;
 import java.util.concurrent.CompletableFuture;

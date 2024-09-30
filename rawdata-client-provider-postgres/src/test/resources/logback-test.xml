@@ -10,7 +10,7 @@
     </appender>
 
     <logger name="com.zaxxer.hikari" level="INFO"/>
-    <logger name="no.ssb.rawdata" level="TRACE"/>
+    <logger name="io.descoped.rawdata" level="TRACE"/>
 
     <root level="INFO">
         <appender-ref ref="STDOUT"/>

@@ -1,8 +1,8 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
-import no.ssb.rawdata.api.RawdataMetadataClient;
-import no.ssb.rawdata.provider.postgres.tx.Transaction;
-import no.ssb.rawdata.provider.postgres.tx.TransactionFactory;
+import io.descoped.rawdata.api.RawdataMetadataClient;
+import io.descoped.rawdata.provider.postgres.tx.Transaction;
+import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

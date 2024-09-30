@@ -1,6 +1,6 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
-import no.ssb.rawdata.provider.postgres.tx.Transaction;
+import io.descoped.rawdata.provider.postgres.tx.Transaction;
 
 import java.sql.Connection;
 import java.sql.SQLException;

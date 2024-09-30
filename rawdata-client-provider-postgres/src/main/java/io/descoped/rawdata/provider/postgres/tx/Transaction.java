@@ -1,4 +1,4 @@
-package no.ssb.rawdata.provider.postgres.tx;
+package io.descoped.rawdata.provider.postgres.tx;
 
 import java.sql.Connection;
 import java.util.concurrent.CompletableFuture;

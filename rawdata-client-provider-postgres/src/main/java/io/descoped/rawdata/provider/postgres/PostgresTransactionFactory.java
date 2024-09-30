@@ -1,8 +1,8 @@
-package no.ssb.rawdata.provider.postgres;
+package io.descoped.rawdata.provider.postgres;
 
 import com.zaxxer.hikari.HikariDataSource;
-import no.ssb.rawdata.provider.postgres.tx.Transaction;
-import no.ssb.rawdata.provider.postgres.tx.TransactionFactory;
+import io.descoped.rawdata.provider.postgres.tx.Transaction;
+import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -55,7 +55,6 @@ public class PostgresTransactionFactory implements TransactionFactory {
             throw new RuntimeException(e);
         }
     }
-
 
 
     @Override
