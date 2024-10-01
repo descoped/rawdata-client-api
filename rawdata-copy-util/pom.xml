@@ -7,8 +7,8 @@
     <version>2.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Rawdata copy utility</name>
-    <description>Rawdata copy utility</description>
+    <name>Rawdata Client Copy Utility</name>
+    <description>Rawdata Client Copy Utility</description>
     <url>https://github.com/descoped/</url>
     <inceptionYear>2019</inceptionYear>
 
