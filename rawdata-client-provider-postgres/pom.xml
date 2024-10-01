@@ -7,8 +7,8 @@
     <version>2.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Rawdata Client Provider PostgreSQL Database</name>
-    <description>Rawdata Client Provider PostgreSQL Database</description>
+    <name>Rawdata Client Provider PostgreSQL</name>
+    <description>Rawdata Client Provider PostgreSQL</description>
     <url>https://github.com/descoped/</url>
     <inceptionYear>2019</inceptionYear>
 
