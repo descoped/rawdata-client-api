@@ -1,17 +1,18 @@
 package io.descoped.rawdata.api;
 
 import de.huxhorn.sulky.ulid.ULID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Publishes messages on one topic.
+ */
 public interface RawdataProducer extends AutoCloseable {
 
-    Logger LOG = LoggerFactory.getLogger(RawdataProducer.class);
-
     /**
+     * Returns the topic on which this producer will publish messages.
+     *
      * @return the topic on which this producer will publish messages.
      */
     String topic();
@@ -83,7 +84,6 @@ public interface RawdataProducer extends AutoCloseable {
                 if (diff < -(30 * 1000)) {
                     throw new IllegalStateException(String.format("Previous timestamp is in the future. Diff %d ms", -diff));
                 }
-                LOG.debug("Previous timestamp is in the future, waiting for time to catch up. Diff {} ms", -diff);
                 try {
                     Thread.sleep(-diff);
                 } catch (InterruptedException e) {

@@ -8,26 +8,40 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * One message in a topic: a ULID, an optional ordering group and sequence number, the source position, and
+ * named binary content.
+ */
 public interface RawdataMessage {
 
+    /**
+     * Creates a builder for a new message.
+     *
+     * @return a new builder
+     */
     static RawdataMessage.Builder builder() {
         return new RawdataDefaultMessage.Builder();
     }
 
+    /**
+     * Creates a builder that starts from this message.
+     *
+     * @return a builder with this message's values
+     */
     RawdataMessage.Builder copy();
 
     /**
      * A unique lexicographically sortable identifier for the message. Sorting by this id, will also sort the messages
-     * by time, making it convenient
+     * by time.
      *
-     * @return
+     * @return the message ULID
      */
     ULID.Value ulid();
 
     /**
      * Timestamp represented as milliseconds since 1/1-1970. This is derived from the ulid.
      *
-     * @return
+     * @return the timestamp in milliseconds
      */
     default long timestamp() {
         return ulid().timestamp();
@@ -103,6 +117,8 @@ public interface RawdataMessage {
         Builder orderingGroup(String orderingGroup);
 
         /**
+         * Returns the group that this message will belong to or null if none has been assigned.
+         *
          * @return the group that this message will belong to or null if none has been assigned
          */
         String orderingGroup();
@@ -110,13 +126,15 @@ public interface RawdataMessage {
         /**
          * Assign the sequence-number > 0. 0 will be used if none is assigned.
          *
-         * @param sequenceNumber
+         * @param sequenceNumber the sequence number
          * @return this builder
          * @throws IllegalArgumentException if the sequenceNumber is less than 1.
          */
         Builder sequenceNumber(long sequenceNumber);
 
         /**
+         * Returns the sequence number.
+         *
          * @return the sequence number
          */
         long sequenceNumber();
@@ -127,12 +145,14 @@ public interface RawdataMessage {
          * from one message to the next message in a stream in order to preserve the correct order of messages. If the
          * sequence-number is used, then the ulid value sequencing can be done in a best-effort manner.
          *
-         * @param ulid
+         * @param ulid the message ULID
          * @return this builder
          */
         Builder ulid(ULID.Value ulid);
 
         /**
+         * Returns the current ulid.
+         *
          * @return the current ulid
          */
         ULID.Value ulid();
@@ -140,12 +160,14 @@ public interface RawdataMessage {
         /**
          * The external identifier of the element in the stream.
          *
-         * @param position
+         * @param position the external identifier
          * @return this builder
          */
         Builder position(String position);
 
         /**
+         * Returns the current position of this builder.
+         *
          * @return the current position of this builder
          */
         String position();
@@ -171,17 +193,23 @@ public interface RawdataMessage {
         }
 
         /**
-         * Get the data map
+         * Returns the content added so far, by key.
+         *
+         * @return an unmodifiable view of the content
          */
         Map<String, byte[]> data();
 
         /**
+         * Returns the keys added to this builder through put so far.
+         *
          * @return The keys added to this builder through put so far.
          */
         Set<String> keys();
 
         /**
-         * @param key
+         * Returns the content for a key.
+         *
+         * @param key the content key
          * @return the current value for the provided key, or null if no such key exists
          */
         byte[] get(String key);

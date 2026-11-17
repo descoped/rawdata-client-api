@@ -1,4 +1,14 @@
-/.idea/
-/target
-/*.log
-/*.iml
+# Build output
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
+
+# JVM crash logs
+hs_err_pid*
+

@@ -2,14 +2,21 @@ package io.descoped.rawdata.api;
 
 import java.util.Set;
 
+/**
+ * Reads and writes the metadata entries (key and bytes) of one topic.
+ */
 public interface RawdataMetadataClient {
 
     /**
+     * Returns the name of the topic from which this metadata-client will read from and write to.
+     *
      * @return the name of the topic from which this metadata-client will read from and write to.
      */
     String topic();
 
     /**
+     * Returns an iterable with the keys of all the metadata entries stored for this topic.
+     *
      * @return an iterable with the keys of all the metadata entries stored for this topic.
      */
     Set<String> keys();

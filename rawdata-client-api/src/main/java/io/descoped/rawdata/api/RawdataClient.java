@@ -4,6 +4,10 @@ import de.huxhorn.sulky.ulid.ULID;
 
 import java.time.Duration;
 
+/**
+ * A client for one rawdata store: creates producers and consumers on topics, finds positions, and reads and
+ * writes topic metadata. Obtained from a provider through {@link RawdataClientInitializer}.
+ */
 public interface RawdataClient extends AutoCloseable {
 
     /**
@@ -12,7 +16,7 @@ public interface RawdataClient extends AutoCloseable {
      * @param topic the name of the topic to produce messages on. Must be the context-specific short-name of the topic
      *              that is independent of any technology or implementation specific schemes which should be configured
      *              when loading the rawdata client provider.
-     * @return
+     * @return a producer on the topic
      */
     RawdataProducer producer(String topic);
 

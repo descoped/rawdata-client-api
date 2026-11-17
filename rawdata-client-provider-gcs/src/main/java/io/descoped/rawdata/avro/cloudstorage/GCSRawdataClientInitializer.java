@@ -20,10 +20,6 @@ import java.util.Set;
 @ProviderName("gcs")
 public class GCSRawdataClientInitializer implements RawdataClientInitializer {
 
-    @Override
-    public String providerId() {
-        return "gcs";
-    }
 
     @Override
     public Set<String> configurationKeys() {
