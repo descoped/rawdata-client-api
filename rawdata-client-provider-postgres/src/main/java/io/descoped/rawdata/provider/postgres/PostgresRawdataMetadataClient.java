@@ -4,6 +4,7 @@ import io.descoped.rawdata.api.RawdataMetadataClient;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -35,7 +36,7 @@ final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
                         keys.add(rows.getString(1));
                     }
                 }
-                return Set.copyOf(keys);
+                return Collections.unmodifiableSet(keys); // sorted by name
             }
         });
     }

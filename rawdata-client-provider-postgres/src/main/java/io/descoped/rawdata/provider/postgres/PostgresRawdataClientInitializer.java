@@ -24,7 +24,9 @@ import java.util.Set;
  *     <tr><td>{@code rawdata.postgres.consumer.prefetch-poll-interval-when-empty}</td><td>{@code 250}: milliseconds
  *     between polls of a topic that has nothing new</td></tr>
  * </table>
- * The tables are created in the user's default schema when they are missing.
+ * The tables are created in the user's default schema when they are missing; a role that may not create tables can
+ * use tables created by another role. Connections are READ COMMITTED whatever the database's default, and show as
+ * application {@code rawdata-postgres} in {@code pg_stat_activity}.
  */
 @ProviderName("postgres")
 public class PostgresRawdataClientInitializer implements RawdataClientInitializer {
@@ -37,6 +39,7 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
     static final String MAX_POOL_SIZE = "postgres.driver.max-pool-size";
     static final String PREFETCH_SIZE = "rawdata.postgres.consumer.prefetch-size";
     static final String POLL_INTERVAL = "rawdata.postgres.consumer.prefetch-poll-interval-when-empty";
+    static final String APPLICATION_NAME = "rawdata-postgres";
 
     /**
      * Creates the initializer; called by the service loader.
@@ -68,13 +71,16 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
         config.addDataSourceProperty("user", required(configuration, USER));
         config.addDataSourceProperty("password", required(configuration, PASSWORD));
         config.addDataSourceProperty("databaseName", required(configuration, DATABASE));
+        config.addDataSourceProperty("ApplicationName", APPLICATION_NAME);
         config.setAutoCommit(false);
+        // The commit order of ids relies on it: after the topic lock, the last id must be read with a fresh snapshot.
+        config.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
         config.setMaximumPoolSize(positive(configuration, MAX_POOL_SIZE, 10));
 
         HikariDataSource dataSource = new HikariDataSource(config);
         try {
             PostgresSchema.create(new Jdbc(dataSource));
-        } catch (RuntimeException | Error e) {
+        } catch (RuntimeException e) {
             dataSource.close();
             throw e;
         }

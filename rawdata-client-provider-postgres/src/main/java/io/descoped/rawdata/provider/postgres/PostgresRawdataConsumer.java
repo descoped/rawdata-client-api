@@ -53,19 +53,7 @@ final class PostgresRawdataConsumer implements RawdataConsumer {
             for (; ; ) {
                 checkOpen();
                 if (buffer.isEmpty()) {
-                    PostgresCursor from = position;
-                    try {
-                        buffer.addAll(client.jdbc().transaction(connection ->
-                                PostgresMessages.after(connection, topic, from.id, from.inclusive, prefetchSize)));
-                    } catch (RuntimeException e) {
-                        if (isClosed()) {
-                            throw closedException(); // the client closed its pool during the fetch
-                        }
-                        throw e;
-                    }
-                    if (!buffer.isEmpty()) {
-                        position = new PostgresCursor(buffer.peekLast().id(), false);
-                    }
+                    fill();
                 }
                 RawdataMessage message = buffer.pollFirst();
                 if (message != null) {
@@ -75,10 +63,31 @@ final class PostgresRawdataConsumer implements RawdataConsumer {
                 if (remaining <= 0) {
                     return null;
                 }
-                wakeUp.awaitNanos(Math.min(remaining, pollIntervalNanos)); // woken early by close
+                if (wakeUp.awaitNanos(Math.min(remaining, pollIntervalNanos)) > 0 && isClosed()) {
+                    throw closedException(); // woken early by close
+                }
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Fetches the next batch after the position into the buffer. Called with the lock held.
+     */
+    private void fill() {
+        PostgresCursor from = position;
+        try {
+            buffer.addAll(client.jdbc().transaction(connection ->
+                    PostgresMessages.after(connection, topic, from.id, from.inclusive, prefetchSize)));
+        } catch (RuntimeException e) {
+            if (isClosed()) {
+                throw closedException(); // the client closed its pool during the fetch
+            }
+            throw e;
+        }
+        if (!buffer.isEmpty()) {
+            position = new PostgresCursor(buffer.peekLast().id(), false);
         }
     }
 
@@ -132,14 +141,16 @@ final class PostgresRawdataConsumer implements RawdataConsumer {
     }
 
     /**
-     * Wakes a receive that waits between polls, so it sees that the consumer or its client is closed.
+     * Wakes a receive that waits between polls, so it sees that the consumer or its client is closed. A receive that
+     * is fetching holds the lock and sees the close when the fetch returns, so close does not wait for it.
      */
     void wake() {
-        lock.lock();
-        try {
-            wakeUp.signalAll();
-        } finally {
-            lock.unlock();
+        if (lock.tryLock()) {
+            try {
+                wakeUp.signalAll();
+            } finally {
+                lock.unlock();
+            }
         }
     }
 

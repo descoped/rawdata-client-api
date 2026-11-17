@@ -22,16 +22,16 @@ final class PostgresMessages {
     /**
      * The messages after (or from) an id, in order.
      */
-    static final String AFTER = COLUMNS
+    static final String AFTER_SQL = COLUMNS
             + "SELECT id, position, ordering_group, sequence_number FROM rawdata_message WHERE topic = ? AND id > ? ORDER BY id LIMIT ?"
             + CONTENT + "ORDER BY m.id, c.ordinal";
-    static final String FROM = COLUMNS
+    static final String FROM_SQL = COLUMNS
             + "SELECT id, position, ordering_group, sequence_number FROM rawdata_message WHERE topic = ? AND id >= ? ORDER BY id LIMIT ?"
             + CONTENT + "ORDER BY m.id, c.ordinal";
     /**
      * The message with the greatest id.
      */
-    static final String LAST = COLUMNS
+    static final String LAST_SQL = COLUMNS
             + "SELECT id, position, ordering_group, sequence_number FROM rawdata_message WHERE topic = ? ORDER BY id DESC LIMIT 1"
             + CONTENT + "ORDER BY c.ordinal";
 
@@ -39,7 +39,7 @@ final class PostgresMessages {
     }
 
     static List<RawdataMessage> after(Connection connection, String topic, UUID id, boolean inclusive, int limit) throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement(inclusive ? FROM : AFTER)) {
+        try (PreparedStatement select = connection.prepareStatement(inclusive ? FROM_SQL : AFTER_SQL)) {
             select.setString(1, topic);
             select.setObject(2, id);
             select.setInt(3, limit);
@@ -49,7 +49,7 @@ final class PostgresMessages {
     }
 
     static RawdataMessage last(Connection connection, String topic) throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement(LAST)) {
+        try (PreparedStatement select = connection.prepareStatement(LAST_SQL)) {
             select.setString(1, topic);
             select.setString(2, topic);
             List<RawdataMessage> messages = read(select);
@@ -73,8 +73,9 @@ final class PostgresMessages {
              PreparedStatement content = connection.prepareStatement(
                      "INSERT INTO rawdata_content (topic, id, ordinal, name, data) VALUES (?, ?, ?, ?, ?)")) {
             boolean anyContent = false;
+            message.setString(1, topic); // parameters stay set between batch rows
+            content.setString(1, topic);
             for (RawdataMessage m : messages) {
-                message.setString(1, topic);
                 message.setObject(2, m.id());
                 message.setString(3, m.position());
                 message.setString(4, m.orderingGroup());
@@ -82,7 +83,6 @@ final class PostgresMessages {
                 message.addBatch();
                 int ordinal = 0;
                 for (String key : m.keys()) {
-                    content.setString(1, topic);
                     content.setObject(2, m.id());
                     content.setInt(3, ordinal++);
                     content.setString(4, key);

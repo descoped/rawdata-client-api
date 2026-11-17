@@ -2,6 +2,7 @@ package io.descoped.rawdata.provider.postgres;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
@@ -57,16 +58,35 @@ final class PostgresSchema {
     private PostgresSchema() {
     }
 
+    /**
+     * Creates what is missing. When everything exists, nothing is created, so a role with only SELECT, INSERT, UPDATE
+     * and DELETE on the tables can start a client (CREATE TABLE IF NOT EXISTS needs the CREATE privilege even when the
+     * table exists).
+     */
     static void create(Jdbc jdbc) {
         jdbc.transaction(connection -> {
+            if (exists(connection)) {
+                return null;
+            }
             lock(connection);
             try (Statement statement = connection.createStatement()) {
                 for (String ddl : DDL) {
-                    statement.execute(ddl);
+                    statement.addBatch(ddl);
                 }
+                statement.executeBatch();
             }
             return null;
         });
+    }
+
+    private static boolean exists(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT to_regclass('rawdata_message') IS NOT NULL"
+                     + " AND to_regclass('rawdata_message_position') IS NOT NULL"
+                     + " AND to_regclass('rawdata_content') IS NOT NULL"
+                     + " AND to_regclass('rawdata_metadata') IS NOT NULL")) {
+            return rows.next() && rows.getBoolean(1);
+        }
     }
 
     private static void lock(Connection connection) throws SQLException {
