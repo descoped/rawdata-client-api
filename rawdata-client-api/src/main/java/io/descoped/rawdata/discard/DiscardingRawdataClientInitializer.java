@@ -16,6 +16,7 @@ public class DiscardingRawdataClientInitializer implements RawdataClientInitiali
      * Creates the initializer; called by the service loader.
      */
     public DiscardingRawdataClientInitializer() {
+        // nothing to set up: the client is created in initialize
     }
 
     @Override

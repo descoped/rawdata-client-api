@@ -16,6 +16,7 @@ public class MemoryRawdataClientInitializer implements RawdataClientInitializer 
      * Creates the initializer; called by the service loader.
      */
     public MemoryRawdataClientInitializer() {
+        // nothing to set up: the client is created in initialize
     }
 
     @Override

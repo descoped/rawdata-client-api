@@ -85,15 +85,17 @@ class RawdataIdsTest {
                 RawdataIds.next(UUID.fromString("fffffff0-0000-7000-bfff-ffffffffffff")));
         assertEquals(UUID.fromString("fffffff0-0001-7000-8000-000000000000"),
                 RawdataIds.next(UUID.fromString("fffffff0-0000-7fff-bfff-ffffffffffff")));
-        assertThrows(IllegalStateException.class, () -> RawdataIds.next(UUID.fromString("ffffffff-ffff-7fff-bfff-ffffffffffff")));
+        UUID greatest = UUID.fromString("ffffffff-ffff-7fff-bfff-ffffffffffff");
+        assertThrows(IllegalStateException.class, () -> RawdataIds.next(greatest));
     }
 
     @Test
     void otherUuidsAreRefused() {
         assertFalse(RawdataIds.isValid(UUID.randomUUID()));
         assertFalse(RawdataIds.isValid(null));
-        assertThrows(IllegalArgumentException.class, () -> RawdataIds.timestamp(UUID.randomUUID()));
-        assertThrows(IllegalArgumentException.class, () -> RawdataIds.next(UUID.randomUUID()));
+        UUID version4 = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class, () -> RawdataIds.timestamp(version4));
+        assertThrows(IllegalArgumentException.class, () -> RawdataIds.next(version4));
         assertThrows(NullPointerException.class, () -> RawdataIds.requireValid(null));
     }
 

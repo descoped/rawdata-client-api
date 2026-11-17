@@ -8,6 +8,7 @@ import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.rawdata.api.RawdataTopics;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
@@ -58,6 +59,7 @@ public abstract class AvroRawdataClient implements RawdataClient {
 
     @Override
     public RawdataProducer producer(String topic) {
+        RawdataTopics.requireValid(topic);
         if (closed.get()) {
             throw new RawdataClosedException();
         }
@@ -68,6 +70,7 @@ public abstract class AvroRawdataClient implements RawdataClient {
 
     @Override
     public RawdataConsumer consumer(String topic, RawdataCursor cursor) {
+        RawdataTopics.requireValid(topic);
         if (closed.get()) {
             throw new RawdataClosedException();
         }
@@ -78,11 +81,14 @@ public abstract class AvroRawdataClient implements RawdataClient {
 
     @Override
     public RawdataCursor cursorOf(String topic, UUID ulid, boolean inclusive) {
+        RawdataTopics.requireValid(topic);
+        RawdataIds.requireValid(ulid);
         return new AvroRawdataCursor(ulid, inclusive);
     }
 
     @Override
     public RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException {
+        RawdataTopics.requireValid(topic);
         return cursorOf(topic, ulidOfPosition(topic, position, approxTimestamp, tolerance), inclusive);
     }
 
@@ -123,6 +129,7 @@ public abstract class AvroRawdataClient implements RawdataClient {
 
     @Override
     public RawdataMessage lastMessage(String topic) throws RawdataClosedException {
+        RawdataTopics.requireValid(topic);
         NavigableMap<Long, RawdataAvroFile> topicBlobs = readOnlyAvroRawdataUtils.getTopicBlobs(topic);
         if (topicBlobs.isEmpty()) {
             return null;

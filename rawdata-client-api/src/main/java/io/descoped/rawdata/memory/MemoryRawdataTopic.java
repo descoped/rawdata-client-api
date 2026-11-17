@@ -29,7 +29,8 @@ final class MemoryRawdataTopic {
     }
 
     /**
-     * Writes messages under one lock, so a batch is atomic and generated ids follow the topic's last id.
+     * Writes messages under one lock, so a batch is atomic and generated ids follow the topic's last id. A given id
+     * must be greater than every id before it; otherwise nothing of the batch is written.
      */
     void publish(RawdataMessage[] batch) {
         lock.lock();
@@ -42,12 +43,13 @@ final class MemoryRawdataTopic {
                 if (id == null) {
                     id = RawdataIds.next(previous);
                     stored[i] = message.copy().id(id).build();
-                } else {
+                } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
                     stored[i] = message;
+                } else {
+                    throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
+                            + " is not greater than the last id in topic " + name + ": " + previous);
                 }
-                if (RawdataIds.ORDER.compare(id, previous) > 0) {
-                    previous = id;
-                }
+                previous = id;
             }
             for (RawdataMessage message : stored) {
                 messages.put(message.id(), message);
@@ -72,7 +74,7 @@ final class MemoryRawdataTopic {
      * closed check says so (the caller then throws).
      */
     RawdataMessage next(MemoryCursor cursor, long timeoutNanos, BooleanSupplier closed) throws InterruptedException {
-        long deadline = System.nanoTime() + timeoutNanos;
+        long remaining = timeoutNanos;
         lock.lockInterruptibly();
         try {
             for (; ; ) {
@@ -85,11 +87,10 @@ final class MemoryRawdataTopic {
                 if (entry != null) {
                     return entry.getValue();
                 }
-                long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
                     return null;
                 }
-                published.awaitNanos(remaining);
+                remaining = published.awaitNanos(remaining);
             }
         } finally {
             lock.unlock();

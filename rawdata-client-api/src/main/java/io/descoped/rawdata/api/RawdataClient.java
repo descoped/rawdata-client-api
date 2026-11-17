@@ -15,8 +15,9 @@ import java.util.UUID;
  * <ul>
  *     <li>A topic name follows {@link RawdataTopics}; a method given an invalid name throws
  *     {@link IllegalArgumentException}. A topic exists from its first use; an unknown topic is empty.</li>
- *     <li>The messages of a topic are consumed in the {@link RawdataIds#ORDER order} of their ids, UUIDv7s. An id the producer
- *     assigns is greater than every id already in the topic, whichever producer wrote it.</li>
+ *     <li>The messages of a topic are consumed in the {@link RawdataIds#ORDER order} of their ids, UUIDv7s. A topic
+ *     only grows at its end: an id the producer assigns is greater than every id already in the topic, whichever
+ *     producer wrote it, and an id the caller gives must be too, or the publish is refused.</li>
  *     <li>After {@link #close()}, every method of the client and of the producers, consumers and metadata clients it
  *     created throws {@link RawdataClosedException}, except {@code isClosed()} and {@code close()}, which may be
  *     called any number of times.</li>

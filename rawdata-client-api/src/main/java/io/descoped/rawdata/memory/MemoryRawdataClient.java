@@ -97,10 +97,10 @@ final class MemoryRawdataClient implements RawdataClient {
             return;
         }
         for (Object producerOrConsumer : open) {
-            if (producerOrConsumer instanceof RawdataProducer) {
-                ((RawdataProducer) producerOrConsumer).close();
-            } else {
-                ((RawdataConsumer) producerOrConsumer).close();
+            if (producerOrConsumer instanceof RawdataProducer producer) {
+                producer.close();
+            } else if (producerOrConsumer instanceof RawdataConsumer consumer) {
+                consumer.close();
             }
         }
         topics.values().forEach(MemoryRawdataTopic::wakeUp);

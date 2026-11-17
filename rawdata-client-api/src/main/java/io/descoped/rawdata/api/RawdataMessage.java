@@ -10,9 +10,10 @@ import java.util.UUID;
  * binary content.
  * <p>
  * A message is immutable. Content goes in and comes out as copies: changing an array passed to
- * {@link Builder#put(String, byte[])} or returned by {@link #get(String)} never changes the message.
+ * {@link Builder#put(String, byte[])} or returned by {@link #get(String)} never changes the message. Messages are
+ * made by {@link #builder()} only, so a store can keep a message as it is.
  */
-public interface RawdataMessage {
+public sealed interface RawdataMessage permits RawdataDefaultMessage {
 
     /**
      * Creates a builder for a new message.
@@ -139,7 +140,8 @@ public interface RawdataMessage {
 
         /**
          * Sets the id. Without one, the producer assigns an id when it publishes the message; that id is greater
-         * than every id already in the topic. A copy of a message keeps its id, so a copied topic keeps its order.
+         * than every id already in the topic. A given id must be greater than every id already in the topic, or the
+         * publish is refused. A copy of a message keeps its id, so a copied topic keeps its order.
          *
          * @param id a UUIDv7, or null to let the producer assign one
          * @return this builder

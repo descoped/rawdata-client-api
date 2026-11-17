@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,12 +81,47 @@ class DiscardProviderTest {
     }
 
     @Test
+    void closingTheConsumerOrTheClientFailsPendingReceiveAsync() throws Exception {
+        RawdataConsumer consumer = client.consumer("the-topic");
+        CompletableFuture<? extends RawdataMessage> first = consumer.receiveAsync();
+        consumer.close();
+        ExecutionException failure = assertThrows(ExecutionException.class, () -> first.get(5, TimeUnit.SECONDS));
+        assertTrue(failure.getCause() instanceof RawdataClosedException);
+
+        RawdataConsumer other = client.consumer("the-topic");
+        CompletableFuture<? extends RawdataMessage> second = other.receiveAsync();
+        client.close();
+        failure = assertThrows(ExecutionException.class, () -> second.get(5, TimeUnit.SECONDS));
+        assertTrue(failure.getCause() instanceof RawdataClosedException);
+        assertTrue(other.isClosed());
+    }
+
+    @Test
+    void closingTheClientWakesAWaitingReceive() throws Exception {
+        RawdataConsumer consumer = client.consumer("the-topic");
+        CompletableFuture<Throwable> waiting = CompletableFuture.supplyAsync(() -> {
+            try {
+                consumer.receive(60, TimeUnit.SECONDS);
+                return null;
+            } catch (Throwable t) {
+                return t;
+            }
+        });
+        Thread.sleep(100);
+        long closedAt = System.nanoTime();
+        client.close();
+        assertTrue(waiting.get(30, TimeUnit.SECONDS) instanceof RawdataClosedException);
+        assertTrue(System.nanoTime() - closedAt < TimeUnit.SECONDS.toNanos(10), "receive must wake on client close");
+    }
+
+    @Test
     void topicNamesAndClosedStateAreChecked() {
         assertThrows(IllegalArgumentException.class, () -> client.producer("../x"));
         RawdataProducer producer = client.producer("t");
         client.close();
         assertTrue(producer.isClosed());
-        assertThrows(RawdataClosedException.class, () -> producer.publish(RawdataMessage.builder().position("p").build()));
+        RawdataMessage message = RawdataMessage.builder().position("p").build();
+        assertThrows(RawdataClosedException.class, () -> producer.publish(message));
         assertThrows(RawdataClosedException.class, () -> client.producer("t"));
         assertThrows(RawdataClosedException.class, () -> client.lastMessage("t"));
     }

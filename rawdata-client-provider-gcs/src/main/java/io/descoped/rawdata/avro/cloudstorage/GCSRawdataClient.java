@@ -2,6 +2,7 @@ package io.descoped.rawdata.avro.cloudstorage;
 
 import com.google.cloud.storage.Storage;
 import io.descoped.rawdata.api.RawdataMetadataClient;
+import io.descoped.rawdata.api.RawdataTopics;
 import io.descoped.rawdata.avro.AvroRawdataClient;
 import io.descoped.rawdata.avro.AvroRawdataUtils;
 
@@ -20,6 +21,7 @@ public class GCSRawdataClient extends AvroRawdataClient {
 
     @Override
     public RawdataMetadataClient metadata(String topic) {
+        RawdataTopics.requireValid(topic);
         return new GCSRawdataMetadataClient(storage, bucketName, topic);
     }
 }

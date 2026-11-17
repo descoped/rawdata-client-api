@@ -6,6 +6,7 @@ import io.descoped.rawdata.api.RawdataProducer;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class MemoryRawdataProducer implements RawdataProducer {
@@ -39,7 +40,11 @@ final class MemoryRawdataProducer implements RawdataProducer {
     @Override
     public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
         RawdataMessage[] batch = Objects.requireNonNull(messages, "messages").clone();
-        return CompletableFuture.runAsync(() -> publish(batch), client.executor());
+        try {
+            return CompletableFuture.runAsync(() -> publish(batch), client.executor());
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(new RawdataClosedException("producer of topic " + topic.name + " is closed"));
+        }
     }
 
     @Override

@@ -120,7 +120,8 @@ class RawdataCopyTest {
     void invalidArgumentsAreRefused() {
         try (RawdataClient client = memory(); RawdataConsumer from = client.consumer("t"); RawdataProducer to = client.producer("u")) {
             assertThrows(IllegalArgumentException.class, () -> RawdataCopy.copy(from, to, 0, Duration.ZERO));
-            assertThrows(IllegalArgumentException.class, () -> RawdataCopy.copy(from, to, 1, Duration.ofSeconds(-1)));
+            Duration negative = Duration.ofSeconds(-1);
+            assertThrows(IllegalArgumentException.class, () -> RawdataCopy.copy(from, to, 1, negative));
             assertThrows(NullPointerException.class, () -> RawdataCopy.copy(null, to, 1, Duration.ZERO));
             assertThrows(NullPointerException.class, () -> RawdataCopy.copy(from, null, 1, Duration.ZERO));
         }

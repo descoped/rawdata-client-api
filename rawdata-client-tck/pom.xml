@@ -15,6 +15,12 @@
     <name>Rawdata Client TCK</name>
     <description>The contract tests every RawdataClient provider must pass, as JUnit tests to extend.</description>
 
+    <!-- The contract tests are this module's product, so they live in src/main; SonarCloud analyses them as tests. -->
+    <properties>
+        <sonar.sources>pom.xml</sonar.sources>
+        <sonar.tests>src/main/java,src/test/java</sonar.tests>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.descoped.rawdata</groupId>

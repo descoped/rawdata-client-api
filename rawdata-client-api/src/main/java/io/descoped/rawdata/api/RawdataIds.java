@@ -27,7 +27,7 @@ public final class RawdataIds {
      */
     public static final Comparator<UUID> ORDER = (a, b) -> {
         int most = Long.compareUnsigned(a.getMostSignificantBits(), b.getMostSignificantBits());
-        return most != 0 ? most : Long.compareUnsigned(a.getLeastSignificantBits(), b.getLeastSignificantBits());
+        return most == 0 ? Long.compareUnsigned(a.getLeastSignificantBits(), b.getLeastSignificantBits()) : most;
     };
 
     private static final long VERSION_7 = 0x7000L;

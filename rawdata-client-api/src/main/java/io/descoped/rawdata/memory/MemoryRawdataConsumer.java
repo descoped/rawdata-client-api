@@ -7,6 +7,7 @@ import io.descoped.rawdata.api.RawdataMessage;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,19 +45,24 @@ final class MemoryRawdataConsumer implements RawdataConsumer {
     @Override
     public CompletableFuture<RawdataMessage> receiveAsync() {
         checkOpen();
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                for (; ; ) {
-                    RawdataMessage message = receive(1, TimeUnit.SECONDS);
-                    if (message != null) {
-                        return message;
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    for (; ; ) {
+                        RawdataMessage message = receive(1, TimeUnit.SECONDS);
+                        if (message != null) {
+                            return message;
+                        }
                     }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    // closing the client interrupts its threads
+                    throw new CompletionException(isClosed() ? closedException() : e);
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new CompletionException(e);
-            }
-        }, client.executor());
+            }, client.executor());
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(closedException()); // the client closed meanwhile
+        }
     }
 
     @Override
@@ -80,8 +86,12 @@ final class MemoryRawdataConsumer implements RawdataConsumer {
 
     private void checkOpen() {
         if (isClosed()) {
-            throw new RawdataClosedException("consumer of topic " + topic.name + " is closed");
+            throw closedException();
         }
+    }
+
+    private RawdataClosedException closedException() {
+        return new RawdataClosedException("consumer of topic " + topic.name + " is closed");
     }
 
     @Override

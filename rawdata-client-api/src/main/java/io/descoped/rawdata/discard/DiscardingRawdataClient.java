@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -30,6 +31,7 @@ final class DiscardingRawdataClient implements RawdataClient {
     };
 
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final Set<DiscardingConsumer> consumers = ConcurrentHashMap.newKeySet();
 
     @Override
     public RawdataProducer producer(String topic) {
@@ -74,65 +76,12 @@ final class DiscardingRawdataClient implements RawdataClient {
 
     @Override
     public RawdataConsumer consumer(String topic, RawdataCursor cursor) {
-        String name = checked(topic);
-        return new RawdataConsumer() {
-            private final AtomicBoolean consumerClosed = new AtomicBoolean();
-
-            @Override
-            public String topic() {
-                return name;
-            }
-
-            /**
-             * Waits out the timeout (nothing is ever published) and returns null.
-             */
-            @Override
-            public RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException {
-                checkOpen();
-                long deadline = System.nanoTime() + unit.toNanos(timeout);
-                synchronized (this) {
-                    long remaining;
-                    while (!isClosed() && (remaining = deadline - System.nanoTime()) > 0) {
-                        TimeUnit.NANOSECONDS.timedWait(this, remaining);
-                    }
-                }
-                checkOpen();
-                return null;
-            }
-
-            /**
-             * Returns a future that never completes with a message; closing the consumer completes it exceptionally.
-             */
-            @Override
-            public CompletableFuture<RawdataMessage> receiveAsync() {
-                checkOpen();
-                return new CompletableFuture<>();
-            }
-
-            @Override
-            public void seek(long timestamp) {
-                checkOpen();
-            }
-
-            @Override
-            public boolean isClosed() {
-                return consumerClosed.get() || closed.get();
-            }
-
-            @Override
-            public void close() {
-                consumerClosed.set(true);
-                synchronized (this) {
-                    notifyAll();
-                }
-            }
-
-            private void checkOpen() {
-                if (isClosed()) {
-                    throw new RawdataClosedException("consumer of topic " + name + " is closed");
-                }
-            }
-        };
+        DiscardingConsumer consumer = new DiscardingConsumer(checked(topic));
+        consumers.add(consumer);
+        if (isClosed()) {
+            consumer.close(); // the client closed while this consumer was created
+        }
+        return consumer;
     }
 
     @Override
@@ -173,7 +122,7 @@ final class DiscardingRawdataClient implements RawdataClient {
             public byte[] get(String key) {
                 Objects.requireNonNull(key, "key");
                 checkOpen();
-                return null;
+                return null; // NOSONAR null is the contract of RawdataMetadataClient.get for a missing entry
             }
 
             @Override
@@ -200,7 +149,9 @@ final class DiscardingRawdataClient implements RawdataClient {
 
     @Override
     public void close() {
-        closed.set(true);
+        if (closed.compareAndSet(false, true)) {
+            consumers.forEach(DiscardingConsumer::close);
+        }
     }
 
     private void checkOpen() {
@@ -213,5 +164,92 @@ final class DiscardingRawdataClient implements RawdataClient {
         RawdataTopics.requireValid(topic);
         checkOpen();
         return topic;
+    }
+
+    /**
+     * Never receives anything. Closing it, or its client, wakes a waiting receive and fails the futures of
+     * {@link #receiveAsync()}.
+     */
+    private final class DiscardingConsumer implements RawdataConsumer {
+
+        private final String name;
+        private final AtomicBoolean consumerClosed = new AtomicBoolean();
+        private final Set<CompletableFuture<RawdataMessage>> pending = ConcurrentHashMap.newKeySet();
+
+        DiscardingConsumer(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String topic() {
+            return name;
+        }
+
+        /**
+         * Waits out the timeout (nothing is ever published) and returns null.
+         */
+        @Override
+        public RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException {
+            checkOpen();
+            long deadline = System.nanoTime() + unit.toNanos(timeout);
+            synchronized (this) {
+                long remaining;
+                while (!isClosed() && (remaining = deadline - System.nanoTime()) > 0) {
+                    TimeUnit.NANOSECONDS.timedWait(this, remaining);
+                }
+            }
+            checkOpen();
+            return null;
+        }
+
+        /**
+         * Returns a future that never completes with a message; closing the consumer or the client completes it
+         * exceptionally with {@link RawdataClosedException}.
+         */
+        @Override
+        public CompletableFuture<RawdataMessage> receiveAsync() {
+            checkOpen();
+            CompletableFuture<RawdataMessage> future = new CompletableFuture<>();
+            pending.add(future);
+            future.whenComplete((message, failure) -> pending.remove(future));
+            if (isClosed()) {
+                future.completeExceptionally(closedException());
+            }
+            return future;
+        }
+
+        @Override
+        public void seek(long timestamp) {
+            checkOpen();
+        }
+
+        @Override
+        public boolean isClosed() {
+            return consumerClosed.get() || closed.get();
+        }
+
+        @Override
+        public void close() {
+            if (!consumerClosed.compareAndSet(false, true)) {
+                return;
+            }
+            consumers.remove(this);
+            synchronized (this) {
+                notifyAll();
+            }
+            for (CompletableFuture<RawdataMessage> future : pending) {
+                future.completeExceptionally(closedException());
+            }
+        }
+
+        private RawdataClosedException closedException() {
+            return new RawdataClosedException("consumer of topic " + name + " is closed");
+        }
+
+        private void checkOpen() {
+            if (isClosed()) {
+                throw closedException();
+            }
+        }
     }
 }

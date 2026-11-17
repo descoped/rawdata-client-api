@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -38,8 +39,10 @@ class RawdataMessageTest {
     @Test
     void keysAreUnmodifiable() {
         RawdataMessage message = RawdataMessage.builder().position("p").put("k", new byte[0]).build();
-        assertThrows(UnsupportedOperationException.class, () -> message.keys().remove("k"));
-        assertThrows(UnsupportedOperationException.class, () -> message.copy().keys().clear());
+        Set<String> keys = message.keys();
+        Set<String> builderKeys = message.copy().keys();
+        assertThrows(UnsupportedOperationException.class, () -> keys.remove("k"));
+        assertThrows(UnsupportedOperationException.class, builderKeys::clear);
     }
 
     @Test
@@ -81,26 +84,33 @@ class RawdataMessageTest {
 
     @Test
     void sequenceNumberMustNotBeNegative() {
-        assertThrows(IllegalArgumentException.class, () -> RawdataMessage.builder().sequenceNumber(-1));
+        RawdataMessage.Builder builder = RawdataMessage.builder();
+        assertThrows(IllegalArgumentException.class, () -> builder.sequenceNumber(-1));
         assertEquals(0, RawdataMessage.builder().sequenceNumber(0).sequenceNumber());
     }
 
     @Test
     void idMustBeAUuidV7() {
-        assertThrows(IllegalArgumentException.class, () -> RawdataMessage.builder().id(UUID.randomUUID()));
-        assertThrows(IllegalArgumentException.class, () -> RawdataMessage.builder().id(UUID.fromString("017f22e2-79b0-6cc4-98c0-0a5f4c1d2e3f")));
-        assertNull(RawdataMessage.builder().id(null).id());
+        RawdataMessage.Builder builder = RawdataMessage.builder();
+        UUID version4 = UUID.randomUUID();
+        UUID version6 = UUID.fromString("017f22e2-79b0-6cc4-98c0-0a5f4c1d2e3f");
+        assertThrows(IllegalArgumentException.class, () -> builder.id(version4));
+        assertThrows(IllegalArgumentException.class, () -> builder.id(version6));
+        assertNull(builder.id(null).id());
     }
 
     @Test
     void positionIsRequired() {
-        assertThrows(IllegalArgumentException.class, () -> RawdataMessage.builder().build());
+        RawdataMessage.Builder builder = RawdataMessage.builder();
+        assertThrows(IllegalArgumentException.class, builder::build);
     }
 
     @Test
     void nullKeyOrPayloadIsRefused() {
-        assertThrows(NullPointerException.class, () -> RawdataMessage.builder().put(null, new byte[0]));
-        assertThrows(NullPointerException.class, () -> RawdataMessage.builder().put("k", null));
+        RawdataMessage.Builder builder = RawdataMessage.builder();
+        byte[] empty = new byte[0];
+        assertThrows(NullPointerException.class, () -> builder.put(null, empty));
+        assertThrows(NullPointerException.class, () -> builder.put("k", null));
     }
 
     @Test

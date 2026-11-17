@@ -23,12 +23,14 @@ class RawdataClientCreateTest {
     @Test
     void missingProviderIsRefused() {
         assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(Map.of()));
-        assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(Map.of(RawdataClient.PROVIDER_KEY, " ")));
+        Map<String, String> blank = Map.of(RawdataClient.PROVIDER_KEY, " ");
+        assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(blank));
         assertThrows(NullPointerException.class, () -> RawdataClient.create(null));
     }
 
     @Test
     void unknownProviderIsReported() {
-        assertThrows(ProviderException.class, () -> RawdataClient.create(Map.of(RawdataClient.PROVIDER_KEY, "no-such-provider")));
+        Map<String, String> unknown = Map.of(RawdataClient.PROVIDER_KEY, "no-such-provider");
+        assertThrows(ProviderException.class, () -> RawdataClient.create(unknown));
     }
 }

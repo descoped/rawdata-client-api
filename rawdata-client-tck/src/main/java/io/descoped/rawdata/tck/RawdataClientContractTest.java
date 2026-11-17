@@ -25,10 +25,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -301,23 +303,45 @@ public abstract class RawdataClientContractTest {
      */
     @Test
     public void generatedIdFollowsAGivenId() throws Exception {
+        List<String> expected = new ArrayList<>();
         for (int round = 0; round < 20; round++) {
+            RawdataMessage last = client.lastMessage(topic);
+            // a given id just after the topic's last, often in the same millisecond as the generated one that follows
+            UUID given = RawdataIds.next(last == null ? RawdataIds.beginningOfTime() : last.id());
             try (RawdataProducer producer = client.producer(topic)) {
                 producer.publish(
-                        RawdataMessage.builder().id(RawdataIds.generate()).position("r" + round + "given").build(),
+                        RawdataMessage.builder().id(given).position("r" + round + "given").build(),
                         RawdataMessage.builder().position("r" + round + "generated").build());
             }
+            expected.add("r" + round + "given");
+            expected.add("r" + round + "generated");
         }
         try (RawdataConsumer consumer = client.consumer(topic)) {
-            List<String> positions = readAll(consumer);
-            assertEquals(40, positions.size());
-            // A given id is placed by its value, which may sort before earlier messages; the generated id that
-            // follows it in the same call must sort after it.
-            for (int round = 0; round < 20; round++) {
-                assertTrue(positions.indexOf("r" + round + "given") < positions.indexOf("r" + round + "generated"),
-                        "round " + round + ": " + positions);
-            }
+            assertEquals(expected, readAll(consumer));
         }
+    }
+
+    /**
+     * A given id that is not greater than every id before it is refused, and nothing of the call is written.
+     */
+    @Test
+    public void givenIdNotGreaterThanTheTopicsIsRefused() {
+        publish("a");
+        RawdataMessage last = client.lastMessage(topic);
+        UUID lower = RawdataIds.beginningOf(last.timestamp());
+        RawdataMessage equal = RawdataMessage.builder().id(last.id()).position("equal").build();
+        RawdataMessage before = RawdataMessage.builder().id(lower).position("lower").build();
+        RawdataMessage fresh = RawdataMessage.builder().position("fresh").build();
+        UUID ahead = RawdataIds.next(last.id());
+        RawdataMessage first = RawdataMessage.builder().id(RawdataIds.next(ahead)).position("first").build();
+        RawdataMessage second = RawdataMessage.builder().id(ahead).position("second").build();
+        try (RawdataProducer producer = client.producer(topic)) {
+            assertThrows(IllegalArgumentException.class, () -> producer.publish(equal));
+            assertThrows(IllegalArgumentException.class, () -> producer.publish(fresh, before));
+            assertThrows(IllegalArgumentException.class, () -> producer.publish(first, second), "ids must increase within a call too");
+        }
+        assertEquals("a", client.lastMessage(topic).position());
+        assertEquals(last, client.lastMessage(topic));
     }
 
     /**
@@ -674,6 +698,85 @@ public abstract class RawdataClientContractTest {
         assertFalse(receiver.isAlive(), "receive must return after close");
         assertTrue(System.nanoTime() - closedAt < TimeUnit.SECONDS.toNanos(30));
         assertTrue(thrown.get() instanceof RawdataClosedException, "receive must throw RawdataClosedException, threw " + thrown.get());
+    }
+
+    /**
+     * Closing the client wakes a receive that waits on one of its consumers, which then throws.
+     *
+     * @throws Exception on failure
+     */
+    @Test
+    public void closingTheClientWakesAWaitingReceive() throws Exception {
+        RawdataConsumer consumer = client.consumer(topic);
+        CompletableFuture<Throwable> waiting = CompletableFuture.supplyAsync(() -> {
+            try {
+                consumer.receive(60, TimeUnit.SECONDS);
+                return null;
+            } catch (Throwable t) {
+                return t;
+            }
+        });
+        sleep(200);
+        client.close();
+        Throwable thrown = waiting.get(30, TimeUnit.SECONDS);
+        assertTrue(thrown instanceof RawdataClosedException, "receive must throw RawdataClosedException, threw " + thrown);
+    }
+
+    /**
+     * Closing the consumer completes a pending asynchronous receive exceptionally.
+     *
+     * @throws Exception on failure
+     */
+    @Test
+    public void closingTheConsumerFailsAPendingReceiveAsync() throws Exception {
+        RawdataConsumer consumer = client.consumer(topic);
+        CompletableFuture<? extends RawdataMessage> pending = consumer.receiveAsync();
+        consumer.close();
+        assertClosed(pending);
+    }
+
+    /**
+     * Closing the client completes a pending asynchronous receive exceptionally, and asynchronous calls after the
+     * close fail.
+     *
+     * @throws Exception on failure
+     */
+    @Test
+    public void closingTheClientFailsAsynchronousCalls() throws Exception {
+        RawdataConsumer consumer = client.consumer(topic);
+        RawdataProducer producer = client.producer(topic);
+        CompletableFuture<? extends RawdataMessage> pending = consumer.receiveAsync();
+        client.close();
+        assertClosed(pending);
+        RawdataMessage message = message("a", 1);
+        CompletableFuture<Void> published;
+        try {
+            published = producer.publishAsync(message);
+        } catch (RawdataClosedException e) {
+            return; // refusing at once is as good as a failed future
+        }
+        assertClosed(published);
+    }
+
+    /**
+     * A closed consumer refuses a batch receive.
+     */
+    @Test
+    public void closedConsumerRefusesABatchReceive() {
+        RawdataConsumer consumer = client.consumer(topic);
+        consumer.close();
+        assertThrows(RawdataClosedException.class, () -> consumer.receiveUpTo(10, Duration.ZERO));
+    }
+
+    private static void assertClosed(CompletableFuture<?> future) throws InterruptedException {
+        try {
+            future.get(30, TimeUnit.SECONDS);
+            throw new AssertionError("the future must fail with RawdataClosedException, it completed");
+        } catch (ExecutionException e) {
+            assertTrue(e.getCause() instanceof RawdataClosedException, "expected RawdataClosedException, got " + e.getCause());
+        } catch (TimeoutException e) {
+            throw new AssertionError("the future must fail with RawdataClosedException, it did not complete", e);
+        }
     }
 
     // ---- copying and batches

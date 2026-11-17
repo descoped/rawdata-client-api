@@ -8,6 +8,7 @@ import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.rawdata.api.RawdataTopics;
 import io.descoped.rawdata.provider.postgres.tx.Transaction;
 import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
@@ -42,6 +43,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataProducer producer(String topicName) {
+        RawdataTopics.requireValid(topicName);
         createTopicIfNotExists(topicName);
         PostgresRawdataProducer producer = new PostgresRawdataProducer(transactionFactory, topicName);
         this.producers.add(producer);
@@ -50,6 +52,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataConsumer consumer(String topic, RawdataCursor cursor) {
+        RawdataTopics.requireValid(topic);
         createTopicIfNotExists(topic);
         PostgresRawdataConsumer consumer = new PostgresRawdataConsumer(transactionFactory, topic, (PostgresCursor) cursor, consumerPrefetchSize, dbPrefetchPollIntervalWhenEmptyMilliseconds);
         consumers.add(consumer);
@@ -58,11 +61,14 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataCursor cursorOf(String topic, UUID ulid, boolean inclusive) {
+        RawdataTopics.requireValid(topic);
+        RawdataIds.requireValid(ulid);
         return new PostgresCursor(ulid, inclusive);
     }
 
     @Override
     public RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) {
+        RawdataTopics.requireValid(topic);
         UUID lowerUlid = RawdataIds.beginningOf(approxTimestamp - tolerance.toMillis());
         UUID upperUlid = RawdataIds.beginningOf(approxTimestamp + tolerance.toMillis());
         UUID lowerBound = lowerUlid;
@@ -89,6 +95,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataMessage lastMessage(String topic) throws RawdataClosedException {
+        RawdataTopics.requireValid(topic);
         if (isClosed()) {
             throw new RawdataClosedException();
         }
@@ -153,6 +160,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public PostgresRawdataMetadataClient metadata(String topic) {
+        RawdataTopics.requireValid(topic);
         createTopicMetadataIfNotExists(topic);
         return new PostgresRawdataMetadataClient(topic, transactionFactory);
     }
