@@ -1,74 +1,61 @@
 package io.descoped.rawdata.memory;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
-class MemoryRawdataProducer implements RawdataProducer {
+final class MemoryRawdataProducer implements RawdataProducer {
 
-    final ULID ulid = new ULID();
+    private final MemoryRawdataClient client;
+    private final MemoryRawdataTopic topic;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
-    final AtomicReference<ULID.Value> prevUlid = new AtomicReference<>(ulid.nextValue());
-
-    final MemoryRawdataTopic topic;
-
-    final AtomicBoolean closed = new AtomicBoolean(false);
-
-    Consumer<MemoryRawdataProducer> closeAction;
-
-    MemoryRawdataProducer(MemoryRawdataTopic topic, Consumer<MemoryRawdataProducer> closeAction) {
+    MemoryRawdataProducer(MemoryRawdataClient client, MemoryRawdataTopic topic) {
+        this.client = client;
         this.topic = topic;
-        this.closeAction = closeAction;
     }
 
     @Override
     public String topic() {
-        return topic.topic;
+        return topic.name;
     }
 
     @Override
     public void publish(RawdataMessage... messages) throws RawdataClosedException {
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            for (RawdataMessage message : messages) {
-                if (message == null) {
-                    throw new NullPointerException("on of the messages was null");
-                }
-                ULID.Value ulid = message.ulid();
-                if (ulid == null) {
-                    ulid = RawdataProducer.nextMonotonicUlid(this.ulid, prevUlid.get());
-                }
-                prevUlid.set(ulid);
-                topic.write(ulid, message);
-            }
-        } finally {
-            topic.unlock();
+        Objects.requireNonNull(messages, "messages");
+        for (RawdataMessage message : messages) {
+            Objects.requireNonNull(message, "one of the messages is null");
         }
+        if (isClosed()) {
+            throw new RawdataClosedException("producer of topic " + topic.name + " is closed");
+        }
+        topic.publish(messages.clone());
     }
 
     @Override
     public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
-        if (isClosed()) {
-            throw new RawdataClosedException();
+        RawdataMessage[] batch = Objects.requireNonNull(messages, "messages").clone();
+        try {
+            return CompletableFuture.runAsync(() -> publish(batch), client.executor());
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(new RawdataClosedException("producer of topic " + topic.name + " is closed"));
         }
-        return CompletableFuture.runAsync(() -> publish(messages));
     }
 
     @Override
     public boolean isClosed() {
-        return closed.get();
+        return closed.get() || client.isClosed();
     }
 
     @Override
     public void close() {
-        closeAction.accept(this);
-        closed.set(true);
+        if (closed.compareAndSet(false, true)) {
+            client.removed(this);
+        }
     }
 }

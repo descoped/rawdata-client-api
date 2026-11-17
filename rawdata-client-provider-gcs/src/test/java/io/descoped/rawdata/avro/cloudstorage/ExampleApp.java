@@ -39,7 +39,7 @@ public class ExampleApp {
             for (; ; ) {
                 RawdataMessage message = consumer.receive(30, TimeUnit.SECONDS);
                 if (message != null) {
-                    System.out.printf("Consumed message with id: %s%n", message.ulid());
+                    System.out.printf("Consumed message with id: %s%n", message.id());
                     if (message.position().equals("582AACB30")) {
                         return;
                     }

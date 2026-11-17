@@ -1,7 +1,6 @@
 module io.descoped.rawdata.postgres {
     requires org.slf4j;
     requires java.sql;
-    requires de.huxhorn.sulky.ulid;
     requires com.zaxxer.hikari;
     requires org.postgresql.jdbc;
     requires io.descoped.rawdata.api;

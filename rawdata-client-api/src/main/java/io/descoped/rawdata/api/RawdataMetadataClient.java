@@ -3,46 +3,52 @@ package io.descoped.rawdata.api;
 import java.util.Set;
 
 /**
- * Reads and writes the metadata entries (key and bytes) of one topic.
+ * Reads and writes the metadata of one topic: entries of a key and bytes, for example a checkpoint. The entries
+ * belong to the topic, so every metadata client of the topic sees the same entries.
  */
 public interface RawdataMetadataClient {
 
     /**
-     * Returns the name of the topic from which this metadata-client will read from and write to.
+     * Returns the topic this metadata client belongs to.
      *
-     * @return the name of the topic from which this metadata-client will read from and write to.
+     * @return the topic
      */
     String topic();
 
     /**
-     * Returns an iterable with the keys of all the metadata entries stored for this topic.
+     * Returns the keys of the topic's metadata entries.
      *
-     * @return an iterable with the keys of all the metadata entries stored for this topic.
+     * @return an unmodifiable snapshot of the keys
+     * @throws RawdataClosedException if the client is closed
      */
     Set<String> keys();
 
     /**
-     * Read value for a given key.
+     * Reads an entry.
      *
-     * @param key the key of the metadata entry.
-     * @return the value of the metadata entry.
+     * @param key the key
+     * @return a copy of the value, or null if there is no entry with the key
+     * @throws RawdataClosedException if the client is closed
      */
     byte[] get(String key);
 
     /**
-     * Write metadata value for a given key.
+     * Writes an entry, replacing any value the key had. The store keeps a copy of the array.
      *
-     * @param key   the key of the metadata entry
-     * @param value the value of the metadata entry
-     * @return this metadata-client.
+     * @param key   the key
+     * @param value the value
+     * @return this metadata client
+     * @throws NullPointerException   if the key or the value is null
+     * @throws RawdataClosedException if the client is closed
      */
     RawdataMetadataClient put(String key, byte[] value);
 
     /**
-     * Remove the metadata entry associated with the given key.
+     * Removes an entry; does nothing if there is none.
      *
-     * @param key the key of the metadata entry to remove
-     * @return this metadata-client.
+     * @param key the key
+     * @return this metadata client
+     * @throws RawdataClosedException if the client is closed
      */
     RawdataMetadataClient remove(String key);
 }

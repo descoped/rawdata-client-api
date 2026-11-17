@@ -20,6 +20,7 @@
     <modules>
         <module>rawdata-client-bom</module>
         <module>rawdata-client-api</module>
+        <module>rawdata-client-tck</module>
         <module>rawdata-client-provider-postgres</module>
         <module>rawdata-client-provider-gcs</module>
         <module>rawdata-copy-util</module>
@@ -37,7 +38,6 @@
         <!-- Dependency versions. Kept as properties, not in dependencyManagement, so that importing
              rawdata-client-bom (which inherits this POM) manages the rawdata modules only. -->
         <service-provider-api.version>3.0.1</service-provider-api.version>
-        <ulid.version>8.3.0</ulid.version>
         <slf4j.version>2.0.20</slf4j.version>
         <logback.version>1.6.7</logback.version>
         <hikaricp.version>7.1.0</hikaricp.version>
@@ -45,8 +45,8 @@
         <h2.version>2.5.252</h2.version>
         <avro.version>1.12.2</avro.version>
         <google-cloud-storage.version>2.79.0</google-cloud-storage.version>
-        <reactive-streams.version>1.0.4</reactive-streams.version>
         <testng.version>7.12.0</testng.version>
+        <junit.version>6.1.3</junit.version>
     </properties>
 
     <licenses>
@@ -181,14 +181,15 @@
             </build>
         </profile>
 
-        <!-- One SonarCloud project for the whole reactor; each module reports its own JaCoCo XML. -->
+        <!-- One SonarCloud project for the whole reactor; each module reports its own JaCoCo XML, and the API module's
+             classes also get the coverage of the contract tests (rawdata-client-tck's aggregate report). -->
         <profile>
             <id>sonar</id>
             <properties>
                 <sonar.host.url>https://sonarcloud.io</sonar.host.url>
                 <sonar.organization>descoped</sonar.organization>
                 <sonar.projectKey>descoped_rawdata-client-project</sonar.projectKey>
-                <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+                <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml,${maven.multiModuleProjectDirectory}/rawdata-client-tck/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
             </properties>
             <build>
                 <plugins>
@@ -244,8 +245,8 @@
                     <version>3.5.1</version>
                 </plugin>
 
-                <!-- The contract tests are named *Tck and the reactive-streams verifications *Verification; before
-                     3.0.0 neither matched Surefire's default includes, so they never ran. -->
+                <!-- The 2.x contract tests are named *Tck; before 3.0.0 they did not match Surefire's default includes,
+                     so they never ran. -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
@@ -254,7 +255,6 @@
                         <includes>
                             <include>**/*Test.java</include>
                             <include>**/*Tck.java</include>
-                            <include>**/*Verification.java</include>
                         </includes>
                     </configuration>
                 </plugin>

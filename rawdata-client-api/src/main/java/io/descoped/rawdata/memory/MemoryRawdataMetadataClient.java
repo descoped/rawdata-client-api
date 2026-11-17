@@ -1,44 +1,60 @@
 package io.descoped.rawdata.memory;
 
+import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataMetadataClient;
 
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
-public class MemoryRawdataMetadataClient implements RawdataMetadataClient {
+final class MemoryRawdataMetadataClient implements RawdataMetadataClient {
 
-    final String topic;
-    final Map<String, byte[]> map = new ConcurrentHashMap<>();
+    private final MemoryRawdataClient client;
+    private final MemoryRawdataTopic topic;
 
-    public MemoryRawdataMetadataClient(String topic) {
+    MemoryRawdataMetadataClient(MemoryRawdataClient client, MemoryRawdataTopic topic) {
+        this.client = client;
         this.topic = topic;
     }
 
     @Override
     public String topic() {
-        return topic;
+        return topic.name;
     }
 
     @Override
     public Set<String> keys() {
-        return map.keySet();
+        checkOpen();
+        return Set.copyOf(topic.metadata.keySet());
     }
 
     @Override
     public byte[] get(String key) {
-        return map.get(key);
+        Objects.requireNonNull(key, "key");
+        checkOpen();
+        byte[] value = topic.metadata.get(key);
+        return value == null ? null : value.clone();
     }
 
     @Override
-    public MemoryRawdataMetadataClient put(String key, byte[] value) {
-        map.put(key, value);
+    public RawdataMetadataClient put(String key, byte[] value) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(value, "value");
+        checkOpen();
+        topic.metadata.put(key, value.clone());
         return this;
     }
 
     @Override
-    public MemoryRawdataMetadataClient remove(String key) {
-        map.remove(key);
+    public RawdataMetadataClient remove(String key) {
+        Objects.requireNonNull(key, "key");
+        checkOpen();
+        topic.metadata.remove(key);
         return this;
+    }
+
+    private void checkOpen() {
+        if (client.isClosed()) {
+            throw new RawdataClosedException("client is closed");
+        }
     }
 }

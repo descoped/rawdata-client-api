@@ -1,6 +1,7 @@
 package io.descoped.rawdata.avro.filesystem;
 
 import io.descoped.rawdata.api.RawdataMetadataClient;
+import io.descoped.rawdata.api.RawdataTopics;
 import io.descoped.rawdata.avro.AvroRawdataClient;
 import io.descoped.rawdata.avro.AvroRawdataUtils;
 
@@ -19,6 +20,7 @@ public class FilesystemRawdataClient extends AvroRawdataClient {
 
     @Override
     public RawdataMetadataClient metadata(String topic) {
+        RawdataTopics.requireValid(topic);
         Path metadataFolder = createMetadataFolderIfNotExists(topic);
         return new FilesystemRawdataMetadataClient(metadataFolder, topic);
     }

@@ -15,23 +15,6 @@
     <name>Rawdata Client API</name>
     <description>The RawdataClient API, its provider service, and the memory and discard providers.</description>
 
-    <build>
-        <plugins>
-            <!-- The ULID library (de.huxhorn.sulky.ulid) is an automatic module (no module-info) that the API exposes, so
-                 javac reports -Xlint:requires-automatic and requires-transitive-automatic; that is expected here, every other lint warning still fails. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <compilerArgs combine.self="override">
-                        <arg>-Xlint:all,-requires-automatic,-requires-transitive-automatic</arg>
-                        <arg>-Werror</arg>
-                    </compilerArgs>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-
     <dependencies>
         <dependency>
             <groupId>io.descoped.spi</groupId>
@@ -39,20 +22,9 @@
             <version>${service-provider-api.version}</version>
         </dependency>
         <dependency>
-            <groupId>de.huxhorn.sulky</groupId>
-            <artifactId>de.huxhorn.sulky.ulid</artifactId>
-            <version>${ulid.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.reactivestreams</groupId>
-            <artifactId>reactive-streams-tck-flow</artifactId>
-            <version>${reactive-streams.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
-            <version>${testng.version}</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

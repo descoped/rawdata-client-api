@@ -1,16 +1,18 @@
 package io.descoped.rawdata.api;
 
 /**
- * Thrown when the client, producer or consumer it was called on is closed.
+ * Thrown when a client, producer, consumer or metadata client is used after it, or the client it belongs to, was
+ * closed.
  */
-public class RawdataClosedException extends RuntimeException {
+public class RawdataClosedException extends RawdataException {
 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Creates the exception without a message.
+     * Creates the exception with a default message.
      */
     public RawdataClosedException() {
+        super("closed");
     }
 
     /**
@@ -20,36 +22,5 @@ public class RawdataClosedException extends RuntimeException {
      */
     public RawdataClosedException(String message) {
         super(message);
-    }
-
-    /**
-     * Creates the exception with a message and a cause.
-     *
-     * @param message the detail message
-     * @param cause   the cause
-     */
-    public RawdataClosedException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
-    /**
-     * Creates the exception with a cause.
-     *
-     * @param cause the cause
-     */
-    public RawdataClosedException(Throwable cause) {
-        super(cause);
-    }
-
-    /**
-     * Creates the exception with full control over suppression and the stack trace.
-     *
-     * @param message            the detail message
-     * @param cause              the cause
-     * @param enableSuppression  whether suppression is enabled
-     * @param writableStackTrace whether the stack trace is writable
-     */
-    public RawdataClosedException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
-        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

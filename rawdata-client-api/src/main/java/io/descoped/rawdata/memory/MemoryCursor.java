@@ -1,54 +1,43 @@
 package io.descoped.rawdata.memory;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataCursor;
 
 import java.util.Objects;
+import java.util.UUID;
 
-public class MemoryCursor implements RawdataCursor {
+/**
+ * A starting point: an id, which need not be the id of a message, and whether a message with exactly that id is read
+ * first.
+ */
+final class MemoryCursor implements RawdataCursor {
 
-    /**
-     * Need not exactly match an existing ulid-value.
-     */
-    final ULID.Value startKey;
-
-    /**
-     * Whether or not to include the element with ulid-value matching the lower-bound exactly.
-     */
+    final UUID startKey;
     final boolean inclusive;
 
-    /**
-     * Traversal direction, true signifies forward.
-     */
-    final boolean forward;
-
-    MemoryCursor(ULID.Value startKey, boolean inclusive, boolean forward) {
-        this.startKey = startKey;
+    MemoryCursor(UUID startKey, boolean inclusive) {
+        this.startKey = Objects.requireNonNull(startKey, "id");
         this.inclusive = inclusive;
-        this.forward = forward;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MemoryCursor)) {
+            return false;
+        }
         MemoryCursor that = (MemoryCursor) o;
-        return inclusive == that.inclusive &&
-                forward == that.forward &&
-                startKey.equals(that.startKey);
+        return inclusive == that.inclusive && startKey.equals(that.startKey);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(startKey, inclusive, forward);
+        return Objects.hash(startKey, inclusive);
     }
 
     @Override
     public String toString() {
-        return "MemoryCursor{" +
-                "startKey=" + startKey +
-                ", inclusive=" + inclusive +
-                ", forward=" + forward +
-                '}';
+        return "MemoryCursor{startKey=" + startKey + ", inclusive=" + inclusive + '}';
     }
 }

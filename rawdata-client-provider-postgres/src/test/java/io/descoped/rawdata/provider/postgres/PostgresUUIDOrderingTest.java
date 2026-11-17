@@ -1,6 +1,5 @@
 package io.descoped.rawdata.provider.postgres;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClientInitializer;
 import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataMessage;
@@ -13,7 +12,6 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.testng.Assert.assertEquals;
@@ -47,20 +45,6 @@ public class PostgresUUIDOrderingTest {
 
     private void dropTables(String topic) {
         client.dropOrCreateTopicTables(topic, "io/descoped/rawdata/provider/postgres/init/init-topic-stream.sql");
-    }
-
-    @Test
-    public void thatULIDtoUUIDAndBackConversionWorks() {
-        ULID ulid = new ULID();
-        ULID.Value value = ulid.nextValue();
-        convertAndCompare(value);
-        convertAndCompare(ulid.nextMonotonicValue(value));
-    }
-
-    private void convertAndCompare(ULID.Value value) {
-        UUID uuidFromMsbLsb = new UUID(value.getMostSignificantBits(), value.getLeastSignificantBits());
-        ULID.Value actual = new ULID.Value(uuidFromMsbLsb.getMostSignificantBits(), uuidFromMsbLsb.getLeastSignificantBits());
-        assertEquals(actual, value);
     }
 
     @Test

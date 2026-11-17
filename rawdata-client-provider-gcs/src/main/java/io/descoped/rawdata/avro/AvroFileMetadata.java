@@ -1,12 +1,14 @@
 package io.descoped.rawdata.avro;
 
-import de.huxhorn.sulky.ulid.ULID;
 
+import io.descoped.rawdata.api.RawdataIds;
+
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class AvroFileMetadata {
-    final AtomicReference<ULID.Value> idOfFirstRecord = new AtomicReference<>();
+    final AtomicReference<UUID> idOfFirstRecord = new AtomicReference<>();
     final AtomicReference<String> positionOfFirstRecord = new AtomicReference<>();
     final AtomicLong count = new AtomicLong(0);
     final AtomicLong syncOfLastBlock = new AtomicLong(0);
@@ -42,16 +44,16 @@ public abstract class AvroFileMetadata {
         return positionOfFirstRecord.get();
     }
 
-    void setIdOfFirstRecord(ULID.Value id) {
+    void setIdOfFirstRecord(UUID id) {
         idOfFirstRecord.compareAndSet(null, id);
     }
 
-    ULID.Value getIdOfFirstRecord() {
+    UUID getIdOfFirstRecord() {
         return idOfFirstRecord.get();
     }
 
     public String toFilename() {
-        String fromTime = AvroRawdataUtils.formatTimestamp(getIdOfFirstRecord().timestamp());
+        String fromTime = AvroRawdataUtils.formatTimestamp(RawdataIds.timestamp(getIdOfFirstRecord()));
         return fromTime + "_" + getCount() + "_" + getSyncOfLastBlock() + "_" + getPositionOfFirstRecord() + ".avro";
     }
 

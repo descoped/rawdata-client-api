@@ -5,14 +5,15 @@ Guidance for Claude Code in this repository.
 ## What this is
 
 The Descoped rawdata client: `RawdataClient`, a provider based API for writing and reading ordered streams of raw
-data messages (topics of ULID-ordered messages with binary content and per-topic metadata), its providers, and a
+data messages (topics of messages ordered by UUIDv7 id, with binary content and per-topic metadata), its providers, and a
 tool that copies topics between providers. One Maven reactor, group `io.descoped.rawdata`, owned by Descoped.
 
 | Module | JPMS module | Role |
 |---|---|---|
 | `rawdata-client-project` (root) | n/a | parent and aggregator |
 | `rawdata-client-bom` | n/a | BOM of the modules below |
-| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataFlows` |
+| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataIds` (UUIDv7), `RawdataCopy` |
+| `rawdata-client-tck` | `io.descoped.rawdata.tck` | `RawdataClientContractTest`: the provider contract as abstract JUnit 6 tests; its own tests run it for `memory` |
 | `rawdata-client-provider-postgres` | `io.descoped.rawdata.postgres` | provider `postgres`: PostgreSQL 18, HikariCP, pgjdbc |
 | `rawdata-client-provider-gcs` | `io.descoped.rawdata.avro` | providers `gcs` (Avro files in Google Cloud Storage) and `filesystem` (Avro files in a local folder) |
 | `rawdata-copy-util` | n/a yet | copies topics from one provider to another (not written yet) |
@@ -36,6 +37,11 @@ this repository, and the work toward it is under way module by module.
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
   metadata behave the same in every provider, and the shared contract tests check it. Topic names are validated and
   never spliced into SQL, file paths or object names.
+- **Ids are UUIDv7** (`RawdataIds`), laid out as PostgreSQL 18's `uuidv7()` (48-bit milliseconds, version 7, 12-bit
+  sub-millisecond fraction, variant, 62 random bits) and ordered by `RawdataIds.ORDER` (unsigned, as PostgreSQL
+  orders `uuid`), never by `UUID.compareTo`, which is signed. No ULID library (owner's decision, 2026-11-17).
+- **Pull, not reactive streams.** Consumers are pulled (`receive`, `receiveUpTo`); there is no `Flow` API (owner's
+  decision, 2026-11-17, to revisit when the JDK offers something better than `Flow`).
 - **Always the latest stable version** of every library, plugin, action and engine (PostgreSQL 18). Pre-releases
   (milestones, RCs, alphas) only on request. Old and outdated code and configuration is removed, not carried along.
 - **Releases only with the owner's go-ahead.** A release (`release:prepare`/`release:perform`, an upload to the
@@ -50,10 +56,12 @@ this repository, and the work toward it is under way module by module.
 
 ## Testing
 
-- The tests are still the 2.x TestNG tests in the main packages, patched into the named module (hence the relaxed
-  test-compile lint in the root POM). Contract tests are named `*Tck` and the reactive-streams verifications
-  `*Verification`; Surefire includes both. They move to JUnit 6 and test modules of their own as each module is
-  revised.
+- The API's tests are JUnit 6 in a test module of their own (`open module io.descoped.rawdata.api.test`). The
+  provider contract is `RawdataClientContractTest` in `rawdata-client-tck`; a provider's test extends it with the
+  provider's configuration.
+- The postgres and gcs tests are still the 2.x TestNG tests in the main packages, patched into the named module
+  (hence the relaxed test-compile lint in the root POM), named `*Tck`. They move to JUnit 6, test modules of their
+  own and the shared contract as each module is revised (#5, #6).
 - The postgres tests run on H2 in PostgreSQL mode (`h2.enabled`). `docker-compose.yml` in the postgres module starts
   PostgreSQL 18 for manual runs (port 5432, user and database `rdc`, password `rdc`).
 - The GCS integration tests need a real bucket and are disabled; the `filesystem` provider shares the engine and
@@ -63,7 +71,7 @@ this repository, and the work toward it is under way module by module.
   start in the same millisecond hide each other) and
   three `PostgresRawdataClientTck` tests (`thatMultipleProducersOnSameTopicCanBeProducedAndReadBack`,
   `thatFilesCreatedAfterConsumerHasSubscribedAreUsed`, `thatAllFieldsOfMessageSurvivesStream`): the producer does not
-  continue from the topic's last ULID, so within one millisecond the topic order can flip.
+  continue from the topic's last id, so within one millisecond the topic order can flip.
 
 ## Maven Wrapper
 

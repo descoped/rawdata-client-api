@@ -1,167 +1,187 @@
 package io.descoped.rawdata.api;
 
-import de.huxhorn.sulky.ulid.ULID;
+import io.descoped.service.provider.api.ProviderConfigurator;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * A client for one rawdata store: creates producers and consumers on topics, finds positions, and reads and
- * writes topic metadata. Obtained from a provider through {@link RawdataClientInitializer}.
+ * A client for one rawdata store: creates producers and consumers on topics, finds positions, and reads and writes
+ * topic metadata.
+ * <p>
+ * The contract every provider keeps:
+ * <ul>
+ *     <li>A topic name follows {@link RawdataTopics}; a method given an invalid name throws
+ *     {@link IllegalArgumentException}. A topic exists from its first use; an unknown topic is empty.</li>
+ *     <li>The messages of a topic are consumed in the {@link RawdataIds#ORDER order} of their ids, UUIDv7s. A topic
+ *     only grows at its end: an id the producer assigns is greater than every id already in the topic, whichever
+ *     producer wrote it, and an id the caller gives must be too, or the publish is refused.</li>
+ *     <li>After {@link #close()}, every method of the client and of the producers, consumers and metadata clients it
+ *     created throws {@link RawdataClosedException}, except {@code isClosed()} and {@code close()}, which may be
+ *     called any number of times.</li>
+ *     <li>Messages and metadata values are copied in and out; nothing a caller holds is shared with the store.</li>
+ * </ul>
  */
 public interface RawdataClient extends AutoCloseable {
 
     /**
-     * Create a new producer on the given topic. The producer can be used to produce messages on the topic stream.
+     * The configuration key that names the provider, e.g. {@code memory} or {@code postgres}.
+     */
+    String PROVIDER_KEY = "rawdata.client.provider";
+
+    /**
+     * Creates a client from the provider named by {@link #PROVIDER_KEY} in the configuration. The whole configuration
+     * is passed to the provider.
      *
-     * @param topic the name of the topic to produce messages on. Must be the context-specific short-name of the topic
-     *              that is independent of any technology or implementation specific schemes which should be configured
-     *              when loading the rawdata client provider.
+     * @param configuration the configuration
+     * @return a new client
+     * @throws IllegalArgumentException if the configuration does not name a provider
+     * @throws io.descoped.service.provider.api.ProviderException if no provider by that name is available
+     */
+    static RawdataClient create(Map<String, String> configuration) {
+        Objects.requireNonNull(configuration, "configuration");
+        String provider = configuration.get(PROVIDER_KEY);
+        if (provider == null || provider.isBlank()) {
+            throw new IllegalArgumentException("Missing configuration '" + PROVIDER_KEY + "'");
+        }
+        return ProviderConfigurator.configure(RawdataClientInitializer.class, provider, configuration);
+    }
+
+    /**
+     * Creates a producer on a topic.
+     *
+     * @param topic the topic
      * @return a producer on the topic
      */
     RawdataProducer producer(String topic);
 
     /**
-     * Create a new consumer on the given topic, starting at the very beginning of the topic.
+     * Creates a consumer that reads the topic from the beginning.
      *
-     * @param topic the name of the topic to consume message from. Must be the context-specific short-name of the topic
-     *              that is independent of any technology or implementation specific schemes which should be configured
-     *              when loading the rawdata client provider.
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic the topic
+     * @return a consumer on the topic
      */
     default RawdataConsumer consumer(String topic) {
         return consumer(topic, (RawdataCursor) null);
     }
 
     /**
-     * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null).
+     * Creates a consumer that reads the topic from a cursor.
      *
-     * @param topic  the name of the topic to consume message from. Must be the context-specific short-name of
-     *               the topic that is independent of any technology or implementation specific schemes which
-     *               should be configured when loading the rawdata client provider.
-     * @param cursor the cursor to use when messages are read from the topic.
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic  the topic
+     * @param cursor where to start, from {@link #cursorOf}; null for the beginning
+     * @return a consumer on the topic
+     * @throws IllegalArgumentException if the cursor was not created by this client's provider
      */
     RawdataConsumer consumer(String topic, RawdataCursor cursor);
 
     /**
-     * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null). The consumer will not include the initial-position itself when reading
-     * the stream.
+     * Creates a consumer that reads the topic from the message after an id.
      *
-     * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
-     *                        the topic that is independent of any technology or implementation specific schemes which
-     *                        should be configured when loading the rawdata client provider.
-     * @param initialPosition the position to be set as current position when creating the consumer
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic           the topic
+     * @param initialPosition the id to start after; null for the beginning
+     * @return a consumer on the topic
      */
-    default RawdataConsumer consumer(String topic, ULID.Value initialPosition) {
+    default RawdataConsumer consumer(String topic, UUID initialPosition) {
         return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, false));
     }
 
     /**
-     * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null).
+     * Creates a consumer that reads the topic from an id.
      *
-     * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
-     *                        the topic that is independent of any technology or implementation specific schemes which
-     *                        should be configured when loading the rawdata client provider.
-     * @param initialPosition the position to be set as current position when creating the consumer
-     * @param inclusive       whether or not to include the message at the initial-position when reading the stream
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic           the topic
+     * @param initialPosition the id to start at; null for the beginning
+     * @param inclusive       whether the message with that id is read first
+     * @return a consumer on the topic
      */
-    default RawdataConsumer consumer(String topic, ULID.Value initialPosition, boolean inclusive) {
+    default RawdataConsumer consumer(String topic, UUID initialPosition, boolean inclusive) {
         return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, inclusive));
     }
 
     /**
-     * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null). The consumer will not include the initial-position itself when reading
-     * the stream.
+     * Creates a consumer that reads the topic from the message after the first message with a position.
      *
-     * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
-     *                        the topic that is independent of any technology or implementation specific schemes which
-     *                        should be configured when loading the rawdata client provider.
-     * @param initialPosition the position to be set as current position when creating the consumer
-     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
-     *                        initialPosition was originally written to the stream.
-     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
-     *                        approxTimestamp + tolerance)
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic           the topic
+     * @param initialPosition the position to start after; null for the beginning
+     * @param approxTimestamp when the message was written, approximately, in milliseconds since 1970-01-01T00:00Z
+     * @param tolerance       the search range: {@code [approxTimestamp - tolerance, approxTimestamp + tolerance]}
+     * @return a consumer on the topic
+     * @throws RawdataNoSuchPositionException if the position is not found in the range
      */
     default RawdataConsumer consumer(String topic, String initialPosition, long approxTimestamp, Duration tolerance) {
         return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, false, approxTimestamp, tolerance));
     }
 
     /**
-     * Create a new consumer on the given topic, starting at the given initial position (or at the beginning of the topic
-     * if the given initial position is null).
+     * Creates a consumer that reads the topic from the first message with a position.
      *
-     * @param topic           the name of the topic to consume message from. Must be the context-specific short-name of
-     *                        the topic that is independent of any technology or implementation specific schemes which
-     *                        should be configured when loading the rawdata client provider.
-     * @param initialPosition the position to be set as current position when creating the consumer
-     * @param inclusive       whether or not to include the message at the initial-position when reading the stream
-     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
-     *                        initialPosition was originally written to the stream.
-     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
-     *                        approxTimestamp + tolerance)
-     * @return a consumer that can be used to read the topic stream.
+     * @param topic           the topic
+     * @param initialPosition the position to start at; null for the beginning
+     * @param inclusive       whether the message with that position is read first
+     * @param approxTimestamp when the message was written, approximately, in milliseconds since 1970-01-01T00:00Z
+     * @param tolerance       the search range: {@code [approxTimestamp - tolerance, approxTimestamp + tolerance]}
+     * @return a consumer on the topic
+     * @throws RawdataNoSuchPositionException if the position is not found in the range
      */
     default RawdataConsumer consumer(String topic, String initialPosition, boolean inclusive, long approxTimestamp, Duration tolerance) {
         return consumer(topic, initialPosition == null ? null : cursorOf(topic, initialPosition, inclusive, approxTimestamp, tolerance));
     }
 
     /**
-     * Find the first message that matches the given ulid in the topic, and return a cursor representing that.
+     * Creates a cursor at an id. The id need not be the id of a message: reading starts at the first message with a
+     * greater id, or at an equal one if inclusive. {@link RawdataIds#beginningOf(long)} gives a cursor at a time.
      *
      * @param topic     the topic
-     * @param ulid      the ulid representing the starting point in the stream
-     * @param inclusive whether the starting point should be included when iterating from the returned cursor
-     * @return a cursor starting at the given ulid if a match is found, null otherwise
+     * @param id        the id, a UUIDv7
+     * @param inclusive whether a message with exactly that id is read first
+     * @return the cursor
+     * @throws IllegalArgumentException if the id is not a UUIDv7
      */
-    RawdataCursor cursorOf(String topic, ULID.Value ulid, boolean inclusive);
+    RawdataCursor cursorOf(String topic, UUID id, boolean inclusive);
 
     /**
-     * Find the first message that matches the given position in the topic, and return a cursor representing that. The
-     * position will be searched within the range as defined by approxTimestamp and tolerance.
+     * Finds the first message with a position, searching the messages written in
+     * {@code [approxTimestamp - tolerance, approxTimestamp + tolerance]}, and creates a cursor at it.
      *
      * @param topic           the topic
-     * @param position        the position to find
-     * @param inclusive       whether the starting point should be included when iterating from the returned cursor
-     * @param approxTimestamp timestamp in milliseconds since 1/1-1970. This is an approximation of when the
-     *                        initialPosition was originally written to the stream.
-     * @param tolerance       tolerance duration. Position can be scanned within the range [approxTimestamp - tolerance,
-     *                        approxTimestamp + tolerance)
-     * @return a cursor starting at the given position if a match is found, null otherwise
-     * @throws RawdataNoSuchPositionException if the position cannot be found within the bounds of the approcTimestamp +- tolerance
+     * @param position        the position
+     * @param inclusive       whether that message is read first
+     * @param approxTimestamp when the message was written, approximately, in milliseconds since 1970-01-01T00:00Z
+     * @param tolerance       how far from the timestamp to search
+     * @return the cursor, never null
+     * @throws RawdataNoSuchPositionException if no message with the position is found in the range
      */
     RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException;
 
     /**
-     * Will read and return the last message in the stream.
+     * Reads the last message of a topic, the one with the greatest id.
      *
-     * @param topic the name of the topic to read the last message position from.
-     * @return the current last message in the stream
-     * @throws RawdataClosedException if the producer was closed before or is closed during this call.
+     * @param topic the topic
+     * @return the last message, or null if the topic is empty
      */
-    RawdataMessage lastMessage(String topic) throws RawdataClosedException;
+    RawdataMessage lastMessage(String topic);
 
     /**
-     * Returns whether or not the client is closed.
+     * Whether the client is closed.
      *
-     * @return whether the client is closed.
+     * @return true after {@link #close()}
      */
     boolean isClosed();
 
+    /**
+     * Closes the client and every producer, consumer and metadata client it created. Calling it again does nothing.
+     */
     @Override
     void close();
 
     /**
-     * Return a metadata-client that can be used for reading and writing metadata for the given topic.
+     * Returns the metadata client of a topic: a small key-value store that belongs to the topic and lasts as long as
+     * the topic's messages do.
      *
-     * @param topic the topic that the metadata-client will be associated with.
-     * @return a metadata-client for the given topic.
+     * @param topic the topic
+     * @return the metadata client of the topic
      */
     RawdataMetadataClient metadata(String topic);
 }

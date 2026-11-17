@@ -1,13 +1,14 @@
 package io.descoped.rawdata.provider.postgres;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataCursor;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.rawdata.api.RawdataTopics;
 import io.descoped.rawdata.provider.postgres.tx.Transaction;
 import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
@@ -42,6 +43,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataProducer producer(String topicName) {
+        RawdataTopics.requireValid(topicName);
         createTopicIfNotExists(topicName);
         PostgresRawdataProducer producer = new PostgresRawdataProducer(transactionFactory, topicName);
         this.producers.add(producer);
@@ -50,6 +52,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataConsumer consumer(String topic, RawdataCursor cursor) {
+        RawdataTopics.requireValid(topic);
         createTopicIfNotExists(topic);
         PostgresRawdataConsumer consumer = new PostgresRawdataConsumer(transactionFactory, topic, (PostgresCursor) cursor, consumerPrefetchSize, dbPrefetchPollIntervalWhenEmptyMilliseconds);
         consumers.add(consumer);
@@ -57,16 +60,19 @@ class PostgresRawdataClient implements RawdataClient {
     }
 
     @Override
-    public RawdataCursor cursorOf(String topic, ULID.Value ulid, boolean inclusive) {
+    public RawdataCursor cursorOf(String topic, UUID ulid, boolean inclusive) {
+        RawdataTopics.requireValid(topic);
+        RawdataIds.requireValid(ulid);
         return new PostgresCursor(ulid, inclusive);
     }
 
     @Override
     public RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) {
-        ULID.Value lowerUlid = RawdataConsumer.beginningOf(approxTimestamp - tolerance.toMillis());
-        ULID.Value upperUlid = RawdataConsumer.beginningOf(approxTimestamp + tolerance.toMillis());
-        UUID lowerBound = new UUID(lowerUlid.getMostSignificantBits(), lowerUlid.getLeastSignificantBits());
-        UUID upperBound = new UUID(upperUlid.getMostSignificantBits(), upperUlid.getLeastSignificantBits());
+        RawdataTopics.requireValid(topic);
+        UUID lowerUlid = RawdataIds.beginningOf(approxTimestamp - tolerance.toMillis());
+        UUID upperUlid = RawdataIds.beginningOf(approxTimestamp + tolerance.toMillis());
+        UUID lowerBound = lowerUlid;
+        UUID upperBound = upperUlid;
 
         try (Transaction tx = transactionFactory.createTransaction(true)) {
             try (PreparedStatement ps = tx.connection().prepareStatement(String.format("SELECT ulid FROM \"%s_positions\" WHERE position = ? AND ? <= ulid AND ulid < ?", topic))) {
@@ -76,7 +82,7 @@ class PostgresRawdataClient implements RawdataClient {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         UUID uuid = (UUID) rs.getObject(1);
-                        ULID.Value ulid = new ULID.Value(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                        UUID ulid = uuid;
                         return new PostgresCursor(ulid, inclusive);
                     }
                     throw new RawdataNoSuchPositionException("Position not found: " + position);
@@ -89,12 +95,13 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public RawdataMessage lastMessage(String topic) throws RawdataClosedException {
+        RawdataTopics.requireValid(topic);
         if (isClosed()) {
             throw new RawdataClosedException();
         }
         createTopicIfNotExists(topic);
         try (Transaction tx = transactionFactory.createTransaction(true)) {
-            ULID.Value ulid = null;
+            UUID ulid = null;
             String orderingGroup = null;
             long sequence = 0;
             String position = null;
@@ -108,7 +115,7 @@ class PostgresRawdataClient implements RawdataClient {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         UUID uuid = (UUID) rs.getObject(1);
-                        ulid = new ULID.Value(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                        ulid = uuid;
                         orderingGroup = rs.getString(2);
                         sequence = rs.getLong(3);
                         position = rs.getString(4);
@@ -120,7 +127,7 @@ class PostgresRawdataClient implements RawdataClient {
                         return null;
                     }
                     return RawdataMessage.builder()
-                            .ulid(ulid)
+                            .id(ulid)
                             .orderingGroup(orderingGroup)
                             .sequenceNumber(sequence)
                             .position(position)
@@ -153,6 +160,7 @@ class PostgresRawdataClient implements RawdataClient {
 
     @Override
     public PostgresRawdataMetadataClient metadata(String topic) {
+        RawdataTopics.requireValid(topic);
         createTopicMetadataIfNotExists(topic);
         return new PostgresRawdataMetadataClient(topic, transactionFactory);
     }

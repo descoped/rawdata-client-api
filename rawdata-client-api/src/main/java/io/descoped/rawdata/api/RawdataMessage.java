@@ -1,18 +1,19 @@
 package io.descoped.rawdata.api;
 
-import de.huxhorn.sulky.ulid.ULID;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.UUID;
 
 /**
- * One message in a topic: a ULID, an optional ordering group and sequence number, the source position, and
- * named binary content.
+ * One message in a topic: an id, an optional ordering group and sequence number, the source position, and named
+ * binary content.
+ * <p>
+ * A message is immutable. Content goes in and comes out as copies: changing an array passed to
+ * {@link Builder#put(String, byte[])} or returned by {@link #get(String)} never changes the message. Messages are
+ * made by {@link #builder()} only, so a store can keep a message as it is.
  */
-public interface RawdataMessage {
+public sealed interface RawdataMessage permits RawdataDefaultMessage {
 
     /**
      * Creates a builder for a new message.
@@ -31,160 +32,159 @@ public interface RawdataMessage {
     RawdataMessage.Builder copy();
 
     /**
-     * A unique lexicographically sortable identifier for the message. Sorting by this id, will also sort the messages
-     * by time.
+     * The unique id of the message, a UUIDv7 (see {@link RawdataIds}). The messages of a topic are read in the
+     * {@link RawdataIds#ORDER order} of their ids.
      *
-     * @return the message ULID
+     * @return the id, or null for a message that was built without one and not yet published
      */
-    ULID.Value ulid();
+    UUID id();
 
     /**
-     * Timestamp represented as milliseconds since 1/1-1970. This is derived from the ulid.
+     * The timestamp of the message, in milliseconds since 1970-01-01T00:00Z, taken from the id.
      *
-     * @return the timestamp in milliseconds
+     * @return the timestamp
+     * @throws NullPointerException if the message has no id yet
      */
     default long timestamp() {
-        return ulid().timestamp();
+        return RawdataIds.timestamp(id());
     }
 
     /**
-     * A group used to maintain which messages belong to the same sequence. The sequence of messages within the same
-     * ordering-group is guaranteed. If there are multiple producers using the same ordering-group on the same topic,
-     * then either the underlying technology must maintain order (in which the sequenceNumber can be 0), or the
-     * producers must synchronize externally to ensure that the sequence-numbers are strictly increasing by 1 for each
-     * next message in the stream belonging to the same ordering-group.
+     * The group of messages that belong to the same sequence. If producers write the same ordering group in parallel,
+     * they must keep the sequence numbers of the group strictly increasing by one, so that consumers can restore the
+     * order.
      *
-     * @return the ordering group.
+     * @return the ordering group, or null if none was set
      */
     String orderingGroup();
 
     /**
-     * A sequence-number (greater-than 0) within the stream, or 0 if the stream already guarantees ordering.
-     * <p>
-     * These sequence numbers are based on a counter that starts at 1 and increases by 1 for each message in the ordered
-     * stream. Because there will be no gaps in this sequence, it's possible for the consumer to re-order the messages
-     * in a timely manner when using streaming technology where ordering is not guaranteed, but a best-effort thing.
+     * The number of the message in its ordering group: starts at 1 and increases by 1 without gaps, or 0 when the
+     * topic itself guarantees the order.
      *
-     * @return the sequence number
+     * @return the sequence number, 0 or greater
      */
     long sequenceNumber();
 
     /**
-     * The original external identifier for the streaming element. Typically the one used by the stream source system.
-     * This identifier does not need to be sortable.
+     * The identifier of the message in its source system. It need not be sortable or unique.
      *
-     * @return the position
+     * @return the position, never null
      */
     String position();
 
     /**
-     * A set of content-keys for this message. Use the get() method to get the corresponding content-value.
+     * The content keys, in the order they were added.
      *
-     * @return the content-keys
+     * @return an unmodifiable set of the keys
      */
     Set<String> keys();
 
     /**
-     * Get the content for a given key.
+     * The content for a key.
      *
-     * @param key the content-key
-     * @return the raw bytes of the content
+     * @param key the content key
+     * @return a copy of the content, or null if the message has no such key
      */
     byte[] get(String key);
 
     /**
-     * Convenience method to get a map of all the content key value mappings.
+     * All content, by key, in the order the keys were added.
      *
-     * @return a map of the data.
+     * @return a new map with copies of the content
      */
     default Map<String, byte[]> data() {
-        return keys().stream().collect(Collectors.toMap(Function.identity(), this::get, (a, b) -> a, LinkedHashMap::new));
+        Map<String, byte[]> data = new LinkedHashMap<>();
+        for (String key : keys()) {
+            data.put(key, get(key));
+        }
+        return data;
     }
 
     /**
-     * Builder used to build messages.
+     * Builds a message. The builder copies content when it is put and when the message is built, so the builder can
+     * be reused and the built message never changes.
      */
     interface Builder {
 
         /**
-         * Assign an ordering-group to this message. Messages within the same ordering-group (those that provide the same
-         * value for the group parameter) will be re-ordered by consumers if necessary to guarantee fifo ordering within
-         * each group.
+         * Sets the ordering group, see {@link RawdataMessage#orderingGroup()}.
          *
-         * @param orderingGroup the name of the group, must be unique
+         * @param orderingGroup the group, or null for none
          * @return this builder
          */
         Builder orderingGroup(String orderingGroup);
 
         /**
-         * Returns the group that this message will belong to or null if none has been assigned.
+         * Returns the ordering group set so far.
          *
-         * @return the group that this message will belong to or null if none has been assigned
+         * @return the group, or null if none has been set
          */
         String orderingGroup();
 
         /**
-         * Assign the sequence-number > 0. 0 will be used if none is assigned.
+         * Sets the sequence number, see {@link RawdataMessage#sequenceNumber()}. 0, the default, means not used.
          *
-         * @param sequenceNumber the sequence number
+         * @param sequenceNumber the sequence number, 0 or greater
          * @return this builder
-         * @throws IllegalArgumentException if the sequenceNumber is less than 1.
+         * @throws IllegalArgumentException if the sequence number is negative
          */
         Builder sequenceNumber(long sequenceNumber);
 
         /**
-         * Returns the sequence number.
+         * Returns the sequence number set so far.
          *
          * @return the sequence number
          */
         long sequenceNumber();
 
         /**
-         * Set ulid value of this message. If not supplied, one will be generated by the publisher at publication time.
-         * If the sequence-number is not used (value of 0), the ulid value must be strictly monotonically increasing
-         * from one message to the next message in a stream in order to preserve the correct order of messages. If the
-         * sequence-number is used, then the ulid value sequencing can be done in a best-effort manner.
+         * Sets the id. Without one, the producer assigns an id when it publishes the message; that id is greater
+         * than every id already in the topic. A given id must be greater than every id already in the topic, or the
+         * publish is refused. A copy of a message keeps its id, so a copied topic keeps its order.
          *
-         * @param ulid the message ULID
+         * @param id a UUIDv7, or null to let the producer assign one
          * @return this builder
+         * @throws IllegalArgumentException if the id is not a UUIDv7
          */
-        Builder ulid(ULID.Value ulid);
+        Builder id(UUID id);
 
         /**
-         * Returns the current ulid.
+         * Returns the id set so far.
          *
-         * @return the current ulid
+         * @return the id, or null if none has been set
          */
-        ULID.Value ulid();
+        UUID id();
 
         /**
-         * The external identifier of the element in the stream.
+         * Sets the identifier of the message in its source system. Required.
          *
-         * @param position the external identifier
+         * @param position the position
          * @return this builder
          */
         Builder position(String position);
 
         /**
-         * Returns the current position of this builder.
+         * Returns the position set so far.
          *
-         * @return the current position of this builder
+         * @return the position, or null if none has been set
          */
         String position();
 
         /**
-         * Assign binary content to a named key.
+         * Adds content under a key, replacing any content the key had. The builder keeps a copy of the array.
          *
-         * @param key     the named key
+         * @param key     the content key
          * @param payload the content
          * @return this builder
+         * @throws NullPointerException if the key or the payload is null
          */
         Builder put(String key, byte[] payload);
 
         /**
-         * Put all values from provided map into internal builder map.
+         * Adds all content of a map, as {@link #put(String, byte[])} for each entry.
          *
-         * @param data the data
+         * @param data the content by key
          * @return this builder
          */
         default Builder data(Map<String, byte[]> data) {
@@ -195,14 +195,14 @@ public interface RawdataMessage {
         /**
          * Returns the content added so far, by key.
          *
-         * @return an unmodifiable view of the content
+         * @return a new map with copies of the content
          */
         Map<String, byte[]> data();
 
         /**
-         * Returns the keys added to this builder through put so far.
+         * Returns the content keys added so far.
          *
-         * @return The keys added to this builder through put so far.
+         * @return an unmodifiable copy of the keys
          */
         Set<String> keys();
 
@@ -210,15 +210,15 @@ public interface RawdataMessage {
          * Returns the content for a key.
          *
          * @param key the content key
-         * @return the current value for the provided key, or null if no such key exists
+         * @return a copy of the content, or null if no such key was added
          */
         byte[] get(String key);
 
         /**
-         * Build a message by the properties defined through previous calls to this builder. If some requirements are
-         * missing, this call will throw a runtime-exception.
+         * Builds the message.
          *
          * @return the message
+         * @throws IllegalArgumentException if the position is missing
          */
         RawdataMessage build();
     }
