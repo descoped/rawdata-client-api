@@ -12,11 +12,6 @@ import java.util.Set;
 public class FilesystemAvroRawdataClientInitializer implements RawdataClientInitializer {
 
     @Override
-    public String providerId() {
-        return "filesystem";
-    }
-
-    @Override
     public Set<String> configurationKeys() {
         return Set.of(
                 "local-temp-folder",

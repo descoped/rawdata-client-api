@@ -1,8 +1,0 @@
-<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
-<suite name="tests">
-    <test name="default">
-        <packages>
-            <package name="io.descoped.rawdata.avro.*"/>
-        </packages>
-    </test>
-</suite>

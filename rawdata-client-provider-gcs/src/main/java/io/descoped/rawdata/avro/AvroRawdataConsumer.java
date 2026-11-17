@@ -116,8 +116,8 @@ class AvroRawdataConsumer implements RawdataConsumer {
         String orderingGroup = ofNullable(record.get("orderingGroup")).map(Object::toString).orElse(null);
         long sequenceNumber = (Long) record.get("sequenceNumber");
         String position = record.get("position").toString();
-        Map<Utf8, ByteBuffer> data = (Map<Utf8, ByteBuffer>) record.get("data");
-        Map<String, byte[]> map = data.entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().array()));
+        Map<?, ?> data = (Map<?, ?>) record.get("data");
+        Map<String, byte[]> map = data.entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> ((ByteBuffer) e.getValue()).array()));
 
         return RawdataMessage.builder()
                 .ulid(ulid)

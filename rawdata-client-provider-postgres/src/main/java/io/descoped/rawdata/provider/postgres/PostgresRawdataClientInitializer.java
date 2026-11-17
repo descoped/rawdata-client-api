@@ -21,11 +21,6 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
     private static final Logger LOG = LoggerFactory.getLogger(PostgresRawdataClientInitializer.class);
 
     @Override
-    public String providerId() {
-        return "postgres";
-    }
-
-    @Override
     public Set<String> configurationKeys() {
         return Set.of(
                 "postgres.driver.host",
@@ -64,7 +59,7 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
             );
 
             try {
-                Class<? extends TransactionFactory> transactionFactoryClass = (Class<? extends TransactionFactory>) Class.forName("io.descoped.rawdata.provider.postgres.H2TransactionFactory");
+                Class<? extends TransactionFactory> transactionFactoryClass = Class.forName("io.descoped.rawdata.provider.postgres.H2TransactionFactory").asSubclass(TransactionFactory.class);
                 TransactionFactory transactionFactory = transactionFactoryClass.getDeclaredConstructor(HikariDataSource.class).newInstance(dataSource);
                 return new PostgresRawdataClient(transactionFactory, consumerPrefetchSize, dbPrefetchPollIntervalWhenEmptyMilliseconds);
 
@@ -110,6 +105,5 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
 
         return datasource;
     }
-
 
 }

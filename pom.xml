@@ -1,26 +1,58 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" child.project.url.inherit.append.path="false" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Parent and aggregator of every module. All modules share this version and are released together. -->
     <groupId>io.descoped.rawdata</groupId>
     <artifactId>rawdata-client-project</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>3.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Rawdata Client Project</name>
-    <description>Rawdata Client Project</description>
-    <url>https://github.com/descoped/</url>
+    <description>A provider based API for writing and reading ordered streams of raw data messages, with providers
+        for PostgreSQL and Avro files on Google Cloud Storage or a local folder, and a tool that copies topics from
+        one provider to another.
+    </description>
+    <url>https://github.com/descoped/rawdata-client-project</url>
     <inceptionYear>2019</inceptionYear>
 
+    <modules>
+        <module>rawdata-client-bom</module>
+        <module>rawdata-client-api</module>
+        <module>rawdata-client-provider-postgres</module>
+        <module>rawdata-client-provider-gcs</module>
+        <module>rawdata-copy-util</module>
+    </modules>
+
     <properties>
-        <java.version>11</java.version>
+        <java.version>17</java.version>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Reproducible builds: every jar entry gets this time, so the same tag builds the same bytes.
+             release:prepare sets it to the release time. -->
+        <project.build.outputTimestamp>2026-11-17T22:00:00Z</project.build.outputTimestamp>
+
+        <!-- Dependency versions. Kept as properties, not in dependencyManagement, so that importing
+             rawdata-client-bom (which inherits this POM) manages the rawdata modules only. -->
+        <service-provider-api.version>3.0.1</service-provider-api.version>
+        <ulid.version>8.3.0</ulid.version>
+        <slf4j.version>2.0.20</slf4j.version>
+        <logback.version>1.6.7</logback.version>
+        <hikaricp.version>7.1.0</hikaricp.version>
+        <postgresql.version>42.7.14</postgresql.version>
+        <h2.version>2.5.252</h2.version>
+        <avro.version>1.12.2</avro.version>
+        <google-cloud-storage.version>2.79.0</google-cloud-storage.version>
+        <reactive-streams.version>1.0.4</reactive-streams.version>
+        <testng.version>7.12.0</testng.version>
     </properties>
 
     <licenses>
         <license>
             <name>The Apache License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
         </license>
     </licenses>
 
@@ -39,30 +71,244 @@
         </contributor>
     </contributors>
 
-    <scm>
+    <!-- The modules live in this repository: their url and scm are the project's, not <url>/<artifactId>. -->
+    <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
         <connection>scm:git:git://github.com/descoped/rawdata-client-project.git</connection>
         <developerConnection>scm:git:git@github.com:descoped/rawdata-client-project.git</developerConnection>
         <url>https://github.com/descoped/rawdata-client-project/tree/master</url>
         <tag>HEAD</tag>
     </scm>
 
+    <profiles>
+        <!-- Releases to Maven Central through the Central Portal, by central-publishing-maven-plugin. Only releases:
+             SNAPSHOTs are not published.
+             Release (Ove approves each one): ./mvnw release:prepare release:perform
+             Server `central` in ~/.m2/settings.xml holds the Portal user token and, for Maven 3.10, lists
+             https://central.sonatype.com in repositoryOrigins. Releases are uploaded with autoPublish=false and
+             published by hand in the Portal. -->
+        <profile>
+            <id>central</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.4.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.12.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                            <waitUntil>validated</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
 
-    <modules>
-        <module>rawdata-client-api</module>
-        <module>rawdata-client-provider-postgres</module>
-        <module>rawdata-client-provider-gcs</module>
-        <module>rawdata-copy-util</module>
-    </modules>
+        <!-- Signing, required by Central for releases. gpg's default-key signs (see ~/.m2/NOTES.md). -->
+        <profile>
+            <id>sign</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>coverage</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>0.8.16</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-agent</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>report</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- One SonarCloud project for the whole reactor; each module reports its own JaCoCo XML. -->
+        <profile>
+            <id>sonar</id>
+            <properties>
+                <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+                <sonar.organization>descoped</sonar.organization>
+                <sonar.projectKey>descoped_rawdata-client-project</sonar.projectKey>
+                <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonarsource.scanner.maven</groupId>
+                        <artifactId>sonar-maven-plugin</artifactId>
+                        <version>5.9.0.7382</version>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.16.0</version>
+                    <configuration>
+                        <compilerArgs>
+                            <arg>-Xlint:all</arg>
+                            <arg>-Werror</arg>
+                        </compilerArgs>
+                    </configuration>
+                    <executions>
+                        <!-- The 2.x tests still sit in the main packages and are patched into the named module, so
+                             javac reports exports and missing-explicit-ctor on test classes (and automatic modules
+                             through the patched module). Relaxed for test compilation only; removed when the tests
+                             move to test modules of their own. -->
+                        <execution>
+                            <id>default-testCompile</id>
+                            <configuration>
+                                <compilerArgs combine.self="override">
+                                    <arg>-Xlint:all,-exports,-missing-explicit-ctor,-requires-automatic,-requires-transitive-automatic</arg>
+                                    <arg>-Werror</arg>
+                                </compilerArgs>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.5.0</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.5.1</version>
+                </plugin>
+
+                <!-- The contract tests are named *Tck and the reactive-streams verifications *Verification; before
+                     3.0.0 neither matched Surefire's default includes, so they never ran. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.6.1</version>
+                    <configuration>
+                        <includes>
+                            <include>**/*Test.java</include>
+                            <include>**/*Tck.java</include>
+                            <include>**/*Verification.java</include>
+                        </includes>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.12.0</version>
+                    <configuration>
+                        <doclint>all</doclint>
+                        <failOnWarnings>true</failOnWarnings>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.11.0</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>3.2.0</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>3.2.0</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-release-plugin</artifactId>
+                    <version>3.3.1</version>
+                    <configuration>
+                        <tagNameFormat>@{project.version}</tagNameFormat>
+                        <autoVersionSubmodules>true</autoVersionSubmodules>
+                        <releaseProfiles>central,sign</releaseProfiles>
+                        <goals>deploy</goals>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.5.0</version>
+                <version>3.7.0</version>
                 <executions>
                     <execution>
-                        <id>enforce-maven</id>
+                        <id>enforce</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -71,6 +317,7 @@
                                 <requireJavaVersion>
                                     <version>${java.version}</version>
                                 </requireJavaVersion>
+                                <!-- Sonatype's central-publishing-maven-plugin does not support Maven 4. -->
                                 <requireMavenVersion>
                                     <version>[3.6.3,4)</version>
                                 </requireMavenVersion>
@@ -81,4 +328,5 @@
             </plugin>
         </plugins>
     </build>
+
 </project>

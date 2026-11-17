@@ -24,8 +24,7 @@ public class ExampleApp {
                 "gcs.service-account.key-file", "secret/my_gcs_sa.json"
         );
 
-        final RawdataClient client = ProviderConfigurator.configure(configuration,
-                "gcs", RawdataClientInitializer.class);
+        final RawdataClient client = ProviderConfigurator.configure(RawdataClientInitializer.class, "gcs", configuration);
 
         Thread consumerThread = new Thread(() -> consumeMessages(client));
         consumerThread.start();

@@ -31,7 +31,7 @@ public class MemoryRawdataClientTck {
 
     @BeforeMethod
     public void createRawdataClient() {
-        client = ProviderConfigurator.configure(Map.of(), "memory", RawdataClientInitializer.class);
+        client = ProviderConfigurator.configure(RawdataClientInitializer.class, "memory", Map.of());
     }
 
     @AfterMethod
@@ -353,8 +353,7 @@ public class MemoryRawdataClientTck {
 
     @Test(expectedExceptions = RawdataNoSuchPositionException.class)
     public void thatPositionCursorOfEmptyTopicIsNotFound() throws Exception {
-        try (RawdataProducer producer = client.producer("the-topic")) {
-        }
+        client.producer("the-topic").close(); // creates the topic
         client.cursorOf("the-topic", "d", true, System.currentTimeMillis(), Duration.ofMinutes(1));
     }
 

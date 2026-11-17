@@ -74,7 +74,7 @@ public class GCSRawdataClientIntegrationTest {
             Files.walk(localTempFolder).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
         }
         Files.createDirectories(localTempFolder);
-        client = ProviderConfigurator.configure(configuration, "gcs", RawdataClientInitializer.class);
+        client = ProviderConfigurator.configure(RawdataClientInitializer.class, "gcs", configuration);
 
         // clear bucket
         String bucket = configuration.get("gcs.bucket-name");

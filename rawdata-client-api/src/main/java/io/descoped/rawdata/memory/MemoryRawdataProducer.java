@@ -3,7 +3,6 @@ package io.descoped.rawdata.memory;
 import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataMessage;
-import io.descoped.rawdata.api.RawdataNotBufferedException;
 import io.descoped.rawdata.api.RawdataProducer;
 
 import java.util.concurrent.CompletableFuture;
@@ -35,7 +34,7 @@ class MemoryRawdataProducer implements RawdataProducer {
     }
 
     @Override
-    public void publish(RawdataMessage... messages) throws RawdataClosedException, RawdataNotBufferedException {
+    public void publish(RawdataMessage... messages) throws RawdataClosedException {
         topic.tryLock(5, TimeUnit.SECONDS);
         try {
             for (RawdataMessage message : messages) {

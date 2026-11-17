@@ -21,11 +21,6 @@ import java.util.Set;
 public class GCSRawdataClientInitializer implements RawdataClientInitializer {
 
     @Override
-    public String providerId() {
-        return "gcs";
-    }
-
-    @Override
     public Set<String> configurationKeys() {
         return Set.of(
                 "local-temp-folder",

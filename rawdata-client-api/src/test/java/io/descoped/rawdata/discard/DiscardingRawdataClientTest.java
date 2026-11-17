@@ -27,7 +27,7 @@ public class DiscardingRawdataClientTest {
 
     @BeforeMethod
     public void createRawdataClient() {
-        client = ProviderConfigurator.configure(Map.of(), "discard", RawdataClientInitializer.class);
+        client = ProviderConfigurator.configure(RawdataClientInitializer.class, "discard", Map.of());
     }
 
     @AfterMethod

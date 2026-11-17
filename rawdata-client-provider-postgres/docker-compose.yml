@@ -1,15 +1,15 @@
-version: '3.3'
-
 services:
 
   postgresdb:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     ports:
       - 5432:5432
     environment:
       POSTGRES_PASSWORD: postgres
     volumes:
-      - rdcpostgres-test:/var/lib/postgresql/data
+      # From PostgreSQL 18 the image keeps its data under /var/lib/postgresql (PGDATA /var/lib/postgresql/18/docker);
+      # mounting the old .../data path would leave the data in an anonymous volume.
+      - rdcpostgres-test:/var/lib/postgresql
       - ./init-db-and-user.sql:/docker-entrypoint-initdb.d/init.sql
 
   adminer:

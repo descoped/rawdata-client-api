@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.descoped.rawdata</groupId>
+        <artifactId>rawdata-client-project</artifactId>
+        <version>3.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>rawdata-client-bom</artifactId>
+    <packaging>pom</packaging>
+
+    <name>Rawdata Client BOM</name>
+    <description>Import this to align the versions of every rawdata-client module.</description>
+
+    <!-- Manages the rawdata modules only: the parent keeps its dependency versions in properties, so nothing else
+         is inherited into this dependencyManagement. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.descoped.rawdata</groupId>
+                <artifactId>rawdata-client-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.descoped.rawdata</groupId>
+                <artifactId>rawdata-client-provider-postgres</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.descoped.rawdata</groupId>
+                <artifactId>rawdata-client-provider-gcs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.descoped.rawdata</groupId>
+                <artifactId>rawdata-copy-util</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>
