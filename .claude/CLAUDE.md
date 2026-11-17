@@ -58,9 +58,12 @@ this repository, and the work toward it is under way module by module.
   PostgreSQL 18 for manual runs (port 5432, user and database `rdc`, password `rdc`).
 - The GCS integration tests need a real bucket and are disabled; the `filesystem` provider shares the engine and
   runs offline.
-- Known open defect: `FilesystemAvroRawdataClientTck.thatMultipleGCSFilesCanBeProducedThroughSizeBasedWindowingAndReadBack`
-  is disabled (files that start in the same millisecond hide each other); the GCS provider's revision fixes it and
-  enables the test again.
+- Known open defects, each test disabled with its reason until the module's revision fixes it and enables it again:
+  `FilesystemAvroRawdataClientTck.thatMultipleGCSFilesCanBeProducedThroughSizeBasedWindowingAndReadBack` (files that
+  start in the same millisecond hide each other) and
+  three `PostgresRawdataClientTck` tests (`thatMultipleProducersOnSameTopicCanBeProducedAndReadBack`,
+  `thatFilesCreatedAfterConsumerHasSubscribedAreUsed`, `thatAllFieldsOfMessageSurvivesStream`): the producer does not
+  continue from the topic's last ULID, so within one millisecond the topic order can flip.
 
 ## Maven Wrapper
 
