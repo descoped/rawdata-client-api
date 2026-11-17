@@ -11,7 +11,6 @@ import java.util.Set;
 @ProviderName("memory")
 public class MemoryRawdataClientInitializer implements RawdataClientInitializer {
 
-
     @Override
     public Set<String> configurationKeys() {
         return Collections.emptySet();

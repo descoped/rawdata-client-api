@@ -12,3 +12,16 @@ target/
 # JVM crash logs
 hs_err_pid*
 
+
+# Logs
+*.log
+
+# maven-release-plugin leftovers of an interrupted release
+release.properties
+pom.xml.releaseBackup
+pom.xml.tag
+pom.xml.next
+
+# Credentials: the GCS tests read service-account keys from rawdata-client-provider-gcs/secret/
+secret/
+certs/

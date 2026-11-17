@@ -11,7 +11,6 @@ import java.util.Set;
 @ProviderName("discard")
 public class DiscardingRawdataClientInitializer implements RawdataClientInitializer {
 
-
     @Override
     public Set<String> configurationKeys() {
         return Collections.emptySet();

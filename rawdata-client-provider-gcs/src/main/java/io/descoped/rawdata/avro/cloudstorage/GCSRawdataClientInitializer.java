@@ -20,7 +20,6 @@ import java.util.Set;
 @ProviderName("gcs")
 public class GCSRawdataClientInitializer implements RawdataClientInitializer {
 
-
     @Override
     public Set<String> configurationKeys() {
         return Set.of(

@@ -6,10 +6,10 @@ import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.service.provider.api.ProviderConfigurator;
-import java.util.Map;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;

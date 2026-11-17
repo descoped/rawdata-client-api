@@ -20,7 +20,6 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
 
     private static final Logger LOG = LoggerFactory.getLogger(PostgresRawdataClientInitializer.class);
 
-
     @Override
     public Set<String> configurationKeys() {
         return Set.of(
@@ -106,6 +105,5 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
 
         return datasource;
     }
-
 
 }
