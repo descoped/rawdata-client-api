@@ -1,8 +1,8 @@
 package io.descoped.rawdata.avro;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.generic.GenericData;
@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.util.Deque;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
@@ -40,17 +41,17 @@ class AvroRawdataConsumer implements RawdataConsumer {
         if (cursor == null) {
             seek(0);
         } else {
-            seek(cursor.ulid.timestamp());
+            seek(RawdataIds.timestamp(cursor.ulid));
             try {
                 RawdataMessage msg;
                 while ((msg = receive(0, TimeUnit.SECONDS)) != null) {
-                    if (msg.ulid().equals(cursor.ulid)) {
+                    if (msg.id().equals(cursor.ulid)) {
                         if (cursor.inclusive) {
                             preloadedMessages.addFirst(msg);
                         }
                         break; // found match
                     }
-                    if (msg.timestamp() > cursor.ulid.timestamp()) {
+                    if (msg.timestamp() > RawdataIds.timestamp(cursor.ulid)) {
                         // past possible point of match, use this message as starting point
                         preloadedMessages.addFirst(msg);
                         break;
@@ -112,7 +113,7 @@ class AvroRawdataConsumer implements RawdataConsumer {
 
     static RawdataMessage toRawdataMessage(GenericRecord record) {
         GenericData.Fixed id = (GenericData.Fixed) record.get("id");
-        ULID.Value ulid = ULID.fromBytes(id.bytes());
+        UUID ulid = AvroRawdataProducer.fromBytes(id.bytes());
         String orderingGroup = ofNullable(record.get("orderingGroup")).map(Object::toString).orElse(null);
         long sequenceNumber = (Long) record.get("sequenceNumber");
         String position = record.get("position").toString();
@@ -120,7 +121,7 @@ class AvroRawdataConsumer implements RawdataConsumer {
         Map<String, byte[]> map = data.entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> ((ByteBuffer) e.getValue()).array()));
 
         return RawdataMessage.builder()
-                .ulid(ulid)
+                .id(ulid)
                 .orderingGroup(orderingGroup)
                 .sequenceNumber(sequenceNumber)
                 .position(position)

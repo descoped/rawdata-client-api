@@ -2,97 +2,90 @@ package io.descoped.rawdata.memory;
 
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
-class MemoryRawdataConsumer implements RawdataConsumer {
+final class MemoryRawdataConsumer implements RawdataConsumer {
 
-    final MemoryRawdataTopic topic;
-    final Consumer<MemoryRawdataConsumer> closeAction;
-    final AtomicReference<MemoryCursor> position = new AtomicReference<>();
-    final AtomicBoolean closed = new AtomicBoolean(false);
+    private final MemoryRawdataClient client;
+    private final MemoryRawdataTopic topic;
+    private final AtomicReference<MemoryCursor> position;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
-    MemoryRawdataConsumer(MemoryRawdataTopic topic, MemoryCursor initialPosition, Consumer<MemoryRawdataConsumer> closeAction) {
+    MemoryRawdataConsumer(MemoryRawdataClient client, MemoryRawdataTopic topic, MemoryCursor start) {
+        this.client = client;
         this.topic = topic;
-        this.closeAction = closeAction;
-        if (initialPosition == null) {
-            initialPosition = new MemoryCursor(RawdataConsumer.beginningOfTime(), true, true);
-        }
-        this.position.set(initialPosition);
+        this.position = new AtomicReference<>(start != null ? start : new MemoryCursor(RawdataIds.beginningOfTime(), true));
     }
 
     @Override
     public String topic() {
-        return topic.topic;
+        return topic.name;
     }
 
     @Override
     public RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException {
-        long expireTimeNano = System.nanoTime() + unit.toNanos(timeout);
-        topic.tryLock(5, TimeUnit.SECONDS);
-        try {
-            while (!topic.hasNext(position.get())) {
-                if (isClosed()) {
-                    throw new RawdataClosedException();
-                }
-                long durationNano = expireTimeNano - System.nanoTime();
-                if (durationNano <= 0) {
-                    return null; // timeout
-                }
-                topic.awaitProduction(durationNano, TimeUnit.NANOSECONDS);
-            }
-            RawdataMessage message = topic.readNext(position.get());
-            position.set(new MemoryCursor(message.ulid(), false, true));
-            return message;
-        } finally {
-            topic.unlock();
+        checkOpen();
+        MemoryCursor cursor = position.get();
+        RawdataMessage message = topic.next(cursor, unit.toNanos(timeout), this::isClosed);
+        checkOpen();
+        if (message != null) {
+            position.compareAndSet(cursor, new MemoryCursor(message.id(), false));
         }
+        return message;
     }
 
     @Override
     public CompletableFuture<RawdataMessage> receiveAsync() {
+        checkOpen();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return receive(5, TimeUnit.MINUTES);
+                for (; ; ) {
+                    RawdataMessage message = receive(1, TimeUnit.SECONDS);
+                    if (message != null) {
+                        return message;
+                    }
+                }
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt();
+                throw new CompletionException(e);
             }
-        });
+        }, client.executor());
     }
 
     @Override
     public void seek(long timestamp) {
-        position.set(new MemoryCursor(RawdataConsumer.beginningOf(timestamp), true, true));
-    }
-
-    @Override
-    public String toString() {
-        return "MemoryRawdataConsumer{" +
-                "position=" + position +
-                ", closed=" + closed +
-                '}';
+        checkOpen();
+        position.set(new MemoryCursor(RawdataIds.beginningOf(timestamp), true));
     }
 
     @Override
     public boolean isClosed() {
-        return closed.get();
+        return closed.get() || client.isClosed();
     }
 
     @Override
     public void close() {
-        closeAction.accept(this);
-        closed.set(true);
-        if (topic.tryLock()) {
-            try {
-                topic.signalProduction();
-            } finally {
-                topic.unlock();
-            }
+        if (closed.compareAndSet(false, true)) {
+            client.removed(this);
+            topic.wakeUp();
         }
+    }
+
+    private void checkOpen() {
+        if (isClosed()) {
+            throw new RawdataClosedException("consumer of topic " + topic.name + " is closed");
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "MemoryRawdataConsumer{topic=" + topic.name + ", position=" + position.get() + ", closed=" + isClosed() + '}';
     }
 }

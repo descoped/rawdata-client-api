@@ -1,7 +1,7 @@
 package io.descoped.rawdata.provider.postgres;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.rawdata.provider.postgres.tx.Transaction;
@@ -22,8 +22,7 @@ class PostgresRawdataProducer implements RawdataProducer {
     private final TransactionFactory transactionFactory;
     private final String topic;
     private final AtomicBoolean closed = new AtomicBoolean(false);
-    private final ULID ulid = new ULID();
-    private final AtomicReference<ULID.Value> previousIdRef = new AtomicReference<>(ulid.nextValue());
+    private final AtomicReference<UUID> previousIdRef = new AtomicReference<>(RawdataIds.beginningOfTime());
 
     PostgresRawdataProducer(TransactionFactory transactionFactory, String topic) {
         this.transactionFactory = transactionFactory;
@@ -45,8 +44,8 @@ class PostgresRawdataProducer implements RawdataProducer {
 
                     for (RawdataMessage message : messages) {
 
-                        ULID.Value id = getOrGenerateNextUlid(message);
-                        UUID uuid = new UUID(id.getMostSignificantBits(), id.getLeastSignificantBits());
+                        UUID id = getOrGenerateNextUlid(message);
+                        UUID uuid = id;
 
                         /*
                          * position
@@ -55,7 +54,7 @@ class PostgresRawdataProducer implements RawdataProducer {
                         positionUpdate.setString(2, message.orderingGroup());
                         positionUpdate.setLong(3, message.sequenceNumber());
                         positionUpdate.setString(4, message.position());
-                        positionUpdate.setTimestamp(5, Timestamp.from(new Date(id.timestamp()).toInstant()));
+                        positionUpdate.setTimestamp(5, Timestamp.from(new Date(RawdataIds.timestamp(id)).toInstant()));
                         positionUpdate.addBatch();
 
                         /*
@@ -81,11 +80,11 @@ class PostgresRawdataProducer implements RawdataProducer {
         }
     }
 
-    private ULID.Value getOrGenerateNextUlid(RawdataMessage message) {
-        ULID.Value id = message.ulid();
+    private UUID getOrGenerateNextUlid(RawdataMessage message) {
+        UUID id = message.id();
         while (id == null) {
-            ULID.Value previousUlid = previousIdRef.get();
-            ULID.Value attemptedId = RawdataProducer.nextMonotonicUlid(this.ulid, previousUlid);
+            UUID previousUlid = previousIdRef.get();
+            UUID attemptedId = RawdataIds.next(previousUlid);
             if (previousIdRef.compareAndSet(previousUlid, attemptedId)) {
                 id = attemptedId;
             }

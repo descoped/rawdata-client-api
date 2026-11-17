@@ -1,8 +1,8 @@
 package io.descoped.rawdata.provider.postgres;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
@@ -45,7 +45,7 @@ class PostgresRawdataConsumer implements RawdataConsumer {
         this.dbPrefetchPollIntervalWhenEmptyMilliseconds = dbPrefetchPollIntervalWhenEmptyMilliseconds;
         this.topic = topic;
         if (initialCursor == null) {
-            initialCursor = new PostgresCursor(RawdataConsumer.beginningOfTime(), true);
+            initialCursor = new PostgresCursor(RawdataIds.beginningOfTime(), true);
         }
         position.set(initialCursor);
     }
@@ -87,12 +87,12 @@ class PostgresRawdataConsumer implements RawdataConsumer {
                         topic, cursor.inclusive ? ">=" : ">", topic
                 );
                 try (PreparedStatement ps = tx.connection().prepareStatement(sql)) {
-                    UUID currentUuid = new UUID(cursor.startKey.getMostSignificantBits(), cursor.startKey.getLeastSignificantBits());
+                    UUID currentUuid = cursor.startKey;
                     ps.setObject(1, currentUuid);
                     ps.setInt(2, prefetchSize);
                     try (ResultSet rs = ps.executeQuery()) {
                         RawdataMessage prevMessage = null;
-                        ULID.Value prevUlid = null;
+                        UUID prevUlid = null;
                         String prevOrderingGroup = null;
                         long prevSequence = 0;
                         String prevPosition = null;
@@ -105,7 +105,7 @@ class PostgresRawdataConsumer implements RawdataConsumer {
                             String position = rs.getString(4);
                             String orderingGroup = rs.getString(5);
                             long sequence = rs.getLong(6);
-                            ULID.Value ulid = new ULID.Value(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                            UUID ulid = uuid;
                             if (prevUlid == null) {
                                 prevUlid = ulid;
                                 prevPosition = position;
@@ -113,7 +113,7 @@ class PostgresRawdataConsumer implements RawdataConsumer {
                                 prevSequence = sequence;
                             }
                             if (!ulid.equals(prevUlid)) {
-                                messageBuffer.add(prevMessage = RawdataMessage.builder().ulid(prevUlid).orderingGroup(prevOrderingGroup).sequenceNumber(prevSequence).position(prevPosition).data(contentMap).build());
+                                messageBuffer.add(prevMessage = RawdataMessage.builder().id(prevUlid).orderingGroup(prevOrderingGroup).sequenceNumber(prevSequence).position(prevPosition).data(contentMap).build());
                                 if (i++ == 0) {
                                     cdl.countDown(); // early signal that at least one message is available.
                                 }
@@ -127,10 +127,10 @@ class PostgresRawdataConsumer implements RawdataConsumer {
                         }
                         if (prevUlid != null) {
                             i++;
-                            messageBuffer.add(prevMessage = RawdataMessage.builder().ulid(prevUlid).orderingGroup(prevOrderingGroup).sequenceNumber(prevSequence).position(prevPosition).data(contentMap).build());
+                            messageBuffer.add(prevMessage = RawdataMessage.builder().id(prevUlid).orderingGroup(prevOrderingGroup).sequenceNumber(prevSequence).position(prevPosition).data(contentMap).build());
                         }
                         if (prevMessage != null) {
-                            position.set(new PostgresCursor(prevMessage.ulid(), false));
+                            position.set(new PostgresCursor(prevMessage.id(), false));
                         }
                         return i;
                     }
@@ -186,7 +186,7 @@ class PostgresRawdataConsumer implements RawdataConsumer {
             throw new RuntimeException("Concurrent access between calls to receive and seek not allowed");
         }
         try {
-            ULID.Value ulid = RawdataConsumer.beginningOf(timestamp);
+            UUID ulid = RawdataIds.beginningOf(timestamp);
             position.set(new PostgresCursor(ulid, true));
             pendingPrefetch.get().join();
             messageBuffer.clear();

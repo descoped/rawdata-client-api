@@ -17,9 +17,8 @@
 
     <build>
         <plugins>
-            <!-- The PostgreSQL driver and the ULID library are automatic modules (no module-info), which javac reports
-                 with -Xlint:requires-automatic;
-                 that is expected here, every other lint warning still fails. -->
+            <!-- The PostgreSQL driver is an automatic module (no module-info), which javac reports with
+                 -Xlint:requires-automatic; that is expected here, every other lint warning still fails. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

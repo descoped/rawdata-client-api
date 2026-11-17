@@ -4,16 +4,18 @@ import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
 import io.descoped.service.provider.api.ProviderName;
 
-import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 
+/**
+ * The {@code discard} provider: accepts everything and keeps nothing. No configuration.
+ */
 @ProviderName("discard")
 public class DiscardingRawdataClientInitializer implements RawdataClientInitializer {
 
-    @Override
-    public Set<String> configurationKeys() {
-        return Collections.emptySet();
+    /**
+     * Creates the initializer; called by the service loader.
+     */
+    public DiscardingRawdataClientInitializer() {
     }
 
     @Override

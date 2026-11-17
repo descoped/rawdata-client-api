@@ -1,9 +1,9 @@
 package io.descoped.rawdata.avro.filesystem;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
 import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataMetadataClient;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -93,10 +94,10 @@ public class FilesystemAvroRawdataClientTck {
 
     @Test
     public void thatAllFieldsOfMessageSurvivesStream() throws Exception {
-        ULID.Value ulid = new ULID().nextValue();
+        UUID ulid = RawdataIds.generate();
         try (RawdataProducer producer = client.producer("the-topic")) {
             producer.publish(
-                    RawdataMessage.builder().ulid(ulid).orderingGroup("og1").sequenceNumber(1).position("a").put("payload1", new byte[3]).put("payload2", new byte[7]).build(),
+                    RawdataMessage.builder().id(ulid).orderingGroup("og1").sequenceNumber(1).position("a").put("payload1", new byte[3]).put("payload2", new byte[7]).build(),
                     RawdataMessage.builder().orderingGroup("og1").sequenceNumber(1).position("b").put("payload1", new byte[4]).put("payload2", new byte[8]).build(),
                     RawdataMessage.builder().orderingGroup("og1").sequenceNumber(1).position("c").put("payload1", new byte[2]).put("payload2", new byte[5]).build()
             );
@@ -105,7 +106,7 @@ public class FilesystemAvroRawdataClientTck {
         try (RawdataConsumer consumer = client.consumer("the-topic", ulid, true)) {
             {
                 RawdataMessage message = consumer.receive(1, TimeUnit.SECONDS);
-                assertEquals(message.ulid(), ulid);
+                assertEquals(message.id(), ulid);
                 assertEquals(message.orderingGroup(), "og1");
                 assertEquals(message.sequenceNumber(), 1);
                 assertEquals(message.position(), "a");
@@ -115,7 +116,7 @@ public class FilesystemAvroRawdataClientTck {
             }
             {
                 RawdataMessage message = consumer.receive(1, TimeUnit.SECONDS);
-                assertNotNull(message.ulid());
+                assertNotNull(message.id());
                 assertEquals(message.orderingGroup(), "og1");
                 assertEquals(message.sequenceNumber(), 1);
                 assertEquals(message.position(), "b");
@@ -125,7 +126,7 @@ public class FilesystemAvroRawdataClientTck {
             }
             {
                 RawdataMessage message = consumer.receive(1, TimeUnit.SECONDS);
-                assertNotNull(message.ulid());
+                assertNotNull(message.id());
                 assertEquals(message.orderingGroup(), "og1");
                 assertEquals(message.sequenceNumber(), 1);
                 assertEquals(message.position(), "c");

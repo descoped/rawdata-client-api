@@ -1,10 +1,10 @@
 package io.descoped.rawdata.avro;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataCursor;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
@@ -24,6 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 import java.util.NavigableMap;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -76,7 +77,7 @@ public abstract class AvroRawdataClient implements RawdataClient {
     }
 
     @Override
-    public RawdataCursor cursorOf(String topic, ULID.Value ulid, boolean inclusive) {
+    public RawdataCursor cursorOf(String topic, UUID ulid, boolean inclusive) {
         return new AvroRawdataCursor(ulid, inclusive);
     }
 
@@ -85,21 +86,21 @@ public abstract class AvroRawdataClient implements RawdataClient {
         return cursorOf(topic, ulidOfPosition(topic, position, approxTimestamp, tolerance), inclusive);
     }
 
-    private ULID.Value ulidOfPosition(String topic, String position, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException {
-        ULID.Value lowerBoundUlid = RawdataConsumer.beginningOf(approxTimestamp - tolerance.toMillis());
-        ULID.Value upperBoundUlid = RawdataConsumer.beginningOf(approxTimestamp + tolerance.toMillis());
+    private UUID ulidOfPosition(String topic, String position, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException {
+        UUID lowerBoundUlid = RawdataIds.beginningOf(approxTimestamp - tolerance.toMillis());
+        UUID upperBoundUlid = RawdataIds.beginningOf(approxTimestamp + tolerance.toMillis());
         try (AvroRawdataConsumer consumer = new AvroRawdataConsumer(readOnlyAvroRawdataUtils, topic, new AvroRawdataCursor(lowerBoundUlid, true), fileListingMinIntervalSeconds)) {
             RawdataMessage message;
             while ((message = consumer.receive(0, TimeUnit.SECONDS)) != null) {
-                if (message.timestamp() > upperBoundUlid.timestamp()) {
+                if (message.timestamp() > RawdataIds.timestamp(upperBoundUlid)) {
                     throw new RawdataNoSuchPositionException(
                             String.format("Unable to find position, reached upper-bound. Time-range=[%s,%s), position=%s",
-                                    formatTimestamp(lowerBoundUlid.timestamp()),
-                                    formatTimestamp(upperBoundUlid.timestamp()),
+                                    formatTimestamp(RawdataIds.timestamp(lowerBoundUlid)),
+                                    formatTimestamp(RawdataIds.timestamp(upperBoundUlid)),
                                     position));
                 }
                 if (position.equals(message.position())) {
-                    return message.ulid(); // found matching position
+                    return message.id(); // found matching position
                 }
             }
         } catch (RuntimeException | Error e) {
@@ -109,8 +110,8 @@ public abstract class AvroRawdataClient implements RawdataClient {
         }
         throw new RawdataNoSuchPositionException(
                 String.format("Unable to find position, reached end-of-stream. Time-range=[%s,%s), position=%s",
-                        formatTimestamp(lowerBoundUlid.timestamp()),
-                        formatTimestamp(upperBoundUlid.timestamp()),
+                        formatTimestamp(RawdataIds.timestamp(lowerBoundUlid)),
+                        formatTimestamp(RawdataIds.timestamp(upperBoundUlid)),
                         position));
     }
 

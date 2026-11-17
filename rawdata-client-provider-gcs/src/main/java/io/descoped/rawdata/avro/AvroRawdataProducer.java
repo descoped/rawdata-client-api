@@ -1,7 +1,7 @@
 package io.descoped.rawdata.avro;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataClosedException;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 import org.apache.avro.Schema;
@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -41,17 +42,27 @@ class AvroRawdataProducer implements RawdataProducer {
 
     static final Schema schema = SchemaBuilder.record("RawdataMessage")
             .fields()
-            .name("id").type().fixed("ulid").size(16).noDefault()
+            .name("id").type().fixed("uuid").size(16).noDefault()
             .name("orderingGroup").type().nullable().stringType().noDefault()
             .name("sequenceNumber").type().longType().longDefault(0)
             .name("position").type().stringType().noDefault()
             .name("data").type().map().values().bytesType().noDefault()
             .endRecord();
 
-    final AtomicBoolean closed = new AtomicBoolean(false);
+    /**
+     * The 16 bytes of an id, most significant first, the order the ids sort in.
+     */
+    static byte[] toBytes(UUID id) {
+        return ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array();
+    }
 
-    final ULID ulid = new ULID();
-    final AtomicReference<ULID.Value> prevUlid = new AtomicReference<>(ulid.nextValue());
+    static UUID fromBytes(byte[] bytes) {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        return new UUID(buffer.getLong(), buffer.getLong());
+    }
+
+    final AtomicBoolean closed = new AtomicBoolean(false);
+    final AtomicReference<UUID> prevUlid = new AtomicReference<>(RawdataIds.beginningOfTime());
 
     final AvroRawdataUtils gcsRawdataUtils;
     final Path tmpFolder;
@@ -226,9 +237,9 @@ class AvroRawdataProducer implements RawdataProducer {
                     timestampOfFirstMessageInWindow.set(now);
                 }
 
-                ULID.Value ulidValue = message.ulid();
+                UUID ulidValue = message.id();
                 if (ulidValue == null) {
-                    ulidValue = RawdataProducer.nextMonotonicUlid(ulid, prevUlid.get());
+                    ulidValue = RawdataIds.next(prevUlid.get());
                 }
                 prevUlid.set(ulidValue);
 
@@ -237,7 +248,7 @@ class AvroRawdataProducer implements RawdataProducer {
 
                 try {
                     GenericRecord record = new GenericData.Record(schema);
-                    record.put("id", new GenericData.Fixed(schema.getField("id").schema(), ulidValue.toBytes()));
+                    record.put("id", new GenericData.Fixed(schema.getField("id").schema(), AvroRawdataProducer.toBytes(ulidValue)));
                     record.put("orderingGroup", message.orderingGroup());
                     record.put("sequenceNumber", message.sequenceNumber());
                     record.put("position", message.position());

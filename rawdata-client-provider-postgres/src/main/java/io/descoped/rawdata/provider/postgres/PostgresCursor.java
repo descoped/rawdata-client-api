@@ -1,23 +1,23 @@
 package io.descoped.rawdata.provider.postgres;
 
-import de.huxhorn.sulky.ulid.ULID;
 import io.descoped.rawdata.api.RawdataCursor;
 
 import java.util.Objects;
+import java.util.UUID;
 
 public class PostgresCursor implements RawdataCursor {
 
     /**
      * Need not exactly match an existing ulid-value.
      */
-    final ULID.Value startKey;
+    final UUID startKey;
 
     /**
      * Whether or not to include the element with ulid-value matching the lower-bound exactly.
      */
     final boolean inclusive;
 
-    PostgresCursor(ULID.Value startKey, boolean inclusive) {
+    PostgresCursor(UUID startKey, boolean inclusive) {
         this.startKey = startKey;
         this.inclusive = inclusive;
     }

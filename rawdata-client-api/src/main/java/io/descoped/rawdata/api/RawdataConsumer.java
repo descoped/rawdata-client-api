@@ -1,78 +1,100 @@
 package io.descoped.rawdata.api;
 
-import de.huxhorn.sulky.ulid.ULID;
-
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A subscription based consumer that can be used to receive and acknowledge messages on a stream.
+ * Reads the messages of one topic in id order, from a starting point. A consumer keeps its own position and is meant
+ * for one thread at a time.
+ * <p>
+ * Reading is pulled by the caller: nothing is delivered until the caller asks, so a caller takes only as much as it
+ * can handle. {@link #receive(int, TimeUnit)} takes one message; {@link #receiveUpTo(int, Duration)} takes a batch of
+ * a size the caller chooses.
  */
 public interface RawdataConsumer extends AutoCloseable {
 
     /**
-     * Returns the name of the topic from which this consumer will consume messages from.
+     * Returns the topic this consumer reads.
      *
-     * @return the name of the topic from which this consumer will consume messages from.
+     * @return the topic
      */
     String topic();
 
     /**
-     * Receive the next message after the current position, or null if no message is available before the timeout. If
-     * successful, the current position for this consumer is updated to that of the returned message.
+     * Receives the next message after the current position, waiting up to the timeout for one to be published. On
+     * success the position moves to the returned message.
      *
-     * @param timeout the timeout in units as specified by the unit parameter.
-     * @param unit    the unit of the timeout, e.g. TimeUnit.SECONDS
-     * @return the next available message before the timeout occurs, or null if no next message is available before the
-     * timeout.
-     * @throws InterruptedException   if the calling thread is interrupted while waiting on an available message.
-     * @throws RawdataClosedException if method is called after this instance has been closed.
+     * @param timeout how long to wait; 0 returns at once
+     * @param unit    the unit of the timeout
+     * @return the next message, or null if none arrived before the timeout
+     * @throws InterruptedException   if the thread is interrupted while waiting
+     * @throws RawdataClosedException if the consumer or its client is closed, also while waiting
      */
     RawdataMessage receive(int timeout, TimeUnit unit) throws InterruptedException, RawdataClosedException;
 
     /**
-     * Asynchronously receive a message callback when the next message after the current position is available. The
-     * current position is also updated to that of the returned message right before calling the callback.
+     * Receives up to a number of messages: waits up to the timeout for the first, then takes the messages that are
+     * available at once, until there are {@code maxMessages}. The position moves to the last message returned.
      *
-     * @return a CompletableFuture representing the next available message.
+     * @param maxMessages the most messages to return, 1 or more
+     * @param timeout     how long to wait for the first message; zero returns at once
+     * @return the messages, in order; empty if none arrived before the timeout
+     * @throws IllegalArgumentException if maxMessages is less than 1 or the timeout is negative
+     * @throws InterruptedException     if the thread is interrupted while waiting
+     * @throws RawdataClosedException   if the consumer or its client is closed
+     */
+    default List<RawdataMessage> receiveUpTo(int maxMessages, Duration timeout) throws InterruptedException, RawdataClosedException {
+        if (maxMessages < 1) {
+            throw new IllegalArgumentException("maxMessages must be 1 or more: " + maxMessages);
+        }
+        Objects.requireNonNull(timeout, "timeout");
+        if (timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must not be negative: " + timeout);
+        }
+        List<RawdataMessage> messages = new ArrayList<>(Math.min(maxMessages, 1024));
+        long millis = Math.min(timeout.toMillis(), Integer.MAX_VALUE);
+        RawdataMessage message = receive((int) millis, TimeUnit.MILLISECONDS);
+        while (message != null) {
+            messages.add(message);
+            if (messages.size() == maxMessages) {
+                break;
+            }
+            message = receive(0, TimeUnit.MILLISECONDS);
+        }
+        return messages;
+    }
+
+    /**
+     * Receives the next message after the current position when it is available. The position moves to the message
+     * before the future completes. At most one receive may be outstanding at a time.
+     *
+     * @return a future of the next message; it completes exceptionally with {@link RawdataClosedException} if the
+     * consumer is closed before a message arrives
      */
     CompletableFuture<? extends RawdataMessage> receiveAsync();
 
     /**
-     * Seek to a specific time in the stream. The stream will be positioned at the first message with matching timestamp
-     * or at the message immediately after if no message match the timestamp. The position will be inclusive, so that
-     * the next message returned by receive will be the message that the stream is positioned at.
+     * Moves the position so that the next message received is the first one whose id has a time at or after a time.
      *
-     * @param timestamp the timestamp in milliseconds from epoch (1970)
+     * @param timestamp the time in milliseconds since 1970-01-01T00:00Z
+     * @throws RawdataClosedException if the consumer or its client is closed
      */
     void seek(long timestamp);
 
     /**
-     * Returns whether or not the consumer is closed.
+     * Whether the consumer is closed.
      *
-     * @return whether the consumer is closed.
+     * @return true after {@link #close()} on the consumer or its client
      */
     boolean isClosed();
 
+    /**
+     * Closes the consumer and wakes any receive that waits. Calling it again does nothing.
+     */
     @Override
     void close();
-
-    /**
-     * Return the ULID.Value that represents beginning of a given timestamp.
-     *
-     * @param timestamp the timestamp component of the returned ulid.
-     * @return the beginning-of-time ulid
-     */
-    static ULID.Value beginningOf(long timestamp) {
-        return new ULID.Value((timestamp << 16) & 0xFFFFFFFFFFFF0000L, 0L);
-    }
-
-    /**
-     * Return the ULID.Value that represents beginning of all time.
-     *
-     * @return the beginning-of-time ulid
-     */
-    static ULID.Value beginningOfTime() {
-        return new ULID.Value(0, 0);
-    }
 }

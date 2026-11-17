@@ -5,7 +5,6 @@
  */
 module io.descoped.rawdata.api {
     requires transitive io.descoped.service.provider.api;
-    requires transitive de.huxhorn.sulky.ulid;
 
     exports io.descoped.rawdata.api;
 
