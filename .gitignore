@@ -1,9 +1,4 @@
 /.idea/
-/service-provider-api/
-/rawdata-client-*/
-/rawdata-backup-*/
-/rawdata-state-*/
-/rawdata-copy-util/
 /target
 /*.log
 /*.iml

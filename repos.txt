@@ -1,4 +1,0 @@
-rawdata-client-api
-rawdata-client-provider-postgres
-rawdata-client-provider-gcs
-rawdata-copy-util
