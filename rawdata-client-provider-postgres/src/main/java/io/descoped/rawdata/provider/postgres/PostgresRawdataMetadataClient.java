@@ -1,24 +1,21 @@
 package io.descoped.rawdata.provider.postgres;
 
 import io.descoped.rawdata.api.RawdataMetadataClient;
-import io.descoped.rawdata.provider.postgres.tx.Transaction;
-import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 
-public class PostgresRawdataMetadataClient implements RawdataMetadataClient {
+final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
 
-    final String topic;
-    final TransactionFactory transactionFactory;
+    private final PostgresRawdataClient client;
+    private final String topic;
 
-    public PostgresRawdataMetadataClient(String topic, TransactionFactory transactionFactory) {
+    PostgresRawdataMetadataClient(PostgresRawdataClient client, String topic) {
+        this.client = client;
         this.topic = topic;
-        this.transactionFactory = transactionFactory;
     }
 
     @Override
@@ -28,84 +25,67 @@ public class PostgresRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public Set<String> keys() {
-        try (Transaction tx = transactionFactory.createTransaction(false)) {
-            try (PreparedStatement st = tx.connection().prepareStatement(String.format("SELECT name FROM \"%s_metadata\"", topic))) {
+        client.checkOpen();
+        return client.jdbc().transaction(connection -> {
+            try (PreparedStatement select = connection.prepareStatement("SELECT name FROM rawdata_metadata WHERE topic = ? ORDER BY name")) {
+                select.setString(1, topic);
                 Set<String> keys = new LinkedHashSet<>();
-                try (ResultSet rs = st.executeQuery()) {
-                    if (!rs.next()) {
-                        return Collections.emptySet();
+                try (ResultSet rows = select.executeQuery()) {
+                    while (rows.next()) {
+                        keys.add(rows.getString(1));
                     }
-                    do {
-                        String key = rs.getString(1);
-                        keys.add(key);
-                    } while (rs.next());
                 }
-                return keys;
+                return Set.copyOf(keys);
             }
-        } catch (SQLException e) {
-            throw new PersistenceException(e);
-        }
+        });
     }
 
     @Override
     public byte[] get(String key) {
-        try (Transaction tx = transactionFactory.createTransaction(false)) {
-            try (PreparedStatement st = tx.connection().prepareStatement(String.format("SELECT data FROM \"%s_metadata\" WHERE name = ?", topic))) {
-                st.setString(1, key);
-                try (ResultSet rs = st.executeQuery()) {
-                    if (!rs.next()) {
-                        return null;
-                    }
-                    byte[] data = rs.getBytes(1);
-                    return data;
+        Objects.requireNonNull(key, "key");
+        client.checkOpen();
+        return client.jdbc().transaction(connection -> {
+            try (PreparedStatement select = connection.prepareStatement("SELECT data FROM rawdata_metadata WHERE topic = ? AND name = ?")) {
+                select.setString(1, topic);
+                select.setString(2, key);
+                try (ResultSet rows = select.executeQuery()) {
+                    return rows.next() ? rows.getBytes(1) : null;
                 }
             }
-        } catch (SQLException e) {
-            throw new PersistenceException(e);
-        }
+        });
     }
 
     @Override
-    public PostgresRawdataMetadataClient put(String key, byte[] value) {
-        try (Transaction tx = transactionFactory.createTransaction(false)) {
-            boolean alreadyExists = false;
-            try (PreparedStatement st = tx.connection().prepareStatement(String.format("SELECT 1 FROM \"%s_metadata\" WHERE name = ?", topic))) {
-                st.setString(1, key);
-                try (ResultSet rs = st.executeQuery()) {
-                    if (rs.next()) {
-                        alreadyExists = true;
-                    }
-                }
+    public RawdataMetadataClient put(String key, byte[] value) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(value, "value");
+        client.checkOpen();
+        byte[] copy = value.clone();
+        client.jdbc().transaction(connection -> {
+            try (PreparedStatement upsert = connection.prepareStatement(
+                    "INSERT INTO rawdata_metadata (topic, name, data) VALUES (?, ?, ?) ON CONFLICT (topic, name) DO UPDATE SET data = EXCLUDED.data")) {
+                upsert.setString(1, topic);
+                upsert.setString(2, key);
+                upsert.setBytes(3, copy);
+                upsert.executeUpdate();
             }
-            if (alreadyExists) {
-                try (PreparedStatement st = tx.connection().prepareStatement(String.format("UPDATE \"%s_metadata\" SET data = ? WHERE name = ?", topic))) {
-                    st.setBytes(1, value);
-                    st.setString(2, key);
-                    st.executeUpdate();
-                }
-            } else {
-                try (PreparedStatement st = tx.connection().prepareStatement(String.format("INSERT INTO \"%s_metadata\" (name, data) VALUES (?, ?)", topic))) {
-                    st.setString(1, key);
-                    st.setBytes(2, value);
-                    st.executeUpdate();
-                }
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException(e);
-        }
+            return null;
+        });
         return this;
     }
 
     @Override
     public RawdataMetadataClient remove(String key) {
-        try (Transaction tx = transactionFactory.createTransaction(false)) {
-            try (PreparedStatement st = tx.connection().prepareStatement(String.format("DELETE FROM \"%s_metadata\" WHERE name = ?", topic))) {
-                st.setString(1, key);
-                st.executeUpdate();
+        Objects.requireNonNull(key, "key");
+        client.checkOpen();
+        client.jdbc().transaction(connection -> {
+            try (PreparedStatement delete = connection.prepareStatement("DELETE FROM rawdata_metadata WHERE topic = ? AND name = ?")) {
+                delete.setString(1, topic);
+                delete.setString(2, key);
+                delete.executeUpdate();
             }
-        } catch (SQLException e) {
-            throw new PersistenceException(e);
-        }
+            return null;
+        });
         return this;
     }
 }

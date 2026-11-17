@@ -5,42 +5,39 @@ import io.descoped.rawdata.api.RawdataCursor;
 import java.util.Objects;
 import java.util.UUID;
 
-public class PostgresCursor implements RawdataCursor {
+/**
+ * A starting point: an id, which need not be the id of a message, and whether a message with exactly that id is read
+ * first.
+ */
+final class PostgresCursor implements RawdataCursor {
 
-    /**
-     * Need not exactly match an existing ulid-value.
-     */
-    final UUID startKey;
-
-    /**
-     * Whether or not to include the element with ulid-value matching the lower-bound exactly.
-     */
+    final UUID id;
     final boolean inclusive;
 
-    PostgresCursor(UUID startKey, boolean inclusive) {
-        this.startKey = startKey;
+    PostgresCursor(UUID id, boolean inclusive) {
+        this.id = Objects.requireNonNull(id, "id");
         this.inclusive = inclusive;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof PostgresCursor)) {
+            return false;
+        }
         PostgresCursor that = (PostgresCursor) o;
-        return inclusive == that.inclusive &&
-                Objects.equals(startKey, that.startKey);
+        return inclusive == that.inclusive && id.equals(that.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(startKey, inclusive);
+        return Objects.hash(id, inclusive);
     }
 
     @Override
     public String toString() {
-        return "PostgresCursor{" +
-                "startKey=" + startKey +
-                ", inclusive=" + inclusive +
-                '}';
+        return "PostgresCursor{id=" + id + ", inclusive=" + inclusive + '}';
     }
 }
