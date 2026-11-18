@@ -151,6 +151,38 @@
     </dependencies>
 
     <profiles>
+        <!-- The Avro engine has no tests of its own: the filesystem, gcs and s3 tests run it. This module depends on every
+             provider, so its aggregate report gives the engine (and every provider) the coverage of all their tests,
+             and SonarCloud merges it with each module's own. The aggregate takes direct dependencies only, so the
+             engine, which comes through the providers, is named here. -->
+        <profile>
+            <id>coverage</id>
+            <dependencies>
+                <dependency>
+                    <groupId>io.descoped.rawdata</groupId>
+                    <artifactId>rawdata-client-provider-avro</artifactId>
+                    <version>${project.version}</version>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>report-aggregate</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>report-aggregate</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.copy, even though
              Surefire is set to the class path. The module does not open the test package to JUnit or read the test
              modules, so every test failed there with InaccessibleObjectException. It also puts junit-jupiter-params on
