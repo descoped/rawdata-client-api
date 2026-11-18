@@ -23,6 +23,7 @@
         <module>rawdata-client-tck</module>
         <module>rawdata-client-provider-postgres</module>
         <module>rawdata-client-provider-avro</module>
+        <module>rawdata-client-provider-filesystem</module>
         <module>rawdata-client-provider-gcs</module>
         <module>rawdata-client-provider-s3</module>
         <module>rawdata-copy-util</module>
@@ -191,15 +192,16 @@
             </build>
         </profile>
 
-        <!-- One SonarCloud project for the whole reactor; each module reports its own JaCoCo XML, and the API module's
-             classes also get the coverage of the contract tests (rawdata-client-tck's aggregate report). -->
+        <!-- One SonarCloud project for the whole reactor; each module reports its own JaCoCo XML, the API module's
+             classes also get the coverage of the contract tests (rawdata-client-tck's aggregate report), and the Avro
+             engine that of the filesystem, gcs and s3 tests (rawdata-copy-util's aggregate report). -->
         <profile>
             <id>sonar</id>
             <properties>
                 <sonar.host.url>https://sonarcloud.io</sonar.host.url>
                 <sonar.organization>descoped</sonar.organization>
                 <sonar.projectKey>descoped_rawdata-client-project</sonar.projectKey>
-                <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml,${maven.multiModuleProjectDirectory}/rawdata-client-tck/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+                <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml,${maven.multiModuleProjectDirectory}/rawdata-client-tck/target/site/jacoco-aggregate/jacoco.xml,${maven.multiModuleProjectDirectory}/rawdata-copy-util/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
             </properties>
             <build>
                 <plugins>

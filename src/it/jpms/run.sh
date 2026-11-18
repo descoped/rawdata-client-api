@@ -17,7 +17,7 @@ cd "$ROOT"
 echo "== build"
 ./mvnw --batch-mode --no-transfer-progress --quiet package -DskipTests \
   dependency:build-classpath -DincludeScope=runtime -Dmdep.outputFile=target/runtime.classpath \
-  -pl rawdata-client-api,rawdata-client-provider-avro,rawdata-client-provider-postgres,rawdata-client-provider-gcs,rawdata-client-provider-s3 -am
+  -pl rawdata-client-api,rawdata-client-provider-avro,rawdata-client-provider-filesystem,rawdata-client-provider-postgres,rawdata-client-provider-gcs,rawdata-client-provider-s3 -am
 rm -rf "$WORK" && mkdir -p "$WORK/app"
 
 version="$(./mvnw --batch-mode --no-transfer-progress --quiet help:evaluate -Dexpression=project.version -DforceStdout)"
@@ -31,6 +31,7 @@ newest() { grep -v '^$' | awk -F/ '{ key = $0; sub("/[^/]*/[^/]*$", "", key); pr
 {
   jar_of rawdata-client-api; entries rawdata-client-api
   jar_of rawdata-client-provider-avro; entries rawdata-client-provider-avro
+  jar_of rawdata-client-provider-filesystem; entries rawdata-client-provider-filesystem
   jar_of rawdata-client-provider-postgres; entries rawdata-client-provider-postgres
   jar_of rawdata-client-provider-gcs; entries rawdata-client-provider-gcs
   jar_of rawdata-client-provider-s3; entries rawdata-client-provider-s3
@@ -39,7 +40,7 @@ MODULES="$(paste -sd: "$WORK/modules.txt")"
 echo "   $(wc -l < "$WORK/modules.txt" | tr -d ' ') jars"
 
 echo "== jdeps"
-jdeps --multi-release 17 --module-path "$MODULES" --check io.descoped.rawdata.api,io.descoped.rawdata.provider.avro,io.descoped.rawdata.provider.postgres,io.descoped.rawdata.provider.gcs,io.descoped.rawdata.provider.s3 \
+jdeps --multi-release 17 --module-path "$MODULES" --check io.descoped.rawdata.api,io.descoped.rawdata.provider.avro,io.descoped.rawdata.provider.filesystem,io.descoped.rawdata.provider.postgres,io.descoped.rawdata.provider.gcs,io.descoped.rawdata.provider.s3 \
   > "$WORK/jdeps.txt" 2>&1 || { cat "$WORK/jdeps.txt"; exit 1; }
 if grep -q -E 'unused|missing' "$WORK/jdeps.txt"; then
   cat "$WORK/jdeps.txt"

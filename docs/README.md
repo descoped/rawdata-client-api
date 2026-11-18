@@ -17,7 +17,7 @@ written by 2.x. See the [CHANGELOG](../CHANGELOG.md).
 
 ## Working on the code
 
-- [Architecture](architecture.md): the modules, finding a provider, ids and the order of a topic across processes,
+- [Architecture](architecture.md): the modules, finding a provider, ids, the order of a topic and its one writer,
   reading, closing.
 - [Building and testing](building-and-testing.md): JDK 17, the build, the test suites and the TCK, the JPMS smoke
   test, CI, the IDE.

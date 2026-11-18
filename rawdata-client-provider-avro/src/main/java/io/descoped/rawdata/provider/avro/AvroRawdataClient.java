@@ -11,6 +11,7 @@ import io.descoped.rawdata.api.RawdataMetadataClient;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.rawdata.api.RawdataTopics;
+import io.descoped.rawdata.api.RawdataWriterConflictException;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -29,9 +30,12 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A client that keeps topics as Avro files in an {@link AvroStore}: one file, a segment, per publish. The segments of
- * a topic are numbered without gaps, and a publish creates the segment after the last only if no other writer has
- * created it first; otherwise it reads the new last segment and tries again. So ids grow in the order segments are
- * created, by writers in any process, and a consumer reads a topic segment by segment, polling for the next.
+ * a topic are numbered without gaps, and a consumer reads a topic segment by segment, polling for the next.
+ * <p>
+ * Only one process writes a topic. When this client first publishes to a topic it reads where the topic ends; after
+ * that it creates the segment after the last one it wrote, and the store creates a segment only if it does not exist.
+ * If it does, another process wrote the topic, and the publish fails with {@link RawdataWriterConflictException},
+ * writing nothing; the client then keeps failing to publish to the topic.
  * <p>
  * Providers built on this engine, such as {@code filesystem} and {@code gcs}, create it with their store; it owns the
  * store and closes it on {@link #close()}.
@@ -45,6 +49,7 @@ public final class AvroRawdataClient implements RawdataClient {
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<Object> open = ConcurrentHashMap.newKeySet(); // producers and consumers
     private final Map<String, Tail> tails = new ConcurrentHashMap<>(); // the last segment seen of each topic
+    private final Map<String, Tail> written = new ConcurrentHashMap<>(); // where this client writes each topic from
     private final Map<String, ReentrantLock> publishLocks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "rawdata-avro-" + THREADS.incrementAndGet());
@@ -185,6 +190,7 @@ public final class AvroRawdataClient implements RawdataClient {
      * Wakes this client's consumers of a topic after a publish, so they need not wait for their next poll.
      */
     void published(String topic, Tail tail) {
+        written.put(topic, tail);
         tails.merge(topic, tail, (seen, created) -> seen.segment() >= created.segment() ? seen : created);
         for (Object producerOrConsumer : open) {
             if (producerOrConsumer instanceof AvroRawdataConsumer consumer && consumer.topic().equals(topic)) {
@@ -194,10 +200,11 @@ public final class AvroRawdataClient implements RawdataClient {
     }
 
     /**
-     * Returns the last segment this client has seen of a topic, which may since have been followed by others.
+     * Returns the last segment this client wrote of a topic, or, before its first publish to the topic, the topic's
+     * last segment as it is now. Called with the topic's publish lock held.
      */
-    Tail seenTail(String topic) {
-        return tails.getOrDefault(topic, Tail.EMPTY);
+    Tail writerTail(String topic) {
+        return written.computeIfAbsent(topic, this::tail);
     }
 
     /**

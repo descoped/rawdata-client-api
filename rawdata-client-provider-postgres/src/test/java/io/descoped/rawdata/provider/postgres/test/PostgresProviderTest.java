@@ -1,7 +1,6 @@
 package io.descoped.rawdata.provider.postgres.test;
 
 import io.descoped.rawdata.api.RawdataClient;
-import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
@@ -12,13 +11,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -30,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the contract cannot see from outside: the stored layout, several clients (as several processes would be) on
- * one topic, and the start-up of the schema.
+ * The provider's internals, which the TCK cannot see: the stored layout, the topic lock, privileges, the start-up of
+ * the schema and the pool.
  */
 @Timeout(120)
 class PostgresProviderTest {
@@ -87,11 +84,6 @@ class PostgresProviderTest {
             }
             assertEquals(expected, sorted);
         }
-    }
-
-    @Test
-    void clientsOnOneTopicKeepItInCommitOrder() throws Exception {
-        assertCommitOrder();
     }
 
     /**
@@ -161,73 +153,6 @@ class PostgresProviderTest {
     private static void execute(String sql) throws Exception {
         try (Connection connection = Postgres18.connect(); Statement statement = connection.createStatement()) {
             statement.execute(sql);
-        }
-    }
-
-    private static void assertCommitOrder() throws Exception {
-        String topic = topic();
-        int clients = 4;
-        int perClient = 100;
-        ExecutorService executor = Executors.newFixedThreadPool(clients);
-        List<RawdataClient> opened = new ArrayList<>();
-        try {
-            CountDownLatch start = new CountDownLatch(1);
-            List<Future<?>> futures = new ArrayList<>();
-            for (int c = 0; c < clients; c++) {
-                RawdataClient client = client();
-                opened.add(client);
-                int number = c;
-                futures.add(executor.submit(() -> {
-                    start.await();
-                    try (RawdataProducer producer = client.producer(topic)) {
-                        for (int i = 0; i < perClient; i++) {
-                            producer.publish(RawdataMessage.builder().position("c" + number + "-" + i).build());
-                        }
-                    }
-                    return null;
-                }));
-            }
-            start.countDown();
-            for (Future<?> future : futures) {
-                future.get(60, TimeUnit.SECONDS);
-            }
-        } finally {
-            executor.shutdownNow();
-            opened.forEach(RawdataClient::close);
-        }
-        try (RawdataClient client = client(); RawdataConsumer consumer = client.consumer(topic)) {
-            List<RawdataMessage> read = consumer.receiveUpTo(clients * perClient + 1, Duration.ofSeconds(5));
-            while (read.size() < clients * perClient) {
-                List<RawdataMessage> more = consumer.receiveUpTo(clients * perClient, Duration.ofSeconds(1));
-                if (more.isEmpty()) {
-                    break;
-                }
-                read.addAll(more);
-            }
-            assertEquals(clients * perClient, read.size());
-            for (int i = 1; i < read.size(); i++) {
-                assertTrue(RawdataIds.ORDER.compare(read.get(i - 1).id(), read.get(i).id()) < 0);
-            }
-            for (int c = 0; c < clients; c++) {
-                String prefix = "c" + c + "-";
-                List<String> own = read.stream().map(RawdataMessage::position).filter(p -> p.startsWith(prefix)).toList();
-                for (int i = 0; i < perClient; i++) {
-                    assertEquals(prefix + i, own.get(i));
-                }
-            }
-        }
-    }
-
-    @Test
-    void aConsumerSeesMessagesOfAnotherClient() throws Exception {
-        String topic = topic();
-        try (RawdataClient reader = client(); RawdataClient writer = client();
-             RawdataConsumer consumer = reader.consumer(topic)) {
-            assertTrue(consumer.receiveUpTo(10, Duration.ZERO).isEmpty());
-            try (RawdataProducer producer = writer.producer(topic)) {
-                producer.publish(RawdataMessage.builder().position("from-writer").build());
-            }
-            assertEquals("from-writer", consumer.receive(10, TimeUnit.SECONDS).position());
         }
     }
 

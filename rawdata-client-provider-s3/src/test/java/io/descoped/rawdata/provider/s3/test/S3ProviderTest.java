@@ -1,35 +1,23 @@
 package io.descoped.rawdata.provider.s3.test;
 
 import io.descoped.rawdata.api.RawdataClient;
-import io.descoped.rawdata.api.RawdataConsumer;
-import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
-import io.descoped.rawdata.api.RawdataProducer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the contract does not cover, against S3Mock: the objects in the bucket, encryption, and the configuration.
- * Several writers on one topic run only against real S3 ({@link S3LiveProviderTest}): S3Mock does not apply
- * {@code If-None-Match} atomically, so concurrent puts there can both succeed.
+ * The provider's internals, which the TCK cannot see, against S3Mock: the objects in the bucket, encryption, the
+ * configuration and the credential kinds.
  */
 @Timeout(120)
 class S3ProviderTest {
@@ -44,31 +32,6 @@ class S3ProviderTest {
 
     static RawdataMessage message(String position) {
         return RawdataMessage.builder().position(position).put("payload", position.getBytes(StandardCharsets.UTF_8)).build();
-    }
-
-    static List<RawdataMessage> readAll(RawdataClient client, String topic) throws InterruptedException {
-        try (RawdataConsumer consumer = client.consumer(topic)) {
-            List<RawdataMessage> read = new ArrayList<>();
-            List<RawdataMessage> batch;
-            while (!(batch = consumer.receiveUpTo(1000, Duration.ofMillis(500))).isEmpty()) {
-                read.addAll(batch);
-            }
-            return read;
-        }
-    }
-
-    /**
-     * A consumer of one client receives what another client publishes, by polling.
-     */
-    @Test
-    void aConsumerSeesMessagesOfAnotherClient() throws Exception {
-        String prefix = prefix();
-        try (RawdataClient reader = client(prefix); RawdataClient writer = client(prefix);
-             RawdataConsumer consumer = reader.consumer("t")) {
-            CompletableFuture<? extends RawdataMessage> received = consumer.receiveAsync();
-            writer.producer("t").publish(message("a"));
-            assertEquals("a", received.get(30, TimeUnit.SECONDS).position());
-        }
     }
 
     /**
@@ -108,6 +71,7 @@ class S3ProviderTest {
         refused("s3.sse", Map.of("s3.sse", "rot13"));
         refused("s3.sse-kms-key-id", Map.of("s3.sse", "AES256", "s3.sse-kms-key-id", "alias/x"));
         refused("s3.prefix", Map.of("s3.prefix", "/x/"));
+        refused("s3.prefix", Map.of("s3.prefix", "p".repeat(659)));
 
         Map<String, String> noSlash = S3Mock.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {

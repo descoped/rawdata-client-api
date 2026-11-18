@@ -120,14 +120,14 @@ final class DiscardingRawdataClient implements RawdataClient {
 
             @Override
             public byte[] get(String key) {
-                Objects.requireNonNull(key, "key");
+                RawdataMetadataClient.requireValidKey(key);
                 checkOpen();
                 return null; // NOSONAR null is the contract of RawdataMetadataClient.get for a missing entry
             }
 
             @Override
             public RawdataMetadataClient put(String key, byte[] value) {
-                Objects.requireNonNull(key, "key");
+                RawdataMetadataClient.requireValidKey(key);
                 Objects.requireNonNull(value, "value");
                 checkOpen();
                 return this;
@@ -135,7 +135,7 @@ final class DiscardingRawdataClient implements RawdataClient {
 
             @Override
             public RawdataMetadataClient remove(String key) {
-                Objects.requireNonNull(key, "key");
+                RawdataMetadataClient.requireValidKey(key);
                 checkOpen();
                 return this;
             }

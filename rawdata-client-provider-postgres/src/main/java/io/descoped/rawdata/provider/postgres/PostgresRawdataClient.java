@@ -15,6 +15,7 @@ import io.descoped.rawdata.api.RawdataTopics;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The {@code postgres} provider's client. It owns its connection pool and closes it on {@link #close()}.
@@ -37,6 +39,8 @@ final class PostgresRawdataClient implements RawdataClient {
     private final long pollIntervalMillis;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<Object> open = ConcurrentHashMap.newKeySet(); // producers and consumers
+    private final Map<String, UUID> written = new ConcurrentHashMap<>(); // the last id this client wrote of each topic
+    private final Map<String, ReentrantLock> publishLocks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "rawdata-postgres-" + THREADS.incrementAndGet());
         thread.setDaemon(true);
@@ -133,6 +137,24 @@ final class PostgresRawdataClient implements RawdataClient {
 
     Jdbc jdbc() {
         return jdbc;
+    }
+
+    /**
+     * Producers of this client take turns per topic, so they never see each other's publish as another writer's.
+     */
+    ReentrantLock publishLock(String topic) {
+        return publishLocks.computeIfAbsent(topic, t -> new ReentrantLock());
+    }
+
+    /**
+     * The last id this client wrote of a topic, or null before its first publish to it.
+     */
+    UUID written(String topic) {
+        return written.get(topic);
+    }
+
+    void written(String topic, UUID last) {
+        written.put(topic, last);
     }
 
     ExecutorService executor() {

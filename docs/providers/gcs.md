@@ -43,12 +43,12 @@ gs://<bucket>/<prefix><topic>/segments/0000000000000000000.avro
 gs://<bucket>/<prefix><topic>/metadata/k<hex of the key>
 ```
 
-A segment is uploaded in one request with the precondition that no object has its name (`ifGenerationMatch=0`), so
-two writers never both create it; the one that loses reads the new last segment and tries the next number. If an
-upload succeeded but its response was lost, the client's retry fails the precondition; the store then reads the
-object back, and if it holds its own bytes the segment counts as created. Metadata entries are written with a
-precondition on the generation they replace, so the client can retry them. A metadata key is at most about 500 bytes
-(an object name is at most 1024 bytes with the prefix and topic).
+A segment is uploaded in one request with the precondition that no object has its name (`ifGenerationMatch=0`). If
+the name is taken, another process wrote the topic, and the publish throws `RawdataWriterConflictException` (see
+[one writer per topic](../contract.md#one-writer-per-topic)). If an upload succeeded but its response was lost, the
+client's retry fails the precondition; the store then reads the object back, and if it holds its own bytes the
+segment counts as created. Metadata entries are written with a precondition on the generation they replace, so the
+client can retry them. A metadata key is at most (1024 − the prefix, topic and `/metadata/k`) / 2 bytes, about 500; a prefix is therefore at most 659 bytes, so that keys of 127 bytes always fit.
 
 GCS answers a missing object and a missing bucket with the same 404. The first time a client sees one, it lists the
 bucket once, so a wrong bucket name fails instead of looking like an empty topic.

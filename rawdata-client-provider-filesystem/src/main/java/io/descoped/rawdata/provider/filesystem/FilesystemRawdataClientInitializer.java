@@ -1,13 +1,13 @@
-package io.descoped.rawdata.provider.avro.filesystem;
+package io.descoped.rawdata.provider.filesystem;
 
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
+import io.descoped.rawdata.api.RawdataException;
 import io.descoped.rawdata.provider.avro.AvroConfiguration;
 import io.descoped.rawdata.provider.avro.AvroRawdataClient;
 import io.descoped.service.provider.api.ProviderName;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -52,7 +52,7 @@ public final class FilesystemRawdataClientInitializer implements RawdataClientIn
         try {
             Files.createDirectories(folder);
         } catch (IOException e) {
-            throw new UncheckedIOException("Cannot create the storage folder " + folder, e);
+            throw new RawdataException("Cannot create the storage folder " + folder, e);
         }
         return new AvroRawdataClient(new FilesystemAvroStore(folder), pollInterval);
     }

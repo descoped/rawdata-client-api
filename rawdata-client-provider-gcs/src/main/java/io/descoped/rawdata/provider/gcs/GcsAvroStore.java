@@ -24,8 +24,8 @@ import java.util.TreeSet;
  * may retry the upload, for example when GCS limits writes to one object name to about one per second. When another
  * writer changed the entry meanwhile, the write starts over, so the last write wins.
  * <p>
- * GCS answers 404 for a missing object and for a missing bucket. The first time {@link #exists} gets one, the store
- * lists the bucket once, so a wrong bucket fails instead of looking like an empty topic.
+ * GCS answers 404 for a missing object and for a missing bucket. The first time the store gets one, it lists the
+ * bucket once, so a wrong bucket fails instead of looking like an empty topic.
  */
 final class GcsAvroStore implements AvroStore {
 
@@ -53,7 +53,26 @@ final class GcsAvroStore implements AvroStore {
 
     @Override
     public Optional<byte[]> read(String topic, long segment) throws IOException {
-        return client.download(bucket, segment(topic, segment));
+        return absentIfTheBucketExists(client.download(bucket, segment(topic, segment)));
+    }
+
+    /**
+     * Fails if the bucket does not exist; asks GCS only until the bucket has been seen once.
+     */
+    private void checkBucket() throws IOException {
+        if (!bucketSeen) {
+            client.checkBucket(bucket, prefix);
+            bucketSeen = true;
+        }
+    }
+
+    private Optional<byte[]> absentIfTheBucketExists(Optional<byte[]> content) throws IOException {
+        if (content.isPresent()) {
+            bucketSeen = true;
+        } else {
+            checkBucket(); // a 404 is a missing object or a missing bucket
+        }
+        return content;
     }
 
     @Override
@@ -62,10 +81,7 @@ final class GcsAvroStore implements AvroStore {
             bucketSeen = true;
             return true;
         }
-        if (!bucketSeen) {
-            client.checkBucket(bucket, prefix);
-            bucketSeen = true;
-        }
+        checkBucket();
         return false;
     }
 
@@ -81,7 +97,7 @@ final class GcsAvroStore implements AvroStore {
 
     @Override
     public Optional<byte[]> readMetadata(String topic, String name) throws IOException {
-        return client.download(bucket, metadata(topic, name));
+        return absentIfTheBucketExists(client.download(bucket, metadata(topic, name)));
     }
 
     @Override

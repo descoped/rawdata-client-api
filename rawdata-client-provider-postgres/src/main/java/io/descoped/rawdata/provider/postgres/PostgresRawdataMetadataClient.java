@@ -2,6 +2,7 @@ package io.descoped.rawdata.provider.postgres;
 
 import io.descoped.rawdata.api.RawdataMetadataClient;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Collections;
@@ -9,7 +10,13 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * A topic's metadata as rows of {@code rawdata_metadata}. A key is at most {@value #MAX_KEY_BYTES} bytes in UTF-8,
+ * below what a PostgreSQL btree index entry holds, so a longer key is refused before the database sees it.
+ */
 final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
+
+    static final int MAX_KEY_BYTES = 2000;
 
     private final PostgresRawdataClient client;
     private final String topic;
@@ -17,6 +24,14 @@ final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
     PostgresRawdataMetadataClient(PostgresRawdataClient client, String topic) {
         this.client = client;
         this.topic = topic;
+    }
+
+    private static void requireValidKey(String key) {
+        RawdataMetadataClient.requireValidKey(key);
+        int bytes = key.getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > MAX_KEY_BYTES) {
+            throw new IllegalArgumentException("A metadata key is at most " + MAX_KEY_BYTES + " bytes in UTF-8 in postgres: " + bytes);
+        }
     }
 
     @Override
@@ -43,7 +58,7 @@ final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public byte[] get(String key) {
-        Objects.requireNonNull(key, "key");
+        requireValidKey(key);
         client.checkOpen();
         return client.jdbc().transaction(connection -> {
             try (PreparedStatement select = connection.prepareStatement("SELECT data FROM rawdata_metadata WHERE topic = ? AND name = ?")) {
@@ -58,7 +73,7 @@ final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public RawdataMetadataClient put(String key, byte[] value) {
-        Objects.requireNonNull(key, "key");
+        requireValidKey(key);
         Objects.requireNonNull(value, "value");
         client.checkOpen();
         byte[] copy = value.clone();
@@ -77,7 +92,7 @@ final class PostgresRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public RawdataMetadataClient remove(String key) {
-        Objects.requireNonNull(key, "key");
+        requireValidKey(key);
         client.checkOpen();
         client.jdbc().transaction(connection -> {
             try (PreparedStatement delete = connection.prepareStatement("DELETE FROM rawdata_metadata WHERE topic = ? AND name = ?")) {

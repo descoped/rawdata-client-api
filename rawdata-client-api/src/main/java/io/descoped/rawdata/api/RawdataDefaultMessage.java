@@ -27,10 +27,22 @@ final class RawdataDefaultMessage implements RawdataMessage {
         this.id = builder.id;
         this.orderingGroup = builder.orderingGroup;
         this.sequenceNumber = builder.sequenceNumber;
-        this.position = builder.position;
+        this.position = requireNoNul(builder.position, "The position");
+        requireNoNul(builder.orderingGroup, "The ordering group");
         Map<String, byte[]> copy = new LinkedHashMap<>();
         builder.data.forEach((key, value) -> copy.put(key, value.clone()));
         this.data = Collections.unmodifiableMap(copy);
+    }
+
+    /**
+     * Refuses a NUL character, which a PostgreSQL text column cannot hold, so that every provider takes the same
+     * strings.
+     */
+    static String requireNoNul(String value, String what) {
+        if (value != null && value.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException(what + " must not contain the NUL character (U+0000)");
+        }
+        return value;
     }
 
     @Override
@@ -179,7 +191,7 @@ final class RawdataDefaultMessage implements RawdataMessage {
 
         @Override
         public RawdataMessage.Builder put(String key, byte[] payload) {
-            Objects.requireNonNull(key, "key");
+            requireNoNul(Objects.requireNonNull(key, "key"), "A content key");
             Objects.requireNonNull(payload, "payload");
             data.put(key, payload.clone());
             return this;

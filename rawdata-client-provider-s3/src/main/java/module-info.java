@@ -18,6 +18,7 @@ module io.descoped.rawdata.provider.s3 {
     requires software.amazon.awssdk.http;
     requires software.amazon.awssdk.identity.spi;
     requires software.amazon.awssdk.utils;
+    requires software.amazon.awssdk.retries.api;
 
     provides io.descoped.rawdata.api.RawdataClientInitializer with
             io.descoped.rawdata.provider.s3.S3RawdataClientInitializer;

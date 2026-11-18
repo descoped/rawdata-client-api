@@ -4,7 +4,10 @@ import io.descoped.rawdata.tck.RawdataClientContractTest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.OptionalInt;
+import java.util.UUID;
 
 /**
  * The contract against real Amazon S3; see {@link LiveS3}.
@@ -15,6 +18,21 @@ class S3LiveContractTest extends RawdataClientContractTest {
     @Override
     protected Map<String, String> configuration() {
         return LiveS3.configuration("contract/");
+    }
+
+    @Override
+    protected OptionalInt metadataKeyLimit(String topic) {
+        return OptionalInt.of((1024 - (LiveS3.RUN + "contract/" + topic + "/metadata/k").getBytes(StandardCharsets.UTF_8).length) / 2);
+    }
+
+    /**
+     * A bucket name nobody has; S3 answers NoSuchBucket (or AccessDenied, should someone own it), both failures.
+     */
+    @Override
+    protected Map<String, String> missingStoreConfiguration() {
+        Map<String, String> configuration = LiveS3.configuration("contract/");
+        configuration.put("s3.bucket-name", "descoped-no-such-bucket-" + UUID.randomUUID());
+        return configuration;
     }
 
     @AfterAll

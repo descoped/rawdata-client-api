@@ -35,8 +35,9 @@ The build fails fast on mistakes that are easy to miss:
 |---|---|---|---|
 | `rawdata-client-api` | the API, ids, the spi base classes | module path, test module `io.descoped.rawdata.api.test` | |
 | `rawdata-client-tck` | the contract against `memory` | module path | |
+| `rawdata-client-provider-avro` | none of its own: the engine is tested through `filesystem`, `gcs` and `s3` | | |
 | `rawdata-client-provider-postgres` | the contract and the provider's own tests on PostgreSQL 18 (`postgres:18-alpine`) | class path | Docker |
-| `rawdata-client-provider-avro` | the contract and the `filesystem` tests | module path, test module `io.descoped.rawdata.provider.avro.test` | |
+| `rawdata-client-provider-filesystem` | the contract, the store contract and the provider's tests | class path | |
 | `rawdata-client-provider-gcs` | the contract and the provider's tests against `fsouza/fake-gcs-server`; the client and credentials against a local server | class path | Docker |
 | `rawdata-client-provider-s3` | the contract and the provider's tests against `adobe/s3mock`; live tests against real S3 with `-Drawdata.s3.live=true` | class path | Docker (live: AWS credentials) |
 | `rawdata-copy-util` | the tool: arguments, copies, resume, filesystem → postgres | class path | Docker |
@@ -46,8 +47,10 @@ dependencies, so this doesn't affect what is published.
 
 ### The contract tests (TCK)
 
-`RawdataClientContractTest` is the contract every provider keeps: topics, ids and order, reading from every starting
-point, metadata, and closing. A provider's test only supplies the configuration:
+`RawdataClientContractTest` is the contract every provider keeps: topics, ids and order, one writer per topic,
+reading from every starting point, metadata, a missing store, and closing. A provider is compliant when it passes it
+unchanged; `AvroStoreContractTest` does the same for the stores of the Avro engine. A provider's test only supplies
+the configuration and its limits (see [writing a provider](writing-a-provider.md#the-contract-tests)):
 
 ```java
 class PostgresContractTest extends RawdataClientContractTest {
@@ -99,8 +102,8 @@ CI publishes nothing.
 
 ## The IDE
 
-**IntelliJ IDEA** imports the Maven project as is. It runs the postgres, gcs, s3 and copy-util tests on the module path,
-even though Surefire uses the class path. The `intellij` profile in those POMs gives those runs the
+**IntelliJ IDEA** imports the Maven project as is. It runs the postgres, filesystem, gcs, s3 and copy-util tests on
+the module path, even though Surefire uses the class path. The `intellij` profile in those POMs gives those runs the
 `--add-reads`, `--add-opens` and `--add-exports` they need. IntelliJ activates the profile itself
 (`idea.maven.embedder.version`), and Maven never does. After changing a POM, reload the Maven project.
 

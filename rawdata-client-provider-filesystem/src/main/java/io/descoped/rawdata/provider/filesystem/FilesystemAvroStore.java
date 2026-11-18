@@ -1,4 +1,4 @@
-package io.descoped.rawdata.provider.avro.filesystem;
+package io.descoped.rawdata.provider.filesystem;
 
 import io.descoped.rawdata.provider.avro.AvroStore;
 
@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -18,7 +19,8 @@ import java.util.stream.Stream;
  * Topics in a folder: {@code <folder>/<topic folder>/segments/<number>.avro}, the number in 19 digits, and
  * {@code <folder>/<topic folder>/metadata/<name>}. A file is written under a temporary name ({@code .*.tmp}) in the
  * topic's folder first; a segment is then hard-linked to its name, which fails if the name exists, and a metadata
- * entry is moved over its name. Readers so never see part of a file, and two writers never both create a segment.
+ * entry is moved over its name. Readers so never see part of a file, and two writers never both create a segment;
+ * creating an existing segment again with the same bytes counts as created, as in every store.
  * A writer that crashes between the two steps leaves its temporary file behind; nothing reads it, and it may be
  * deleted. The folder must be on a file system with hard links and atomic moves, as local file systems on Linux,
  * macOS and Windows are.
@@ -50,7 +52,8 @@ final class FilesystemAvroStore implements AvroStore {
             Files.createLink(target, temporary);
             return true;
         } catch (FileAlreadyExistsException e) {
-            return false;
+            // as in every store: the same bytes are this writer's segment (an Avro file has a random sync marker)
+            return readIfExists(target).map(stored -> Arrays.equals(content, stored)).orElse(false);
         } finally {
             Files.deleteIfExists(temporary);
         }

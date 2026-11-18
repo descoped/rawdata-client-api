@@ -11,4 +11,12 @@ class MemoryContractTest extends RawdataClientContractTest {
     protected Map<String, String> configuration() {
         return Map.of(RawdataClient.PROVIDER_KEY, "memory");
     }
+
+    /**
+     * A memory client keeps its own topics, so there is no second client on the same store.
+     */
+    @Override
+    protected boolean clientsShareTheStore() {
+        return false;
+    }
 }

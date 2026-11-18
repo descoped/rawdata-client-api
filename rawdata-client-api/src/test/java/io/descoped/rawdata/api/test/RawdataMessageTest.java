@@ -119,4 +119,19 @@ class RawdataMessageTest {
         assertArrayEquals(new byte[]{1}, message.get("a"));
         assertNull(message.get("missing"));
     }
+
+    /**
+     * NUL is refused in the position, the ordering group and content keys, which every provider must store.
+     */
+    @Test
+    void nulIsRefusedInStrings() {
+        RawdataMessage.Builder position = RawdataMessage.builder().position("a\0b");
+        assertThrows(IllegalArgumentException.class, position::build);
+        RawdataMessage.Builder group = RawdataMessage.builder().position("a").orderingGroup("g\0");
+        assertThrows(IllegalArgumentException.class, group::build);
+        RawdataMessage.Builder content = RawdataMessage.builder().position("a");
+        byte[] payload = {1};
+        assertThrows(IllegalArgumentException.class, () -> content.put("k\0", payload));
+        assertEquals("ü € 😀", RawdataMessage.builder().position("ü € 😀").build().position());
+    }
 }
