@@ -64,27 +64,42 @@ code. Java 17 or newer.
   `rawdata-client-provider-filesystem` (module `io.descoped.rawdata.provider.filesystem`) and
   `rawdata-client-provider-gcs` (module `io.descoped.rawdata.provider.gcs`). Packages renamed from
   `io.descoped.rawdata.avro`.
-- One Avro file per publish, numbered without gaps, created only if the number is free (a hard link, or an upload
-  with the `ifGenerationMatch=0` precondition): a message is visible and durable when `publish` returns, and a segment
-  number already taken means another writer (`RawdataWriterConflictException`). The local temp folder, the upload
-  thread and the time and size windows are gone.
-- New layout: `<topic>/segments/<19 digits>.avro` and `<topic>/metadata/k<hex of the key>`. Avro record
-  `io.descoped.rawdata.RawdataMessage`: `id` `fixed(16)` named `uuid`, `content` an array of `{name, value}` (was a map
-  `data`). On a file system, topic folders keep topics that differ only by case apart.
-- Configuration: `local-temp-folder`, `avro-file.*`, `listing.min-interval-seconds` and
-  `gcs.listing.min-interval-seconds` are removed. `filesystem.poll-interval-ms`, `gcs.poll-interval-ms`,
-  `gcs.prefix` and `gcs.endpoint` are new. `gcs.credential-provider` is now `gcs.credentials`:
-  `application-default` (the default), `service-account` or `none`.
+- The upload window of 2.x stays, fixed. A producer buffers on a local disk and uploads one Avro file per window,
+  which closes on `avro-file.max.seconds` (now also by a timer, without new publishes), on `avro-file.max.bytes`,
+  or when a producer closes. Messages are visible and durable once their window is uploaded.
+- Each window is a segment, numbered without gaps and created only if its number is free (a hard link, or an upload
+  with the `ifGenerationMatch=0` precondition). A number already taken means another writer
+  (`RawdataWriterConflictException`).
+- Durability:
+  - each Avro block is forced to disk;
+  - a closed window is sealed before upload;
+  - a failed upload fails the writer loudly and keeps its windows on disk, with no silent close and no deadlock;
+  - a restarted writer uploads the windows a crash left, a sealed one unchanged, an open one cut back to its complete
+    blocks, but only right after the topic's end;
+  - a leftover that no longer fits is kept as `*.invalid`;
+  - a lock file keeps a buffer folder to one process;
+  - `avro-file.max.pending-uploads` (default 4) bounds the windows waiting for upload.
+- New layout: `<topic>/segments/<19 digits>.avro` and `<topic>/metadata/k<hex of the key>`. The Avro record is
+  2.x's `RawdataMessage`; only the id's `fixed(16)` type is renamed from `ulid` to `uuid`. On a file system, topic
+  folders keep topics that differ only by case apart.
+- Configuration:
+  - the 2.x keys stay: `local-temp-folder` (required), `avro-file.max.seconds`, `avro-file.max.bytes`,
+    `avro-file.sync.interval`, `listing.min-interval-seconds`, `gcs.listing.min-interval-seconds` and
+    `gcs.credential-provider` (`service-account`, the default, `compute-engine`, and now `application-default` and
+    `none`);
+  - they now have defaults (60 s, 64 MiB, 512 KiB, 1 s) and are read with dynamic-configuration's value rules;
+  - new: `avro-file.max.pending-uploads`, `gcs.prefix`, `gcs.endpoint`, and `s3.listing.min-interval-seconds` for
+    `s3`.
 - Metadata keys are at most 127 bytes (`filesystem`) or about 500 bytes (`gcs`, `s3`).
 - `gcs` no longer uses Google's client libraries: it talks to GCS's JSON API on the JDK's `java.net.http`, and does
   Google's OAuth 2.0 itself (service account keys, gcloud user credentials, the metadata server, and Application
   Default Credentials in Google's order). Its only dependency besides the Avro engine is Jackson: about 56 Google jars
   fewer, and the copy tool's zip is 7 MB instead of 61 MB. `gcs` is a named module and runs on the module path.
   `external_account` (workload identity federation) is not supported yet.
-- Fixed: files that started in the same millisecond hid each other; an upload failure deadlocked the producer;
-  messages stayed invisible until a window closed; a later upload with an older name was skipped; topics could
-  escape the storage folder; file handles leaked; a closed consumer threw `NullPointerException`; a cursor at the
-  start of a millisecond skipped it.
+- Fixed: files that started in the same millisecond hid each other; an upload failure deadlocked the producer; a
+  window closed only when the next publish came, so a quiet producer never uploaded; a later upload with an older name
+  was skipped; topics could escape the storage folder; file handles leaked; a closed consumer threw
+  `NullPointerException`; a cursor at the start of a millisecond skipped it.
 
 ### `s3` (new)
 

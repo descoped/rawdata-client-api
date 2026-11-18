@@ -95,7 +95,17 @@ public final class S3Mock {
         configuration.put("s3.credentials", "static");
         configuration.put("s3.access-key-id", "test");
         configuration.put("s3.secret-access-key", "test");
-        configuration.put("s3.poll-interval-ms", "50");
+        configuration.put("s3.listing.min-interval-seconds", "0");
+        configuration.put("local-temp-folder", bufferFolder());
+        configuration.put("avro-file.max.seconds", "1");
         return configuration;
+    }
+
+    private static String bufferFolder() {
+        try {
+            return java.nio.file.Files.createTempDirectory("rawdata-buffer").toString(); // a folder per client, as per process
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }

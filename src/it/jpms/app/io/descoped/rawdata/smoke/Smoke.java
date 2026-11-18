@@ -45,7 +45,8 @@ public final class Smoke {
         roundTrip(layout, Map.of(
                 RawdataClient.PROVIDER_KEY, "filesystem",
                 "filesystem.storage-folder", Files.createTempDirectory("rawdata-smoke").toString(),
-                "filesystem.poll-interval-ms", "50"));
+                "local-temp-folder", Files.createTempDirectory("rawdata-smoke-buffer").toString(),
+                "listing.min-interval-seconds", "0"));
         String postgresPort = System.getProperty("smoke.postgres.port");
         if (postgresPort != null) {
             roundTrip(layout, Map.of(
@@ -62,10 +63,11 @@ public final class Smoke {
             Map<String, String> gcs = new HashMap<>();
             gcs.put(RawdataClient.PROVIDER_KEY, "gcs");
             gcs.put("gcs.bucket-name", "rawdata");
-            gcs.put("gcs.credentials", "none");
+            gcs.put("gcs.credential-provider", "none");
             gcs.put("gcs.endpoint", gcsEndpoint);
             gcs.put("gcs.prefix", layout + "/");
-            gcs.put("gcs.poll-interval-ms", "50");
+            gcs.put("gcs.listing.min-interval-seconds", "0");
+            gcs.put("local-temp-folder", Files.createTempDirectory("rawdata-smoke-buffer").toString());
             roundTrip(layout, gcs);
         }
         String s3Endpoint = System.getProperty("smoke.s3.endpoint");
@@ -80,7 +82,8 @@ public final class Smoke {
             s3.put("s3.access-key-id", "smoke");
             s3.put("s3.secret-access-key", "smoke");
             s3.put("s3.prefix", layout + "/");
-            s3.put("s3.poll-interval-ms", "50");
+            s3.put("s3.listing.min-interval-seconds", "0");
+            s3.put("local-temp-folder", Files.createTempDirectory("rawdata-smoke-buffer").toString());
             roundTrip(layout, s3);
         }
     }

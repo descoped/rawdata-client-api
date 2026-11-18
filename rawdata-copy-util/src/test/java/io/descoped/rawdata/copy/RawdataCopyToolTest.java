@@ -47,7 +47,9 @@ class RawdataCopyToolTest {
         return Map.of(
                 RawdataClient.PROVIDER_KEY, "filesystem",
                 "filesystem.storage-folder", folder.resolve(name).toString(),
-                "filesystem.poll-interval-ms", "20");
+                "local-temp-folder", folder.resolve(name + "-buffer").toString(),
+                "avro-file.max.seconds", "1",
+                "listing.min-interval-seconds", "0");
     }
 
     private Path config(Map<String, String> source, Map<String, String> target) throws IOException {

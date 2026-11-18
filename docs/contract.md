@@ -12,12 +12,18 @@ be, and what a store accepts at most.
 client keeps them in order. Consumers may be in any process.
 
 If another process publishes to the topic anyway (a misconfiguration, or a new writer started while the old one
-still runs), the writer that finds the topic moved under it fails: its `publish` throws
-`RawdataWriterConflictException`, which names the topic, and writes nothing. The client keeps failing to publish to
-that topic, so two writers never merge into one stream. The other writer goes on; a client created after the other
-writer stopped starts from the topic's current end. Every provider detects it the same way: a client remembers where
-it last wrote a topic (or where the topic ended when it started writing), and a publish that finds more after that
-fails.
+still runs), the writer that finds the topic moved under it fails with `RawdataWriterConflictException`, which names
+the topic. The client keeps failing to publish to that topic, so two writers never merge into one stream. The other
+writer goes on; a client created after the other writer stopped starts from the topic's current end. Every provider
+detects it the same way: a client remembers where it last wrote a topic (or where the topic ended when it started
+writing), and finds more after that.
+
+When the failure shows depends on when the provider writes:
+- `postgres` writes in `publish`, so that `publish` throws and writes nothing.
+- `filesystem`, `gcs` and `s3` buffer in an [upload window](providers/upload-window.md). The conflict is found when a
+  window opens or uploads, so it is thrown by that `publish`, or by a later `publish`, `flush` or `close`. Messages
+  already accepted into windows that were not uploaded are never written to the topic; they are kept on disk as
+  `*.invalid` files.
 
 ## Topics
 
@@ -59,8 +65,11 @@ A topic only grows at its end:
 - An id you give must be greater than every id in the topic and than the id before it in the same call; otherwise
   the publish throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the ids of
   the source.
-- A `publish` call is written whole or not at all, and when it returns its messages are visible to every consumer
-  and durable.
+- A `publish` call is written whole or not at all.
+- **When published messages are visible and durable depends on the provider.** In `postgres` and `memory`, as soon
+  as `publish` returns. In `filesystem`, `gcs` and `s3`, once their [upload window](providers/upload-window.md) is
+  uploaded: after `avro-file.max.seconds` or `avro-file.max.bytes`, or when the producer or client closes. Closing
+  a producer always makes what it published visible and durable, in every provider.
 
 So a consumer that has read up to an id never misses a message published later.
 

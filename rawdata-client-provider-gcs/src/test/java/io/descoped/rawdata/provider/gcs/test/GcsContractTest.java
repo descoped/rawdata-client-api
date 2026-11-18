@@ -1,12 +1,12 @@
 package io.descoped.rawdata.provider.gcs.test;
 
-import io.descoped.rawdata.tck.RawdataClientContractTest;
+import io.descoped.rawdata.tck.avro.AvroClientContractTest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.OptionalInt;
 
-class GcsContractTest extends RawdataClientContractTest {
+class GcsContractTest extends AvroClientContractTest {
 
     private static final String PREFIX = "contract/";
 

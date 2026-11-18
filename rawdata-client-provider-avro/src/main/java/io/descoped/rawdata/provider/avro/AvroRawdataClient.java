@@ -23,19 +23,25 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * A client that keeps topics as Avro files in an {@link AvroStore}: one file, a segment, per publish. The segments of
- * a topic are numbered without gaps, and a consumer reads a topic segment by segment, polling for the next.
+ * A client that keeps topics as Avro files in an {@link AvroStore}. A producer buffers on a local disk and uploads one
+ * large Avro file, a segment, per upload window ({@link AvroUploadWindow}); its messages are visible to consumers once
+ * the window is uploaded. The segments of a topic are numbered without gaps, and a consumer reads a topic segment by
+ * segment, polling for the next.
  * <p>
  * Only one process writes a topic. When this client first publishes to a topic it reads where the topic ends; after
- * that it creates the segment after the last one it wrote, and the store creates a segment only if it does not exist.
- * If it does, another process wrote the topic, and the publish fails with {@link RawdataWriterConflictException},
- * writing nothing; the client then keeps failing to publish to the topic.
+ * that it uploads each window as the segment after the last, and the store creates a segment only if it does not
+ * exist. If it does, another process wrote the topic: the client fails with {@link RawdataWriterConflictException}
+ * and keeps failing to publish to the topic.
+ * <p>
+ * Closing a producer uploads its topic's open window and waits for the uploads; closing the client does that for
+ * every topic. That is how an application shuts down gracefully, for example on SIGTERM.
  * <p>
  * Providers built on this engine, such as {@code filesystem} and {@code gcs}, create it with their store; it owns the
  * store and closes it on {@link #close()}.
@@ -45,14 +51,20 @@ public final class AvroRawdataClient implements RawdataClient {
     private static final AtomicInteger THREADS = new AtomicInteger();
 
     private final AvroStore store;
+    private final AvroUploadWindow window;
     private final long pollIntervalMillis;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<Object> open = ConcurrentHashMap.newKeySet(); // producers and consumers
     private final Map<String, Tail> tails = new ConcurrentHashMap<>(); // the last segment seen of each topic
-    private final Map<String, Tail> written = new ConcurrentHashMap<>(); // where this client writes each topic from
+    private final Map<String, AvroTopicWriter> writers = new ConcurrentHashMap<>();
     private final Map<String, ReentrantLock> publishLocks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "rawdata-avro-" + THREADS.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "rawdata-avro-window-" + THREADS.incrementAndGet());
         thread.setDaemon(true);
         return thread;
     });
@@ -68,10 +80,12 @@ public final class AvroRawdataClient implements RawdataClient {
      * Creates a client on a store.
      *
      * @param store              the store; the client closes it
+     * @param window             how producers buffer before they upload
      * @param pollIntervalMillis how often a waiting consumer looks for a new segment, 1 or more
      */
-    public AvroRawdataClient(AvroStore store, long pollIntervalMillis) {
+    public AvroRawdataClient(AvroStore store, AvroUploadWindow window, long pollIntervalMillis) {
         this.store = Objects.requireNonNull(store, "store");
+        this.window = Objects.requireNonNull(window, "window");
         if (pollIntervalMillis < 1) {
             throw new IllegalArgumentException("The poll interval must be 1 ms or more: " + pollIntervalMillis);
         }
@@ -141,16 +155,46 @@ public final class AvroRawdataClient implements RawdataClient {
         return new AvroRawdataMetadataClient(this, checked(topic));
     }
 
+    /**
+     * Closes the topic's open upload window and waits until every window of the topic this client buffered is
+     * uploaded and visible. Nothing to do if the client has not published to the topic.
+     *
+     * @param topic the topic
+     * @throws RawdataException if an upload failed (the windows stay on disk), or another process writes the topic
+     */
+    public void flush(String topic) {
+        AvroTopicWriter writer = writers.get(checked(topic));
+        if (writer != null) {
+            writer.flush();
+        }
+    }
+
     @Override
     public boolean isClosed() {
         return closed.get();
     }
 
+    /**
+     * Closes the client: uploads every open window and waits for the uploads, then closes the producers, consumers
+     * and store.
+     *
+     * @throws RawdataException if an upload failed; the client is closed, and the windows not uploaded stay on disk
+     *                          for the next writer of the topic
+     */
     @Override
     public void close() {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+        RawdataException failed = null;
+        for (AvroTopicWriter writer : writers.values()) {
+            try {
+                writer.close();
+            } catch (RawdataException e) {
+                failed = failed == null ? e : failed;
+            }
+        }
+        writers.clear();
         for (Object producerOrConsumer : open) {
             if (producerOrConsumer instanceof AvroRawdataProducer producer) {
                 producer.close();
@@ -158,8 +202,12 @@ public final class AvroRawdataClient implements RawdataClient {
                 consumer.close();
             }
         }
+        scheduler.shutdownNow();
         executor.shutdownNow();
         store.close();
+        if (failed != null) {
+            throw failed;
+        }
     }
 
     // ---- for the producers, consumers and metadata clients
@@ -170,6 +218,36 @@ public final class AvroRawdataClient implements RawdataClient {
 
     ExecutorService executor() {
         return executor;
+    }
+
+    ScheduledExecutorService scheduler() {
+        return scheduler;
+    }
+
+    /**
+     * The writer of a topic, started on the first publish. Called with the topic's publish lock held.
+     */
+    AvroTopicWriter writer(String topic) {
+        AvroTopicWriter writer = writers.computeIfAbsent(topic, t -> {
+            checkOpen();
+            return AvroTopicWriter.start(this, t, window);
+        });
+        if (isClosed()) { // close() may have gone over the writers before this one was added
+            writers.remove(topic, writer);
+            writer.close();
+            throw new RawdataClosedException("client is closed");
+        }
+        return writer;
+    }
+
+    /**
+     * A producer closed: uploads its topic's open window and waits, as 2.x did.
+     */
+    void producerClosed(String topic) {
+        AvroTopicWriter writer = writers.get(topic);
+        if (writer != null && !isClosed()) {
+            writer.flush();
+        }
     }
 
     ReentrantLock publishLock(String topic) {
@@ -187,24 +265,15 @@ public final class AvroRawdataClient implements RawdataClient {
     }
 
     /**
-     * Wakes this client's consumers of a topic after a publish, so they need not wait for their next poll.
+     * A segment was uploaded: wakes this client's consumers of the topic, so they need not wait for their next poll.
      */
-    void published(String topic, Tail tail) {
-        written.put(topic, tail);
+    void uploaded(String topic, Tail tail) {
         tails.merge(topic, tail, (seen, created) -> seen.segment() >= created.segment() ? seen : created);
         for (Object producerOrConsumer : open) {
             if (producerOrConsumer instanceof AvroRawdataConsumer consumer && consumer.topic().equals(topic)) {
                 consumer.wake();
             }
         }
-    }
-
-    /**
-     * Returns the last segment this client wrote of a topic, or, before its first publish to the topic, the topic's
-     * last segment as it is now. Called with the topic's publish lock held.
-     */
-    Tail writerTail(String topic) {
-        return written.computeIfAbsent(topic, this::tail);
     }
 
     /**

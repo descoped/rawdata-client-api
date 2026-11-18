@@ -13,10 +13,19 @@
     <packaging>jar</packaging>
 
     <name>Rawdata Client Provider Avro Engine</name>
-    <description>The Avro engine of the file and object store providers (filesystem, gcs, s3): topics as Avro files, one per publish, in an AvroStore.</description>
+    <description>The Avro engine of the file and object store providers (filesystem, gcs, s3): topics as Avro files, one per upload window, in an AvroStore.</description>
 
     <build>
         <plugins>
+            <!-- The engine's own tests (failure paths with a store that holds back or fails uploads) are in the engine's
+                 package and run on the class path. The provider contract is tested through filesystem, gcs and s3. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                </configuration>
+            </plugin>
             <!-- Avro is an automatic module (no module-info, a stable Automatic-Module-Name), which javac reports with
                  -Xlint:requires-automatic; that is expected here, every other lint warning still fails. -->
             <plugin>
@@ -84,6 +93,36 @@
             <artifactId>commons-codec</artifactId>
             <version>${commons-codec.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <profiles>
+        <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.provider.avro, even
+             though Surefire is set to the class path (see the postgres module). Maven and CI never activate it. -->
+        <profile>
+            <id>intellij</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.avro=ALL-UNNAMED,org.junit.jupiter.api --add-opens io.descoped.rawdata.provider.avro/io.descoped.rawdata.provider.avro=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

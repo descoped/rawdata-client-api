@@ -1,6 +1,7 @@
 package io.descoped.rawdata.provider.filesystem;
 
 import io.descoped.rawdata.provider.avro.AvroStore;
+import io.descoped.rawdata.provider.avro.AvroTopicFolders;
 
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
@@ -9,7 +10,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -33,9 +33,6 @@ import java.util.stream.Stream;
 final class FilesystemAvroStore implements AvroStore {
 
     private static final int MAX_NAME_LENGTH = 255;
-    private static final Set<String> WINDOWS_DEVICES = Set.of("con", "prn", "aux", "nul",
-            "com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-            "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9");
 
     private final Path folder;
 
@@ -129,27 +126,7 @@ final class FilesystemAvroStore implements AvroStore {
     }
 
     private Path topicFolder(String topic) {
-        return folder.resolve(folderName(topic));
-    }
-
-    static String folderName(String topic) {
-        StringBuilder name = new StringBuilder(topic.length() + 4);
-        String base = topic.contains(".") ? topic.substring(0, topic.indexOf('.')) : topic;
-        if (WINDOWS_DEVICES.contains(base.toLowerCase(Locale.ROOT))) {
-            name.append('~');
-        }
-        for (int i = 0; i < topic.length(); i++) {
-            char c = topic.charAt(i);
-            if (c >= 'A' && c <= 'Z') {
-                name.append('^').append(Character.toLowerCase(c));
-            } else {
-                name.append(c);
-            }
-        }
-        if (topic.endsWith(".")) {
-            name.append('^');
-        }
-        return name.toString();
+        return folder.resolve(AvroTopicFolders.folderName(topic));
     }
 
     private Path segment(String topic, long segment) {

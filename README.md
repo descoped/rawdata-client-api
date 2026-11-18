@@ -95,7 +95,8 @@ For using the library:
 - [The contract](docs/contract.md): topics, ids, ordering, reading, metadata and closing, the same in every provider.
 - The providers: [`postgres`](docs/providers/postgres.md), [`filesystem`](docs/providers/filesystem.md),
   [`gcs`](docs/providers/gcs.md), [`s3`](docs/providers/s3.md),
-  [`memory` and `discard`](docs/providers/memory-and-discard.md).
+  [`memory` and `discard`](docs/providers/memory-and-discard.md), and
+  [the upload window](docs/providers/upload-window.md) that `filesystem`, `gcs` and `s3` share.
 - [The copy tool](docs/copy-tool.md): copying topics, and moving a system to another store or cloud.
 
 For working on the code:

@@ -10,7 +10,9 @@ and [`s3`](s3.md) share.
 |---|---|---|
 | `rawdata.client.provider` | | `filesystem` |
 | `filesystem.storage-folder` | | required; created if missing |
-| `filesystem.poll-interval-ms` | `250` | how often a waiting consumer looks for new messages |
+| `listing.min-interval-seconds` | `1` | how often a waiting consumer looks for new messages, in seconds; `0` as often as it asks |
+| `local-temp-folder` | | required; where producers buffer, see [the upload window](upload-window.md) |
+| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads` | `60`, 64 MiB, 512 KiB, `4` | the window; see [the upload window](upload-window.md) |
 
 ## Layout
 
@@ -20,9 +22,8 @@ and [`s3`](s3.md) share.
                                /metadata/k<hex of the key>
 ```
 
-Each publish is one segment, a plain Avro file of its messages (record `io.descoped.rawdata.RawdataMessage`: `id` as
-`fixed(16)`, `orderingGroup`, `sequenceNumber`, `position`, `content` as an array of `{name, value}`). Segments are
-numbered 0, 1, 2… without gaps.
+Each upload window is one segment, a plain Avro file of its messages in the 2.x schema (see
+[the upload window](upload-window.md#the-segments-avro-file)). Segments are numbered 0, 1, 2… without gaps.
 
 The topic folder is the topic name, with `^` and the letter in lower case for each upper-case letter, `^` after a
 trailing `.`, and `~` before a Windows device name (`con`, `nul`, `com1`…), so topics that differ only by case stay
@@ -31,13 +32,12 @@ of the key's UTF-8 bytes, so a metadata key is at most 127 bytes.
 
 ## Writing a segment
 
-A publish writes its segment to a temporary file in the topic folder, then hard-links it to the next segment number,
-which fails if the number is taken: then another process wrote the topic, and the publish throws
-`RawdataWriterConflictException` (see [one writer per topic](../contract.md#one-writer-per-topic)). Readers never see
-part of a file.
+Producers buffer in [upload windows](upload-window.md). Uploading a window writes it to a temporary file in the topic
+folder, then hard-links it to the next segment number. The link fails if the number is taken: another process wrote
+the topic, and the writer fails with `RawdataWriterConflictException` (see
+[one writer per topic](../contract.md#one-writer-per-topic)). Readers never see part of a file.
 The folder must be on a file system with hard links and atomic moves: a local file system on Linux, macOS or
 Windows. A writer that crashes between the two steps leaves a `.*.tmp` file behind; nothing reads it, and it can be
 deleted.
 
-Messages are visible and durable when `publish` returns. Many small publishes make many small files: publish in
-batches (`publish(List)`) where you can.
+Messages are visible once their window is uploaded.

@@ -1,12 +1,12 @@
 package io.descoped.rawdata.provider.s3.test;
 
-import io.descoped.rawdata.tck.RawdataClientContractTest;
+import io.descoped.rawdata.tck.avro.AvroClientContractTest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.OptionalInt;
 
-class S3ContractTest extends RawdataClientContractTest {
+class S3ContractTest extends AvroClientContractTest {
 
     private static final String PREFIX = "contract/";
 

@@ -32,8 +32,18 @@ final class LiveS3 {
         configuration.put("s3.bucket-name", BUCKET);
         configuration.put("s3.region", REGION);
         configuration.put("s3.prefix", RUN + prefix);
-        configuration.put("s3.poll-interval-ms", "200");
+        configuration.put("s3.listing.min-interval-seconds", "0");
+        configuration.put("local-temp-folder", bufferFolder());
+        configuration.put("avro-file.max.seconds", "1");
         return configuration;
+    }
+
+    private static String bufferFolder() {
+        try {
+            return java.nio.file.Files.createTempDirectory("rawdata-buffer").toString(); // a folder per client, as per process
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     /**
