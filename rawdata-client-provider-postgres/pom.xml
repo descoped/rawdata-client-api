@@ -96,7 +96,9 @@
     <profiles>
         <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.provider.postgres, even though Surefire is set to the
              class path. The module does not open the test package to JUnit or read the test modules, so every test
-             failed there with InaccessibleObjectException. IntelliJ sets idea.maven.embedder.version when it imports
+             failed there with InaccessibleObjectException. It also puts junit-jupiter-params on the class path while
+             junit-platform-commons is a module, which exports its util and logging packages only to JUnit's modules,
+             so parameterized tests failed with IllegalAccessError. IntelliJ sets idea.maven.embedder.version when it imports
              the project and passes Surefire's argLine to its test runs; Maven and CI never activate this profile. -->
         <profile>
             <id>intellij</id>
@@ -111,7 +113,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.postgres=ALL-UNNAMED,org.junit.jupiter.api,io.descoped.rawdata.tck --add-opens io.descoped.rawdata.provider.postgres/io.descoped.rawdata.provider.postgres.test=ALL-UNNAMED,org.junit.platform.commons</argLine>
+                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.postgres=ALL-UNNAMED,org.junit.jupiter.api,io.descoped.rawdata.tck --add-opens io.descoped.rawdata.provider.postgres/io.descoped.rawdata.provider.postgres.test=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
                         </configuration>
                     </plugin>
                 </plugins>
