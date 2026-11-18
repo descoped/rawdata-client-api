@@ -36,8 +36,8 @@
                 </configuration>
             </plugin>
             <!-- Keeps the exclusions on google-cloud-storage from quietly lapsing: a Google release that adds or
-                 renames a gRPC, Conscrypt or OpenTelemetry artifact fails the build instead of growing the provider
-                 again. Add the new artifact to the exclusions. -->
+                 renames a gRPC, Conscrypt, OpenTelemetry or excluded legacy artifact fails the build instead of
+                 growing the provider again. Add the new artifact to the exclusions. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -61,6 +61,13 @@
                                         <exclude>io.opentelemetry.contrib</exclude>
                                         <exclude>org.conscrypt</exclude>
                                         <exclude>dev.cel</exclude>
+                                        <exclude>org.apache.httpcomponents</exclude>
+                                        <exclude>com.google.http-client:google-http-client-apache-v2</exclude>
+                                        <exclude>com.google.cloud:google-cloud-monitoring</exclude>
+                                        <exclude>io.opentelemetry:opentelemetry-sdk*</exclude>
+                                        <exclude>io.opentelemetry.semconv</exclude>
+                                        <exclude>com.google.android:annotations</exclude>
+                                        <exclude>org.threeten:threeten-extra</exclude>
                                     </excludes>
                                     <includes>
                                         <include>io.grpc:grpc-api</include>
@@ -104,9 +111,65 @@
             <version>${google-cloud-storage.version}</version>
             <!-- The provider uses the JSON API over HTTP (StorageOptions.newBuilder()), never the gRPC transport, so
                  gRPC (except grpc-api and grpc-context, which the HTTP client loads), its GCS stubs, Conscrypt and the
-                 OpenTelemetry metrics exporter are left out: 70 jars instead of 98. The tests against the fake GCS
-                 and the JPMS smoke test check that nothing missing is loaded. -->
+                 OpenTelemetry metrics exporter are left out. So are the legacy jars the HTTP path never loads: Apache
+                 HttpClient 4 (end of life) and Google's adapter to it (the client uses the JDK's HTTP), Cloud
+                 Monitoring and the OpenTelemetry SDK (metrics export only), com.google.android:annotations and
+                 threeten-extra. 56 dependencies instead of 98. The tests against the fake GCS and the JPMS smoke test check
+                 that nothing missing is loaded. Kept, because the HTTP path loads them: google-http-client-appengine,
+                 OpenCensus, jsr305, threetenbp. -->
             <exclusions>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpclient</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpcore</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.http-client</groupId>
+                    <artifactId>google-http-client-apache-v2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.cloud</groupId>
+                    <artifactId>google-cloud-monitoring</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk-metrics</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk-trace</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk-logs</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry.semconv</groupId>
+                    <artifactId>opentelemetry-semconv</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.android</groupId>
+                    <artifactId>annotations</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.threeten</groupId>
+                    <artifactId>threeten-extra</artifactId>
+                </exclusion>
                 <!-- One version of each in applications: these come through rawdata-client-provider-avro, at the
                      newest version; checker-qual (annotations, not needed at run time) is declared below for compiling
                      only. -->

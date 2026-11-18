@@ -45,8 +45,8 @@ this repository, and the work toward it is under way module by module.
   Google libraries also split packages among themselves (`google-cloud-core` and `proto-google-common-protos` both
   have `com.google.cloud`), so they cannot be modules: an application puts the rawdata modules, `gcs` included, on the
   module path and the Google libraries on the class path (with `--add-modules ALL-MODULE-PATH`), or everything on the
-  class path. `gcs` excludes Google's gRPC transport, which it does not use. A module whose
-  exported API exposes another module's types `requires transitive` it. The API module declares `uses` for
+  class path. `gcs` excludes what Google's HTTP path never loads (gRPC, Cloud Monitoring, the OpenTelemetry SDK,
+  Apache HttpClient 4 and other legacy jars), and bans them with the enforcer. A module whose exported API exposes another module's types `requires transitive` it. The API module declares `uses` for
   `RawdataClientInitializer`. Providers are registered both with `provides` in `module-info.java` and in
   `META-INF/services`, so they work on the module path and the class path (gcs: `META-INF/services` only).
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
