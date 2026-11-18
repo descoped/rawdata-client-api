@@ -3,7 +3,7 @@
 ## Requirements
 
 - **JDK 17**, the baseline. Every module compiles with `--release 17`, so a newer JDK builds the same class files.
-  Its `javac` gives other warnings, though, and the build fails on warnings. CI builds on JDK 17 only, so build on 17
+  Its `javac` gives fewer warnings, though, and the build fails on warnings. CI builds on JDK 17 only, so build on 17
   to see what CI sees:
   ```sh
   export JAVA_HOME=$(/usr/libexec/java_home -v 17)     # macOS; or the path of your JDK 17
@@ -74,7 +74,9 @@ Run it after changing a `module-info`, a dependency or how providers are found.
 
 ## CI
 
-`.github/workflows/ci.yml`, one job on JDK 17, for pull requests and pushes to `master`:
+`.github/workflows/ci.yml`, one job on JDK 17, for pull requests to `master`, pushes to `master` and release tags
+(`3.0.0`). Changes that touch only Markdown files, `.claude/`, `LICENSE` and similar skip it (`paths-ignore`): a
+docs-only pull request gets the review, but no build.
 1. `./mvnw verify javadoc:javadoc`, with `-P coverage` for pull requests from this repository and pushes;
 2. the JPMS smoke test;
 3. the SonarCloud analysis (`-P sonar`, project `descoped_rawdata-client-project`). It doesn't gate the build, but

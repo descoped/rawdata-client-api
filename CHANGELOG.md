@@ -18,11 +18,11 @@ code. Java 17 or newer.
 - One version of each library in every module's compile and runtime dependencies, checked by the build: slf4j 2,
   Jackson and commons-codec are declared by the providers at the newest version and excluded from HikariCP, Avro
   and google-cloud-storage (which also no longer brings checker-qual).
-- Every module is a JPMS module (`gcs` an automatic one, see below).
+- Every module is a JPMS module (`gcs` an automatic one, see below). CI checks the providers on the module path and
+  the class path.
 - Documentation in `docs/`: for users (getting started, the contract, the providers, the copy tool) and for
   developers (architecture, building and testing, dependencies, writing a provider, releasing, troubleshooting).
-  The README is the getting-started for the repository. CI checks the providers on the module path and
-  the class path.
+  The README is the getting-started for the repository.
 
 ### API
 

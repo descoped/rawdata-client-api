@@ -106,7 +106,8 @@ For working on the code:
 ## Contributing
 
 Work goes in pull requests to `master`. A pull request needs a green CI build on JDK 17 and passes a SonarCloud
-analysis and an automated review. Before you open one:
+analysis and an automated review (a pull request that changes only Markdown files skips the build, and gets the
+review). Before you open one:
 
 - build and test on JDK 17 (`./mvnw verify javadoc:javadoc`, and `src/it/jpms/run.sh` for module or dependency
   changes);
