@@ -157,19 +157,18 @@ final class GcsClient {
     }
 
     private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request) throws IOException {
-        boolean refreshed = false;
+        HttpResponse<byte[]> response = sendWithRetries(request);
+        if (response.statusCode() == UNAUTHORIZED && credentials.authorization().isPresent()) {
+            credentials.invalidate(); // revoked, or the clock is off: once more with a new token
+            response = sendWithRetries(request);
+        }
+        return response;
+    }
+
+    private HttpResponse<byte[]> sendWithRetries(Supplier<HttpRequest.Builder> request) throws IOException {
         for (int attempt = 1; ; attempt++) {
             try {
-                HttpRequest.Builder builder = request.get().timeout(REQUEST_TIMEOUT);
-                Optional<String> authorization = credentials.authorization(); // a token request is retried like the call
-                authorization.ifPresent(value -> builder.header("Authorization", value));
-                HttpResponse<byte[]> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
-                if (response.statusCode() == UNAUTHORIZED && authorization.isPresent() && !refreshed) {
-                    credentials.invalidate(); // revoked, or the clock is off: once more with a new token
-                    refreshed = true;
-                    attempt--;
-                    continue;
-                }
+                HttpResponse<byte[]> response = sendOnce(request);
                 if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
                     return response;
                 }
@@ -179,11 +178,19 @@ final class GcsClient {
                 if (attempt == MAX_ATTEMPTS) {
                     throw e;
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw interrupted(e);
             }
             backOff(attempt);
+        }
+    }
+
+    private HttpResponse<byte[]> sendOnce(Supplier<HttpRequest.Builder> request) throws IOException {
+        HttpRequest.Builder builder = request.get().timeout(REQUEST_TIMEOUT);
+        credentials.authorization().ifPresent(value -> builder.header("Authorization", value)); // a token request is retried like the call
+        try {
+            return http.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw interrupted(e);
         }
     }
 

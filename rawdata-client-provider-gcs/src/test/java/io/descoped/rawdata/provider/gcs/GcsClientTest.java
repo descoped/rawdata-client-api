@@ -91,8 +91,7 @@ class GcsClientTest {
     void aFailedTokenRequestIsRetried() throws Exception {
         AtomicInteger tokens = new AtomicInteger();
         try (LocalHttp google = new LocalHttp(request -> request.path().endsWith("/token")
-                ? (tokens.incrementAndGet() == 1 ? LocalHttp.Response.json(503, "{}")
-                : LocalHttp.Response.json(200, "{\"access_token\":\"t\",\"expires_in\":3600}"))
+                ? LocalHttp.Response.json(tokens.incrementAndGet() == 1 ? 503 : 200, "{\"access_token\":\"t\",\"expires_in\":3600}")
                 : LocalHttp.Response.json(200, "{\"generation\":\"1\"}"))) {
             GcsCredentials metadata = new GcsCredentials.MetadataServer(google.root(), java.net.http.HttpClient.newHttpClient(), java.time.Clock.systemUTC());
             assertEquals(1, new GcsClient(google.root(), metadata).generation("b", "o").getAsLong());
