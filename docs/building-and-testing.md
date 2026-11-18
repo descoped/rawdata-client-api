@@ -9,7 +9,7 @@
   export JAVA_HOME=$(/usr/libexec/java_home -v 17)     # macOS; or the path of your JDK 17
   ./mvnw -v                                           # check: Java version: 17
   ```
-- **Docker**, for the Testcontainers tests (postgres, gcs, the copy tool) and the JPMS smoke test.
+- **Docker**, for the Testcontainers tests (postgres, gcs, s3, the copy tool) and the JPMS smoke test.
 - **Maven** comes with the wrapper. `./mvnw` downloads the version in `.mvn/wrapper/maven-wrapper.properties` and
   checks it against `distributionSha256Sum`. A wrong checksum fails the build.
 
@@ -38,6 +38,7 @@ The build fails fast on mistakes that are easy to miss:
 | `rawdata-client-provider-postgres` | the contract and the provider's own tests on PostgreSQL 18 (`postgres:18-alpine`) | class path | Docker |
 | `rawdata-client-provider-avro` | the contract and the `filesystem` tests | module path, test module `io.descoped.rawdata.provider.avro.test` | |
 | `rawdata-client-provider-gcs` | the contract and the provider's tests against `fsouza/fake-gcs-server`; the client and credentials against a local server | class path | Docker |
+| `rawdata-client-provider-s3` | the contract and the provider's tests against `adobe/s3mock`; live tests against real S3 with `-Drawdata.s3.live=true` | class path | Docker (live: AWS credentials) |
 | `rawdata-copy-util` | the tool: arguments, copies, resume, filesystem → postgres | class path | Docker |
 
 Testcontainers' own jars split packages, so tests that use it run on the class path. Applications never get test
@@ -62,10 +63,10 @@ topic or the layout in the store, goes in the provider's own test class (`*Provi
 
 ### The JPMS smoke test
 
-`src/it/jpms/run.sh` builds the reactor, starts PostgreSQL 18 and a fake GCS in Docker, and runs a small application
-module (`src/it/jpms/app`) that requires only `io.descoped.rawdata.api`. It checks that:
-- the service loader finds all five providers;
-- a topic round-trips through `filesystem`, `postgres` and `gcs`, with order, `lastMessage` and metadata;
+`src/it/jpms/run.sh` builds the reactor, starts PostgreSQL 18, a fake GCS and S3Mock in Docker, and runs a small
+application module (`src/it/jpms/app`) that requires only `io.descoped.rawdata.api`. It checks that:
+- the service loader finds all six providers;
+- a topic round-trips through `filesystem`, `postgres`, `gcs` and `s3`, with order, `lastMessage` and metadata;
 - this works both with everything on the module path and with everything on the class path;
 - `jdeps --check` finds nothing to change in the module declarations.
 
@@ -93,11 +94,13 @@ CI publishes nothing.
 - **A real GCS bucket:** the [`gcs` configuration](providers/gcs.md#configuration) with
   `gcs.credentials=application-default` after `gcloud auth application-default login`. The copy tool is the easiest
   way to try it.
+- **Real S3:** the [live tests](providers/s3.md#tests), or the [`s3` configuration](providers/s3.md#configuration)
+  with an AWS profile.
 
 ## The IDE
 
-**IntelliJ IDEA** imports the Maven project as is. It runs the postgres, gcs and copy-util tests on the module path,
-even though Surefire uses the class path. The `intellij` profile in those POMs (and gcs's) gives those runs the
+**IntelliJ IDEA** imports the Maven project as is. It runs the postgres, gcs, s3 and copy-util tests on the module path,
+even though Surefire uses the class path. The `intellij` profile in those POMs gives those runs the
 `--add-reads`, `--add-opens` and `--add-exports` they need. IntelliJ activates the profile itself
 (`idea.maven.embedder.version`), and Maven never does. After changing a POM, reload the Maven project.
 

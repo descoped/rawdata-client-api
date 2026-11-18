@@ -20,12 +20,12 @@ import java.util.UUID;
 
 /**
  * Lists the providers the service loader finds, and writes and reads a topic through each store it is given:
- * filesystem always, postgres and gcs when their system properties are set (smoke.postgres.port,
- * smoke.gcs.endpoint). Exits with 1 on the first failure.
+ * filesystem always, postgres, gcs and s3 when their system properties are set (smoke.postgres.port,
+ * smoke.gcs.endpoint, smoke.s3.endpoint). Exits with 1 on the first failure.
  */
 public final class Smoke {
 
-    private static final List<String> PROVIDERS = List.of("discard", "filesystem", "gcs", "memory", "postgres");
+    private static final List<String> PROVIDERS = List.of("discard", "filesystem", "gcs", "memory", "postgres", "s3");
 
     private Smoke() {
     }
@@ -67,6 +67,21 @@ public final class Smoke {
             gcs.put("gcs.prefix", layout + "/");
             gcs.put("gcs.poll-interval-ms", "50");
             roundTrip(layout, gcs);
+        }
+        String s3Endpoint = System.getProperty("smoke.s3.endpoint");
+        if (s3Endpoint != null) {
+            Map<String, String> s3 = new HashMap<>();
+            s3.put(RawdataClient.PROVIDER_KEY, "s3");
+            s3.put("s3.bucket-name", "rawdata");
+            s3.put("s3.region", "us-east-1");
+            s3.put("s3.endpoint", s3Endpoint);
+            s3.put("s3.path-style-access", "true");
+            s3.put("s3.credentials", "static");
+            s3.put("s3.access-key-id", "smoke");
+            s3.put("s3.secret-access-key", "smoke");
+            s3.put("s3.prefix", layout + "/");
+            s3.put("s3.poll-interval-ms", "50");
+            roundTrip(layout, s3);
         }
     }
 

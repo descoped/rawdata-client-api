@@ -78,11 +78,14 @@ What to watch:
 - **Retries after a lost response.** A client that retries a create after the response was lost sees its own
   segment and a failed condition. Compare the stored bytes with your own: an Avro file carries a random sync marker,
   so equal bytes mean it was your write. Return true then.
+- **Test several writers against the real store** when the emulator's conditional create is not atomic (S3Mock's is
+  not): the contract passes either way, but two writers would both win.
 - **Names.** Topic names reach the store validated and are case-sensitive. Metadata names are `k` plus lowercase hex.
   Refuse a name that is too long for the store with `IllegalArgumentException`.
 - **Errors.** Throw `IOException` for store failures; the client wraps them.
 
-The [`filesystem`](providers/filesystem.md) and [`gcs`](providers/gcs.md) stores are short examples.
+The [`filesystem`](providers/filesystem.md), [`gcs`](providers/gcs.md) and [`s3`](providers/s3.md) stores are short
+examples.
 
 ## The contract tests
 

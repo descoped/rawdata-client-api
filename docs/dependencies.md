@@ -28,9 +28,16 @@ not the newer. So:
 
 | Library | Declared in | Excluded from |
 |---|---|---|
-| `slf4j-api` | postgres, avro | HikariCP, Avro |
+| `slf4j-api` | postgres, avro, s3 | HikariCP, Avro, the AWS SDK |
 | `jackson-core`, `jackson-databind` | avro (and gcs, which uses it) | Avro |
 | `commons-codec` | avro | Avro (through commons-compress) |
+
+### The AWS SDK in `s3`
+
+The SDK brings an HTTP client of its own choosing: Apache by default, Netty for async. `s3` uses the SDK's
+`url-connection-client` (the JDK's `HttpURLConnection`) and excludes `apache-client`, `apache5-client` and
+`netty-nio-client`; the enforcer execution `aws-http-clients` bans them, the CRT, Netty and Apache HttpComponents, so
+an SDK update cannot bring them back unnoticed.
 
 To see what a module resolves: `./mvnw dependency:tree -pl <module>`.
 

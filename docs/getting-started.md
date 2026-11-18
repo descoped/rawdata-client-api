@@ -36,6 +36,7 @@ Java 17 or newer. Import the BOM, then add the API and the providers you use:
 | `rawdata-client-provider-postgres` | `postgres` |
 | `rawdata-client-provider-avro` | `filesystem` |
 | `rawdata-client-provider-gcs` | `gcs` (brings `rawdata-client-provider-avro`) |
+| `rawdata-client-provider-s3` | `s3` (brings `rawdata-client-provider-avro` and the AWS SDK) |
 
 Code depends on the API only; a provider is chosen by configuration and found by the service loader.
 

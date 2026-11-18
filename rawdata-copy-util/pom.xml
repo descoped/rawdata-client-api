@@ -110,6 +110,12 @@
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>io.descoped.rawdata</groupId>
+            <artifactId>rawdata-client-provider-s3</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
         <!-- Where HikariCP and Avro log; warnings and errors only (simplelogger.properties). -->
         <dependency>
             <groupId>org.slf4j</groupId>

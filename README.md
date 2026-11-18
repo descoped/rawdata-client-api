@@ -3,10 +3,10 @@
 A Java library for writing and reading ordered streams of raw data messages, with one API over several stores.
 
 A **topic** is a stream of messages ordered by id, a UUIDv7 laid out as PostgreSQL 18's `uuidv7()`. Each message has
-your own position (for example a key in the source system), optional ordering fields, and named binary content.
-Every topic also has a small metadata store, for example for checkpoints. Applications code against `RawdataClient`
-and choose the store by configuration: PostgreSQL, Avro files in a folder, or Google Cloud Storage. Consumers are
-pulled: the application takes one message, or a batch of the size it chooses.
+your own position (for example a key in the source system), optional ordering fields, and named binary content. Every
+topic also has a small metadata store, for example for checkpoints. Applications code against `RawdataClient` and
+choose the store by configuration: PostgreSQL, Avro files in a folder, Google Cloud Storage or Amazon S3. Consumers
+are pulled: the application takes one message, or a batch of the size it chooses.
 
 ```java
 try (RawdataClient client = RawdataClient.create(Map.of("rawdata.client.provider", "memory"))) {
@@ -31,8 +31,9 @@ Version 3.0.0 is in progress on `master`; the last release is 2.0.0. 3.0 is a cl
 | `rawdata-client-api` | the API, the provider service, the `spi` base classes, and the `memory` and `discard` providers |
 | `rawdata-client-tck` | the contract every provider passes, as JUnit 6 tests to extend |
 | `rawdata-client-provider-postgres` | provider `postgres`, on PostgreSQL 18 |
-| `rawdata-client-provider-avro` | provider `filesystem` (Avro files in a local folder), and the Avro engine that `gcs` shares |
+| `rawdata-client-provider-avro` | provider `filesystem` (Avro files in a local folder), and the Avro engine that `gcs` and `s3` share |
 | `rawdata-client-provider-gcs` | provider `gcs` (Avro files in a Google Cloud Storage bucket) |
+| `rawdata-client-provider-s3` | provider `s3` (Avro files in an Amazon S3 bucket) |
 | `rawdata-copy-util` | `rawdata-copy`, a command-line tool that copies topics between stores and clouds |
 | `rawdata-client-bom` | a BOM that aligns the versions of the modules above |
 
@@ -44,7 +45,8 @@ Maven group `io.descoped.rawdata`, Java 17 or newer, every module a JPMS module.
 
 - **JDK 17 or newer.** The build targets Java 17 (`--release 17`), and CI builds on JDK 17. Build on 17 to see what
   CI sees: a newer `javac` gives fewer warnings, and warnings fail the build.
-- **Docker**, for the postgres, gcs and copy tool tests: Testcontainers starts PostgreSQL 18 and a fake GCS server.
+- **Docker**, for the postgres, gcs, s3 and copy tool tests: Testcontainers starts PostgreSQL 18, a fake GCS server
+  and S3Mock.
 - Maven comes with the wrapper (`./mvnw`); nothing else to install.
 
 ### Build and test
@@ -58,7 +60,7 @@ cd rawdata-client-project
 src/it/jpms/run.sh               # JPMS smoke test: every provider on the module path and the class path
 ```
 
-`./mvnw verify` takes a few minutes; most of it is the postgres and gcs tests. To work on one module:
+`./mvnw verify` takes a few minutes; most of it is the postgres, gcs and s3 tests. To work on one module:
 `./mvnw verify -pl rawdata-client-provider-postgres -am`.
 
 ### Run something
@@ -91,7 +93,8 @@ For using the library:
 - [Getting started](docs/getting-started.md): dependencies, a first producer and consumer, logging, the module path.
 - [The contract](docs/contract.md): topics, ids, ordering, reading, metadata and closing, the same in every provider.
 - The providers: [`postgres`](docs/providers/postgres.md), [`filesystem`](docs/providers/filesystem.md),
-  [`gcs`](docs/providers/gcs.md), [`memory` and `discard`](docs/providers/memory-and-discard.md).
+  [`gcs`](docs/providers/gcs.md), [`s3`](docs/providers/s3.md),
+  [`memory` and `discard`](docs/providers/memory-and-discard.md).
 - [The copy tool](docs/copy-tool.md): copying topics, and moving a system to another store or cloud.
 
 For working on the code:

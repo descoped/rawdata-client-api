@@ -1,8 +1,8 @@
 # The copy tool
 
 `rawdata-copy` copies topics from one store to another, keeping ids and order: a backup, or a move from one provider
-or cloud to another, for example from `gcs` to `postgres` on another cloud. When a target topic has messages, the copy
-continues after its last id, so a copy that stopped can be run again.
+or cloud to another, for example from `gcs` to `s3`, or to `postgres` on another cloud. When a target topic has
+messages, the copy continues after its last id, so a copy that stopped can be run again.
 
 It is distributed as `rawdata-copy-<version>.zip` (the jar and `lib/` with every provider) on GitHub releases, not
 on Maven Central. To build it: `./mvnw -pl rawdata-copy-util -am package -DskipTests`, which writes
@@ -57,4 +57,4 @@ rawdata-copy --config <file> [options] <topic>[:<target-topic>]...
 
 A start point earlier than the target's last id is ignored: the copy always continues after what the target has,
 because a target topic only grows at its end. Each batch is one publish, so with a file-based target
-(`filesystem`, `gcs`) the batch size is the number of messages per file.
+(`filesystem`, `gcs`, `s3`) the batch size is the number of messages per file.

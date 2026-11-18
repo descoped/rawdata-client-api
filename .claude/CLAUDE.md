@@ -17,6 +17,7 @@ tool that copies topics between providers. One Maven reactor, group `io.descoped
 | `rawdata-client-provider-postgres` | `io.descoped.rawdata.provider.postgres` | provider `postgres`: PostgreSQL 18 only, HikariCP, pgjdbc; shared tables `rawdata_message`, `rawdata_content`, `rawdata_metadata` keyed by topic |
 | `rawdata-client-provider-avro` | `io.descoped.rawdata.provider.avro` | the Avro engine (`AvroRawdataClient` on an `AvroStore`) and provider `filesystem` (Avro files in a local folder) |
 | `rawdata-client-provider-gcs` | `io.descoped.rawdata.provider.gcs` | provider `gcs`: the Avro engine on a Google Cloud Storage bucket, through GCS's JSON API on `java.net.http` with Google's OAuth 2.0 done in-house (`GcsClient`, `GcsCredentials`); no Google libraries |
+| `rawdata-client-provider-s3` | `io.descoped.rawdata.provider.s3` | provider `s3`: the Avro engine on an Amazon S3 bucket, through the AWS SDK for Java 2 with its JDK-based `url-connection-client` (Apache, Netty and the CRT excluded and banned); the SDK's default credentials and region chains |
 | `rawdata-copy-util` | `io.descoped.rawdata.copy` | `rawdata-copy` (`RawdataCopyTool`): a command-line tool that copies topics between providers and clouds, resuming after the target's last id; distributed as `rawdata-copy-<version>.zip` (jar and `lib/`) on GitHub releases, not on Central and not in the BOM |
 
 Until 2026-11 every module was a repository of its own; their histories were imported here with `git filter-repo`
@@ -36,8 +37,8 @@ this repository, and the work toward it is under way module by module.
   module's compile and runtime tree has one version of each library (enforcer `dependencyConvergence`; test and
   provided scope, which applications never get, are excluded). When two libraries bring different versions, the module
   that first needs it declares it at the newest version (a property in the root POM) and excludes it from the others:
-  slf4j-api from HikariCP and Avro, Jackson and commons-codec from Avro. Build and test locally on JDK 17, as CI does:
-  a newer javac gives fewer warnings, and warnings fail the build.
+  slf4j-api from HikariCP, Avro and the AWS SDK, Jackson and commons-codec from Avro. Build and test locally on JDK
+  17, as CI does: a newer javac gives fewer warnings, and warnings fail the build.
 - **JPMS.** Every module is a named module, with a `module-info` (the gcs exception ended when gcs dropped Google's
   client libraries, 2026-11-18). Applications can put every module and its dependencies on the module path, or
   everything on the class path; the JPMS smoke test runs both. A module whose exported API exposes another module's
@@ -74,8 +75,8 @@ this repository, and the work toward it is under way module by module.
   (`postgres:18-alpine`) through Testcontainers, so the build needs Docker. They run on the class path (Testcontainers'
   dependencies are automatic modules with split packages). `docker-compose.yml` in the postgres module starts
   PostgreSQL 18 for manual runs (port 5432, user and database `rdc`, password `rdc`).
-- **IntelliJ IDEA** ignores Surefire's `useModulePath=false` and runs the postgres, gcs and copy-util tests on the
-  module path, patched into the main module. A profile `intellij` in those three POMs, active only under IntelliJ's
+- **IntelliJ IDEA** ignores Surefire's `useModulePath=false` and runs the postgres, gcs, s3 and copy-util tests on the
+  module path, patched into the main module. A profile `intellij` in those POMs, active only under IntelliJ's
   import (property `idea.maven.embedder.version`), gives its test runs the `--add-reads`/`--add-opens` they need
   through Surefire's `argLine`. Maven and CI never activate it. The root POM's empty `argLine` property keeps
   `@{argLine}` defined when JaCoCo does not set it.
@@ -85,14 +86,17 @@ this repository, and the work toward it is under way module by module.
 - The `filesystem` tests (shared contract and the provider's own) run offline in a test module of their own,
   `open module io.descoped.rawdata.provider.avro.test`. The `gcs` tests run the same against a fake GCS server
   (`fsouza/fake-gcs-server`) through Testcontainers, on the class path, and its client and credential sources against
-  a local server (`jdk.httpserver`) playing GCS, Google's token endpoint and the metadata server.
+  a local server (`jdk.httpserver`) playing GCS, Google's token endpoint and the metadata server. The `s3` tests run
+  the contract and its own tests against S3Mock (`adobe/s3mock`); S3Mock's `If-None-Match` is not atomic, so several
+  writers on one topic are tested only by the live tests against real S3 (`-Drawdata.s3.live=true`, credentials from
+  the SDK's default chain, never in CI).
 - **Avro invariants**: a topic is segments numbered 0, 1, 2… without gaps, one Avro file per publish, and a publish
   creates the segment after the last only if it does not exist (a hard link on a file system, an upload with the
-  `ifGenerationMatch=0` precondition on GCS). A writer that loses the race reads the new last segment and tries again, so
-  ids grow in segment order across processes. A published message is visible and durable when `publish` returns;
-  there is no local buffer or upload thread.
+  `ifGenerationMatch=0` precondition on GCS, a put with `If-None-Match: *` on S3). A writer that loses the race reads
+  the new last segment and tries again, so ids grow in segment order across processes. A published message is visible
+  and durable when `publish` returns; there is no local buffer or upload thread.
 - **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the
-  API must find all five providers and round-trip through filesystem, PostgreSQL 18 and a fake GCS, both with
+  API must find all six providers and round-trip through filesystem, PostgreSQL 18, a fake GCS and S3Mock, both with
   everything on the module path and with everything on the class path; `jdeps --check`
   must find nothing to change in the module declarations. Needs Docker.
 
