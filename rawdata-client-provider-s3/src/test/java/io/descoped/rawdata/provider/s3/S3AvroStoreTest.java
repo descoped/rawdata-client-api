@@ -2,6 +2,12 @@ package io.descoped.rawdata.provider.s3;
 
 import io.descoped.rawdata.provider.s3.test.S3Mock;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -13,6 +19,8 @@ import java.net.URI;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,11 +78,12 @@ class S3AvroStoreTest {
      * retries.
      */
     @Test
-    void failuresAreIOExceptions() throws Exception {
+    void failuresAreIOExceptions() {
         try (S3AvroStore store = new S3AvroStore(S3Mock.client(), "no-such-bucket", "", null, null)) {
             IOException read = assertThrows(IOException.class, () -> store.read("t", 0));
-            assertTrue(read.getMessage().contains("no-such-bucket") || read.getMessage().contains("NoSuchBucket")
-                    || read.getMessage().contains("bucket"), read.getMessage());
+            assertEquals("NoSuchBucket", errorCode(read));
+            IOException exists = assertThrows(IOException.class, () -> store.exists("t", 0), "a wrong bucket is not an empty topic");
+            assertEquals("NoSuchBucket", errorCode(exists));
             assertThrows(IOException.class, () -> store.create("t", 0, new byte[]{1}));
             assertThrows(IOException.class, () -> store.writeMetadata("t", "k01", new byte[]{1}));
             assertThrows(IOException.class, () -> store.metadataNames("t"));
@@ -111,10 +120,72 @@ class S3AvroStoreTest {
     }
 
     /**
+     * A 409 (another conditional put on the key in flight) is asked again, after a short wait, until S3 gives the
+     * outcome; S3Mock never answers 409, so a stub plays S3 here. The credentials provider is closed with the store.
+     */
+    @Test
+    void aConflictIsAskedAgain() throws Exception {
+        AtomicInteger puts = new AtomicInteger();
+        AtomicBoolean credentialsClosed = new AtomicBoolean();
+        S3Client conflicting = new S3Client() {
+            @Override
+            public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
+                if (puts.incrementAndGet() <= 2) {
+                    throw (S3Exception) S3Exception.builder().statusCode(409)
+                            .awsErrorDetails(AwsErrorDetails.builder().errorCode("ConditionalRequestConflict").build()).build();
+                }
+                return PutObjectResponse.builder().build();
+            }
+
+            @Override
+            public String serviceName() {
+                return "s3";
+            }
+
+            @Override
+            public void close() {
+                // nothing to close
+            }
+        };
+        try (S3AvroStore store = new S3AvroStore(conflicting, "b", "", null, null, () -> credentialsClosed.set(true))) {
+            assertTrue(store.create("t", 0, new byte[]{1}));
+            assertEquals(3, puts.get());
+        }
+        assertTrue(credentialsClosed.get());
+
+        S3Client alwaysConflicting = new S3Client() {
+            @Override
+            public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
+                puts.incrementAndGet();
+                throw (S3Exception) S3Exception.builder().statusCode(409).build();
+            }
+
+            @Override
+            public String serviceName() {
+                return "s3";
+            }
+
+            @Override
+            public void close() {
+                // nothing to close
+            }
+        };
+        puts.set(0);
+        try (S3AvroStore store = new S3AvroStore(alwaysConflicting, "b", "", null, null)) {
+            assertThrows(IOException.class, () -> store.create("t", 0, new byte[]{1}));
+            assertEquals(11, puts.get(), "the first put and ten more");
+        }
+    }
+
+    private static String errorCode(IOException e) {
+        return ((AwsServiceException) e.getCause()).awsErrorDetails().errorCode();
+    }
+
+    /**
      * Object keys are at most 1024 bytes; a longer metadata name is refused before the request.
      */
     @Test
-    void aTooLongMetadataNameIsRefused() throws Exception {
+    void aTooLongMetadataNameIsRefused() {
         try (S3AvroStore store = store()) {
             String tooLong = "k" + "a".repeat(1100);
             byte[] value = new byte[1];

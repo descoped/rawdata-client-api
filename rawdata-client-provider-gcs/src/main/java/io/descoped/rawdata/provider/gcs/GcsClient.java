@@ -142,6 +142,16 @@ final class GcsClient {
     }
 
     /**
+     * Fails if the bucket cannot be listed under the prefix, for example because it does not exist (404): a cheap
+     * listing of at most one object, which needs only the permission the store needs anyway.
+     */
+    void checkBucket(String bucket, String prefix) throws IOException {
+        URI uri = URI.create(endpoint + "/storage/v1/b/" + encode(bucket) + "/o?prefix=" + encode(prefix) + "&maxResults=1&fields="
+                + encode("nextPageToken"));
+        expect(send(() -> HttpRequest.newBuilder(uri).GET()), "Listing the bucket " + bucket);
+    }
+
+    /**
      * Deletes an object; does nothing if there is none.
      */
     void delete(String bucket, String object) throws IOException {

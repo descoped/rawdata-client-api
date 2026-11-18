@@ -17,6 +17,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
+import software.amazon.awssdk.utils.SdkAutoCloseable;
 
 import java.net.URI;
 import java.time.Duration;
@@ -104,7 +105,17 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
         if (endpoint != null) {
             builder.endpointOverride(URI.create(endpoint));
         }
-        return new AvroRawdataClient(new S3AvroStore(builder.build(), bucket, prefix, encryption, kmsKeyId), pollInterval);
+        SdkAutoCloseable closeable = credentials instanceof SdkAutoCloseable ? (SdkAutoCloseable) credentials : null;
+        S3Client s3;
+        try {
+            s3 = builder.build();
+        } catch (RuntimeException e) {
+            if (closeable != null) {
+                closeable.close(); // the SDK does not close a credentials provider it was given
+            }
+            throw e;
+        }
+        return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable), pollInterval);
     }
 
     private static String prefix(String prefix) {

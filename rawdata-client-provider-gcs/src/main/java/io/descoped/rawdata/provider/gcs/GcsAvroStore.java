@@ -23,6 +23,9 @@ import java.util.TreeSet;
  * A metadata entry is written with a precondition on the generation it replaces (or that there is none), so the client
  * may retry the upload, for example when GCS limits writes to one object name to about one per second. When another
  * writer changed the entry meanwhile, the write starts over, so the last write wins.
+ * <p>
+ * GCS answers 404 for a missing object and for a missing bucket. The first time {@link #exists} gets one, the store
+ * lists the bucket once, so a wrong bucket fails instead of looking like an empty topic.
  */
 final class GcsAvroStore implements AvroStore {
 
@@ -31,6 +34,7 @@ final class GcsAvroStore implements AvroStore {
     private final GcsClient client;
     private final String bucket;
     private final String prefix;
+    private volatile boolean bucketSeen;
 
     GcsAvroStore(GcsClient client, String bucket, String prefix) {
         this.client = client;
@@ -54,7 +58,15 @@ final class GcsAvroStore implements AvroStore {
 
     @Override
     public boolean exists(String topic, long segment) throws IOException {
-        return client.generation(bucket, segment(topic, segment)).isPresent();
+        if (client.generation(bucket, segment(topic, segment)).isPresent()) {
+            bucketSeen = true;
+            return true;
+        }
+        if (!bucketSeen) {
+            client.checkBucket(bucket, prefix);
+            bucketSeen = true;
+        }
+        return false;
     }
 
     @Override

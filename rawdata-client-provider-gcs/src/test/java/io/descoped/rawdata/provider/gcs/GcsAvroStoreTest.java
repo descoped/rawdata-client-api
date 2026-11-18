@@ -62,6 +62,20 @@ class GcsAvroStoreTest {
     }
 
     /**
+     * A wrong bucket is an error, not an empty topic.
+     */
+    @Test
+    void aWrongBucketIsAnError() {
+        GcsAvroStore store = new GcsAvroStore(new GcsClient(FakeGcs.endpoint(), GcsCredentials.NONE), "no-such-bucket", "");
+        try {
+            java.io.IOException exists = assertThrows(java.io.IOException.class, () -> store.exists("t", 0));
+            assertTrue(exists.getMessage().contains("HTTP 404"), exists.getMessage());
+        } finally {
+            store.close();
+        }
+    }
+
+    /**
      * Object names are at most 1024 bytes; a longer metadata name is refused before the request.
      */
     @Test

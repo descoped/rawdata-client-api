@@ -50,6 +50,9 @@ object back, and if it holds its own bytes the segment counts as created. Metada
 precondition on the generation they replace, so the client can retry them. A metadata key is at most about 500 bytes
 (an object name is at most 1024 bytes with the prefix and topic).
 
+GCS answers a missing object and a missing bucket with the same 404. The first time a client sees one, it lists the
+bucket once, so a wrong bucket name fails instead of looking like an empty topic.
+
 Every request is retried on an I/O error, 408, 429 and 5xx, with exponential backoff and jitter. That is safe:
 reads and deletes are idempotent, and every upload has a generation precondition. Getting a token is retried the same
 way, unless Google refuses it (a 4xx such as `invalid_grant`). A 401 from GCS drops the kept token and tries once
