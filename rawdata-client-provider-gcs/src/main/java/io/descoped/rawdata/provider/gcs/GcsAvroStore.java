@@ -51,9 +51,31 @@ final class GcsAvroStore implements AvroStore {
         return client.download(bucket, name).map(stored -> Arrays.equals(content, stored)).orElse(false); // our own upload, if a retry found it
     }
 
+    /**
+     * Opens a segment, pinned to its generation: every range is read from that generation ({@code generation=}).
+     */
     @Override
-    public Optional<byte[]> read(String topic, long segment) throws IOException {
-        return absentIfTheBucketExists(client.download(bucket, segment(topic, segment)));
+    public Optional<Segment> open(String topic, long segment) throws IOException {
+        String name = segment(topic, segment);
+        Optional<GcsClient.ObjectInfo> found = client.info(bucket, name);
+        if (found.isEmpty()) {
+            checkBucket(); // a 404 is a missing object or a missing bucket
+            return Optional.empty();
+        }
+        bucketSeen = true;
+        GcsClient.ObjectInfo info = found.get();
+        return Optional.of(new Segment() {
+            @Override
+            public long size() {
+                return info.size();
+            }
+
+            @Override
+            public byte[] read(long offset, int length) throws IOException {
+                int available = (int) Math.max(0, Math.min(length, info.size() - offset));
+                return available == 0 ? new byte[0] : client.downloadRange(bucket, name, info.generation(), offset, available);
+            }
+        });
     }
 
     /**

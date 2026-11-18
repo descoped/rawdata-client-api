@@ -69,7 +69,7 @@ public RawdataClient initialize(Map<String, String> configuration) {
 | Method | Must |
 |---|---|
 | `create(topic, segment, bytes)` | write the segment **only if it does not exist**, atomically. Return false, writing nothing, if it exists with other bytes, and true if it holds these bytes. This is how the engine notices another writer. |
-| `read(topic, segment)` | return the whole segment, or empty |
+| `open(topic, segment)` | return the segment, or empty: its size, and `read(offset, length)` for ranges, cut short only at its end. Pin it to the object found now (a generation, an ETag, a file key), so a replaced object fails the read. It must hold no connection or file: readers drop it without closing. `read(topic, segment)` is a default method on top of it. |
 | `exists(topic, segment)` | say whether it exists; it is called often, so make it cheap (a HEAD, a stat) |
 | `metadataNames`, `readMetadata`, `writeMetadata`, `deleteMetadata` | keep a topic's metadata entries. A write replaces the value atomically, and a delete of a missing entry does nothing. |
 | `close()` | release clients and pools; called once, by the client |

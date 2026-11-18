@@ -33,6 +33,7 @@ final class GcsClient {
 
     private static final int OK = 200;
     private static final int NO_CONTENT = 204;
+    private static final int PARTIAL_CONTENT = 206;
     private static final int UNAUTHORIZED = 401;
     private static final int NOT_FOUND = 404;
     private static final int PRECONDITION_FAILED = 412;
@@ -95,6 +96,68 @@ final class GcsClient {
         }
         expect(response, "Downloading " + object);
         return Optional.of(response.body());
+    }
+
+    /**
+     * An object's generation and size.
+     *
+     * @param generation the generation
+     * @param size       the size in bytes
+     */
+    record ObjectInfo(long generation, long size) {
+    }
+
+    /**
+     * The object's generation and size.
+     *
+     * @return them, or empty if there is no such object
+     */
+    Optional<ObjectInfo> info(String bucket, String object) throws IOException {
+        URI uri = URI.create(objectUri(bucket, object) + "?fields=generation,size");
+        HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri).GET());
+        if (response.statusCode() == NOT_FOUND) {
+            return Optional.empty();
+        }
+        expect(response, "Reading the metadata of " + object);
+        JsonNode json = JSON.readTree(response.body());
+        return Optional.of(new ObjectInfo(number(json, "generation", object), number(json, "size", object)));
+    }
+
+    private static long number(JsonNode json, String field, String object) throws IOException {
+        JsonNode value = json.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            throw new IOException("GCS returned no " + field + " for " + object);
+        }
+        return value.isNumber() ? value.asLong() : Long.parseLong(value.asText()); // GCS sends int64 as a string
+    }
+
+    /**
+     * Downloads a range of one generation of an object.
+     *
+     * @param generation the generation; another one, or none, fails
+     * @param offset     the first byte
+     * @param length     how many bytes, 1 or more, within the object
+     * @return the bytes
+     * @throws IOException if GCS fails, or the generation is gone
+     */
+    byte[] downloadRange(String bucket, String object, long generation, long offset, int length) throws IOException {
+        URI uri = URI.create(objectUri(bucket, object) + "?alt=media&generation=" + generation);
+        String range = "bytes=" + offset + "-" + (offset + length - 1);
+        HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri).header("Range", range).GET());
+        if (response.statusCode() == NOT_FOUND) {
+            throw new IOException("Generation " + generation + " of " + object + " is gone: it was replaced or deleted");
+        }
+        if (response.statusCode() != PARTIAL_CONTENT) {
+            expect(response, "Downloading " + range + " of " + object);
+        }
+        byte[] body = response.body();
+        if (response.statusCode() == OK && (offset > 0 || body.length > length)) {
+            throw new IOException("GCS sent the whole of " + object + " for " + range); // the Range header was ignored
+        }
+        if (body.length != length) {
+            throw new IOException("GCS sent " + body.length + " bytes of " + object + " for " + range);
+        }
+        return body;
     }
 
     /**

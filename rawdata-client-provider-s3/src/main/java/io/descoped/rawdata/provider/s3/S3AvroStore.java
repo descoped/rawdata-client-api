@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.utils.SdkAutoCloseable;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -47,6 +48,7 @@ final class S3AvroStore implements AvroStore {
     private static final int CONFLICT = 409;
     private static final int PRECONDITION_FAILED = 412;
     private static final String PUTTING = "Putting ";
+    private static final String GETTING = "Getting ";
     private static final int MAX_CONFLICTS = 10;
     private static final long FIRST_CONFLICT_WAIT_MILLIS = 50;
     private static final long MAX_CONFLICT_WAIT_MILLIS = 1_000;
@@ -114,22 +116,64 @@ final class S3AvroStore implements AvroStore {
         }
     }
 
+    /**
+     * Opens a segment, pinned to its ETag: every range is read with {@code If-Match} on it.
+     */
     @Override
-    public Optional<byte[]> read(String topic, long segment) throws IOException {
-        return get(segment(topic, segment));
+    public Optional<Segment> open(String topic, long segment) throws IOException {
+        String key = segment(topic, segment);
+        Optional<HeadObjectResponse> found = head(key);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        long size = found.get().contentLength();
+        String eTag = found.get().eTag();
+        return Optional.of(new Segment() {
+            @Override
+            public long size() {
+                return size;
+            }
+
+            @Override
+            public byte[] read(long offset, int length) throws IOException {
+                int available = (int) Math.max(0, Math.min(length, size - offset));
+                if (available == 0) {
+                    return new byte[0];
+                }
+                String range = "bytes=" + offset + "-" + (offset + available - 1);
+                byte[] bytes;
+                try {
+                    bytes = s3.getObjectAsBytes(get -> get.bucket(bucket).key(key).range(range).ifMatch(eTag)).asByteArray();
+                } catch (AwsServiceException e) {
+                    if (e.statusCode() == PRECONDITION_FAILED || e.statusCode() == NOT_FOUND) {
+                        throw new IOException("Segment " + key + " is no longer the object that was opened (ETag " + eTag + ")", e);
+                    }
+                    throw failed(GETTING + range + " of " + key, e);
+                } catch (SdkException e) {
+                    throw failed(GETTING + range + " of " + key, e);
+                }
+                if (bytes.length != available) {
+                    throw new IOException("S3 sent " + bytes.length + " bytes of " + key + " for " + range);
+                }
+                return bytes;
+            }
+        });
     }
 
     @Override
     public boolean exists(String topic, long segment) throws IOException {
-        String key = segment(topic, segment);
+        return head(segment(topic, segment)).isPresent();
+    }
+
+    private Optional<HeadObjectResponse> head(String key) throws IOException {
         try {
-            s3.headObject(head -> head.bucket(bucket).key(key));
+            HeadObjectResponse response = s3.headObject(head -> head.bucket(bucket).key(key));
             bucketSeen = true;
-            return true;
+            return Optional.of(response);
         } catch (AwsServiceException e) {
             if (e.statusCode() == NOT_FOUND) {
                 checkBucket();
-                return false;
+                return Optional.empty();
             }
             throw failed("Looking up " + key, e);
         } catch (SdkException e) {
@@ -205,7 +249,7 @@ final class S3AvroStore implements AvroStore {
         } catch (NoSuchKeyException e) {
             return Optional.empty(); // not NoSuchBucket, which is also a 404: a wrong bucket fails instead of reading empty
         } catch (SdkException e) {
-            throw failed("Getting " + key, e);
+            throw failed(GETTING + key, e);
         }
     }
 

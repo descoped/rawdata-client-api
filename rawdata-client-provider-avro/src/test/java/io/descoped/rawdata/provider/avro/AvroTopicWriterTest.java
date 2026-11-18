@@ -73,8 +73,22 @@ class AvroTopicWriterTest {
         }
 
         @Override
-        public Optional<byte[]> read(String topic, long segment) {
-            return Optional.ofNullable(segments.get(topic + "/" + segment));
+        public Optional<Segment> open(String topic, long segment) {
+            byte[] content = segments.get(topic + "/" + segment);
+            if (content == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new Segment() {
+                @Override
+                public long size() {
+                    return content.length;
+                }
+
+                @Override
+                public byte[] read(long offset, int length) {
+                    return Arrays.copyOfRange(content, (int) offset, (int) Math.min(content.length, offset + length));
+                }
+            });
         }
 
         @Override
@@ -239,7 +253,7 @@ class AvroTopicWriterTest {
     void leftoversWithoutMessagesAreRemoved() throws Exception {
         Path topic = Files.createDirectories(folder.resolve("t"));
         Files.write(topic.resolve("0000000000000000000.window.avro"), new byte[]{'O', 'b', 'j'});
-        byte[] noHeader = AvroSegments.encode(List.of(), 1, io.descoped.rawdata.api.RawdataIds.beginningOfTime());
+        byte[] noHeader = AvroSegments.encode(List.of(), 1, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64);
         Files.write(topic.resolve("0000000000000000001.sealed.avro"), noHeader);
         GatedStore store = new GatedStore();
         try (AvroRawdataClient client = client(store, 1 << 20, 4)) {
