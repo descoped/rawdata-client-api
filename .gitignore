@@ -25,3 +25,6 @@ pom.xml.next
 # Credentials: the GCS tests read service-account keys from rawdata-client-provider-gcs/secret/
 secret/
 certs/
+
+# Class path dumps from local runs
+*.cp
