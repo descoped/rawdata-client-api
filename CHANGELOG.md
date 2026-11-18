@@ -65,7 +65,9 @@ code. Java 17 or newer.
   `gcs.prefix`, `gcs.project-id` and `gcs.endpoint` are new. `gcs.credential-provider` is now `gcs.credentials`:
   `application-default` (the default), `service-account` or `none`.
 - Metadata keys are at most 127 bytes (`filesystem`) or about 500 bytes (`gcs`).
-- `gcs` leaves out Google's gRPC transport, which it does not use.
+- `gcs` leaves out what Google's HTTP path never loads: the gRPC transport, Cloud Monitoring and the OpenTelemetry
+  SDK, and legacy jars (Apache HttpClient 4, `com.google.android:annotations`, `threeten-extra`). 56 dependencies
+  instead of 98.
 - Fixed: files that started in the same millisecond hid each other; an upload failure deadlocked the producer;
   messages stayed invisible until a window closed; a later upload with an older name was skipped; topics could
   escape the storage folder; file handles leaked; a closed consumer threw `NullPointerException`; a cursor at the

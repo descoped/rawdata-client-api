@@ -34,21 +34,23 @@ this repository, and the work toward it is under way module by module.
   the BOM manages the rawdata modules only.
 - **Predictable transitive dependencies.** Applications add these modules next to their own libraries, so every
   module's compile and runtime tree has one version of each library (enforcer `dependencyConvergence`; test and
-  provided scope, which applications never get, are excluded). When two libraries bring different versions, the module that first needs it declares it at the newest
-  version (a property in the root POM) and excludes it from the others: slf4j-api from HikariCP and Avro, Jackson
-  and commons-codec from Avro, all of them and checker-qual from google-cloud-storage (gcs compiles against
-  checker-qual in provided scope: javac on JDK 17 warns, and -Werror fails, when Google's annotations are missing).
-  Build and test locally on JDK 17, as CI does: a newer javac does not give that warning.
+  provided scope, which applications never get, are excluded). When two libraries bring different versions, the module
+  that first needs it declares it at the newest version (a property in the root POM) and excludes it from the others:
+  slf4j-api from HikariCP and Avro, Jackson and commons-codec from Avro, all of them and checker-qual from
+  google-cloud-storage (gcs compiles against checker-qual in provided scope: javac on JDK 17 warns, and -Werror fails,
+  when Google's annotations are missing). Build and test locally on JDK 17, as CI does: a newer javac does not give
+  that warning.
 - **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs` (owner's
   decision, 2026-11-18): the Google Cloud libraries are not modules, and requiring the names Java derives from their
   jar names would break when Google names them, so it is an automatic module with a fixed `Automatic-Module-Name`. The
   Google libraries also split packages among themselves (`google-cloud-core` and `proto-google-common-protos` both
   have `com.google.cloud`), so they cannot be modules: an application puts the rawdata modules, `gcs` included, on the
   module path and the Google libraries on the class path (with `--add-modules ALL-MODULE-PATH`), or everything on the
-  class path. `gcs` excludes Google's gRPC transport, which it does not use. A module whose
-  exported API exposes another module's types `requires transitive` it. The API module declares `uses` for
-  `RawdataClientInitializer`. Providers are registered both with `provides` in `module-info.java` and in
-  `META-INF/services`, so they work on the module path and the class path (gcs: `META-INF/services` only).
+  class path. `gcs` excludes what Google's HTTP path never loads (gRPC, Cloud Monitoring, the OpenTelemetry SDK,
+  Apache HttpClient 4 and other legacy jars), and bans them with the enforcer. A module whose exported API exposes
+  another module's types `requires transitive` it. The API module declares `uses` for `RawdataClientInitializer`.
+  Providers are registered both with `provides` in `module-info.java` and in `META-INF/services`, so they work on the
+  module path and the class path (gcs: `META-INF/services` only).
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
   metadata behave the same in every provider, and the shared contract tests check it. Topic names are validated and
   never spliced into SQL, file paths or object names.
