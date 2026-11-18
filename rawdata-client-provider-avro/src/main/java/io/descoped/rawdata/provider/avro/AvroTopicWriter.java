@@ -16,7 +16,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
@@ -63,6 +62,7 @@ final class AvroTopicWriter {
     private static final String LOCK_FILE = ".lock";
     private static final String OF_TOPIC = " of topic ";
     private static final String CLOSING = "Closing the upload window" + OF_TOPIC;
+    private static final String FAILED = " failed";
     private static final int MAX_AVRO_SYNC_INTERVAL = 1 << 30; // Avro never ends a block by itself; endBlock does
 
     private final AvroRawdataClient client;
@@ -188,15 +188,7 @@ final class AvroTopicWriter {
             }
             Window window = current;
             List<RawdataMessage> stored = withIds.apply(window.lastId); // may refuse the batch before anything is written
-            try {
-                for (RawdataMessage message : stored) {
-                    window.writer.append(AvroSegments.toRecord(message));
-                    window.blockBytes += AvroSegments.estimatedSize(message);
-                }
-            } catch (IOException | RuntimeException e) {
-                window.torn = true; // part of the call is in Avro's block buffer, never written
-                throw e;
-            }
+            append(window, stored);
             window.lastId = stored.get(stored.size() - 1).id();
             window.count += stored.size();
             if (window.blockBytes >= settings.syncInterval()) {
@@ -209,6 +201,18 @@ final class AvroTopicWriter {
             throw fail(storeFailure("Writing the upload window" + OF_TOPIC + topic, e));
         } finally {
             appendLock.unlock();
+        }
+    }
+
+    private static void append(Window window, List<RawdataMessage> stored) throws IOException {
+        try {
+            for (RawdataMessage message : stored) {
+                window.writer.append(AvroSegments.toRecord(message));
+                window.blockBytes += AvroSegments.estimatedSize(message);
+            }
+        } catch (IOException | RuntimeException e) {
+            window.torn = true; // part of the call is in Avro's block buffer, never written
+            throw e;
         }
     }
 
@@ -324,7 +328,7 @@ final class AvroTopicWriter {
         } catch (IOException e) {
             fail(storeFailure(CLOSING + topic, e));
         } catch (RuntimeException e) {
-            LOG.log(System.Logger.Level.WARNING, CLOSING + topic + " failed", e);
+            LOG.log(System.Logger.Level.WARNING, CLOSING + topic + FAILED, e);
         } finally {
             appendLock.unlock();
         }
@@ -414,29 +418,28 @@ final class AvroTopicWriter {
     }
 
     /**
-     * Fails the writer: every later call throws. On a conflict the windows not uploaded are set aside.
+     * Fails the writer: every later call throws. On a conflict the windows not uploaded are set aside, before anyone
+     * waiting is woken, so a flush or close that returns sees them set aside.
      */
     private RuntimeException fail(RuntimeException cause) {
-        List<Sealed> setAside = List.of();
         synchronized (this) {
             if (failure == null) {
                 failure = cause;
                 if (cause instanceof RawdataWriterConflictException) {
-                    setAside = new ArrayList<>(pending);
+                    for (Sealed sealed : pending) {
+                        invalidate(sealed.file());
+                    }
                     pending.clear();
                 }
             }
             uploading = false;
             notifyAll();
         }
-        for (Sealed sealed : setAside) {
-            invalidate(sealed.file());
-        }
         if (cause instanceof RawdataWriterConflictException) {
             LOG.log(System.Logger.Level.ERROR, "Another process writes topic " + topic
                     + "; this client stops writing it. Windows not uploaded are kept as *" + INVALID_SUFFIX + " in " + folder);
         } else {
-            LOG.log(System.Logger.Level.ERROR, "The writer" + OF_TOPIC + topic + " failed; windows not uploaded stay in "
+            LOG.log(System.Logger.Level.ERROR, "The writer" + OF_TOPIC + topic + FAILED + "; windows not uploaded stay in "
                     + folder + " and are uploaded when a writer of the topic starts again", cause);
         }
         return cause;
@@ -446,7 +449,7 @@ final class AvroTopicWriter {
      * A store or disk failure, with its cause, also while the client closes.
      */
     private static RawdataException storeFailure(String what, IOException e) {
-        return new RawdataException(what + " failed: " + e.getMessage(), e);
+        return new RawdataException(what + FAILED + ": " + e.getMessage(), e);
     }
 
     private synchronized RuntimeException failureOrNull() {
@@ -465,7 +468,7 @@ final class AvroTopicWriter {
             throw new RawdataWriterConflictException(topic);
         }
         if (cause != null) {
-            throw new RawdataException("The writer" + OF_TOPIC + topic + " failed: " + cause.getMessage(), cause);
+            throw new RawdataException("The writer" + OF_TOPIC + topic + FAILED + ": " + cause.getMessage(), cause);
         }
     }
 
@@ -496,7 +499,7 @@ final class AvroTopicWriter {
                 Files.move(window.file, folder.resolve(name(window.segment) + SEALED_SUFFIX), StandardCopyOption.ATOMIC_MOVE);
             }
         } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "Closing the window file " + window.file + " failed", e);
+            LOG.log(System.Logger.Level.WARNING, "Closing the window file " + window.file + FAILED, e);
         }
     }
 
@@ -506,7 +509,7 @@ final class AvroTopicWriter {
                 folderLock.release();
             }
         } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "Releasing the lock of " + folder + " failed", e);
+            LOG.log(System.Logger.Level.WARNING, "Releasing the lock of " + folder + FAILED, e);
         }
         closeQuietly(lockChannel);
     }
@@ -577,7 +580,7 @@ final class AvroTopicWriter {
         try {
             Files.move(file, file.resolveSibling(file.getFileName() + INVALID_SUFFIX), StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "Setting aside " + file + " failed", e);
+            LOG.log(System.Logger.Level.WARNING, "Setting aside " + file + FAILED, e);
         }
     }
 
