@@ -13,30 +13,32 @@
     <packaging>jar</packaging>
 
     <name>Rawdata Client Provider GCS</name>
-    <description>RawdataClient providers that store topics as Avro files in Google Cloud Storage or a local folder.</description>
+    <description>The gcs RawdataClient provider: topics as Avro files in a Google Cloud Storage bucket.</description>
 
     <build>
         <plugins>
-            <!-- Avro, google-cloud-storage, gax and google-auth are automatic modules (no module-info), which javac reports
-                 with -Xlint:requires-automatic;
-                 that is expected here, every other lint warning still fails. -->
+            <!-- No module-info: the Google Cloud libraries are not modules, and a module-info would have to require
+                 the names Java derives from their jar file names, which change when Google names its modules. The jar
+                 is an automatic module with a stable name instead, and its provider is registered in
+                 META-INF/services, which the module system reads for automatic modules too. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
+                <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
-                    <compilerArgs combine.self="override">
-                        <arg>-Xlint:all,-requires-automatic</arg>
-                        <arg>-Werror</arg>
-                    </compilerArgs>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.descoped.rawdata.provider.gcs</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
                 </configuration>
             </plugin>
-            <!-- A provider exports no package: its classes are implementation, reached only through the
-                 RawdataClient API. Doclint still checks the Javadoc that is there, but does not require it. -->
+            <!-- The tests run a fake GCS server in Docker through Testcontainers, whose dependencies are automatic
+                 modules with split packages, so they run on the class path. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
+                <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <doclint>all,-missing</doclint>
+                    <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
         </plugins>
@@ -45,41 +47,36 @@
     <dependencies>
         <dependency>
             <groupId>io.descoped.rawdata</groupId>
-            <artifactId>rawdata-client-api</artifactId>
+            <artifactId>rawdata-client-provider-avro</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>${avro.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
             <version>${google-cloud-storage.version}</version>
-            <exclusions>
-                <!-- jsr305 is a split package (javax.annotation) on the module path. -->
-                <exclusion>
-                    <groupId>com.google.code.findbugs</groupId>
-                    <artifactId>jsr305</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
+            <groupId>io.descoped.rawdata</groupId>
+            <artifactId>rawdata-client-tck</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
-            <version>${testng.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

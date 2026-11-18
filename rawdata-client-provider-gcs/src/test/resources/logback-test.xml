@@ -3,17 +3,13 @@
     <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <withJansi>true</withJansi>
         <encoder>
-            <pattern>%highlight(%d{HH:mm:ss.SSS}) %highlight([%thread]) %highlight(%-5level) %highlight(%logger{1}) %highlight(- %msg%n)</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{1} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <logger name="io.descoped.rawdata.gcs" level="INFO"/>
-
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT"/>
-        <appender-ref ref="FILE"/>
     </root>
 
 </configuration>
