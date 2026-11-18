@@ -50,10 +50,13 @@ So an application can pass `config.asMap()` or `config.subset(..)` from dynamic-
   For `client.close()` it is one limit for all topics together. When the time runs out, `close()` throws
   `RawdataException`, and the windows not uploaded stay on disk; the next writer of the topic uploads them when it
   starts. After a producer's close times out, the uploads go on and the client can still publish. After the
-  client's close times out, the client stops uploading.
+  client's close times out, the client starts no new upload; one already under way may still complete, and its
+  file is then left for the next writer, which sees the segment stored with the same bytes and removes the file.
 
 Set the limit below the grace period of the platform that stops the process, for example Kubernetes'
-`terminationGracePeriodSeconds` (30 by default), so that `close()` returns before the process is killed.
+`terminationGracePeriodSeconds`, so that `close()` returns before the process is killed. The default limit, 30,
+equals Kubernetes' default grace period: on Kubernetes, lower the limit or raise the grace period, leaving room
+for the application's other shutdown work.
 
 This is 2.x's `AutoCloseable` design: an application shuts down gracefully, for example on SIGTERM, by closing the
 client. The client registers no shutdown hook of its own.

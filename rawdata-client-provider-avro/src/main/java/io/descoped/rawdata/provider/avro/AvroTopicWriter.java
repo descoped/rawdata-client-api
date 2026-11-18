@@ -247,9 +247,9 @@ final class AvroTopicWriter {
         boolean uploaded = awaitUploads(timeoutNanos);
         throwIfFailed();
         if (!uploaded) {
-            throw new RawdataException("Waiting for the uploads" + OF_TOPIC + topic + " timed out after "
-                    + TimeUnit.NANOSECONDS.toSeconds(timeoutNanos) + " s (" + AvroUploadWindow.CLOSE_TIMEOUT_SECONDS
-                    + "); the windows not uploaded stay in " + folder);
+            throw new RawdataException("Waiting for the uploads" + OF_TOPIC + topic + " timed out ("
+                    + AvroUploadWindow.CLOSE_TIMEOUT_SECONDS + " = " + settings.closeTimeoutSeconds()
+                    + " s); the windows not uploaded stay in " + folder);
         }
     }
 
@@ -433,6 +433,11 @@ final class AvroTopicWriter {
             try {
                 if (!store.create(topic, next.segment(), Files.readAllBytes(next.file()))) {
                     fail(new RawdataWriterConflictException(topic));
+                    return;
+                }
+                if (failureOrNull() != null) {
+                    // The upload outlived a close that timed out, and the folder may have a new writer: leave the
+                    // file to its recovery, which finds the segment stored with the same bytes and removes it.
                     return;
                 }
                 Files.delete(next.file());
