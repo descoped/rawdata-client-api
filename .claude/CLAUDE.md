@@ -127,6 +127,10 @@ this repository, and the work toward it is under way module by module.
     uploaded or deleted.
   - **The schema** is 2.x's (`id`, `orderingGroup`, `sequenceNumber` default 0, `position`, `data` as a map), with the
     id's fixed type named `uuid`.
+  - **Reads in ranges** (Ove, 2026-11-18): a segment is never read whole by a reader. Its header's summary (first and
+    last id, count, last-block offset; the header only, not object metadata) serves seek and `lastMessage`, and
+    consumers stream it. `AvroStore.open` pins a read to the object it found (generation, ETag, file key) and holds
+    no resources.
 - **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the
   API must find all six providers and round-trip through filesystem, PostgreSQL 18, a fake GCS and S3Mock, both with
   everything on the module path and with everything on the class path; `jdeps --check`

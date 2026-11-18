@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 
@@ -119,6 +120,28 @@ public abstract class AvroStoreContractTest {
     }
 
     /**
+     * A segment is read in ranges from an opened segment: its size, any range, a range past its end cut short, and
+     * nothing at its end.
+     *
+     * @throws IOException if the store fails
+     */
+    @Test
+    public void aSegmentIsReadInRanges() throws IOException {
+        byte[] content = new byte[100_000];
+        for (int i = 0; i < content.length; i++) {
+            content[i] = (byte) (i * 31);
+        }
+        assertTrue(store.create(topic, 0, content));
+        AvroStore.Segment segment = store.open(topic, 0).orElseThrow();
+        assertEquals(content.length, segment.size());
+        assertArrayEquals(Arrays.copyOfRange(content, 0, 10), segment.read(0, 10));
+        assertArrayEquals(Arrays.copyOfRange(content, 4_096, 70_000), segment.read(4_096, 70_000 - 4_096));
+        assertArrayEquals(Arrays.copyOfRange(content, 99_990, 100_000), segment.read(99_990, 100), "cut short at the end");
+        assertEquals(0, segment.read(100_000, 10).length, "nothing at the end");
+        assertTrue(store.open(topic, 1).isEmpty());
+    }
+
+    /**
      * An unknown topic has no segments and no metadata.
      *
      * @throws IOException if the store fails
@@ -180,6 +203,7 @@ public abstract class AvroStoreContractTest {
         try (missing) {
             assertThrows(IOException.class, () -> missing.exists(topic, 0));
             assertThrows(IOException.class, () -> missing.read(topic, 0));
+            assertThrows(IOException.class, () -> missing.open(topic, 0));
             assertThrows(IOException.class, () -> missing.create(topic, 0, new byte[]{1}));
             assertThrows(IOException.class, () -> missing.metadataNames(topic));
             assertThrows(IOException.class, () -> missing.readMetadata(topic, "k01"));

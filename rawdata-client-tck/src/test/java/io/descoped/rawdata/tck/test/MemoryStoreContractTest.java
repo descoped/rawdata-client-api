@@ -55,9 +55,23 @@ class MemoryStoreContractTest extends AvroStoreContractTest {
         }
 
         @Override
-        public Optional<byte[]> read(String topic, long segment) throws IOException {
+        public Optional<Segment> open(String topic, long segment) throws IOException {
             check();
-            return Optional.ofNullable(segments.get(key(topic, segment))).map(byte[]::clone);
+            byte[] content = segments.get(key(topic, segment));
+            if (content == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new Segment() {
+                @Override
+                public long size() {
+                    return content.length;
+                }
+
+                @Override
+                public byte[] read(long offset, int length) {
+                    return Arrays.copyOfRange(content, (int) offset, (int) Math.min(content.length, offset + length));
+                }
+            });
         }
 
         @Override

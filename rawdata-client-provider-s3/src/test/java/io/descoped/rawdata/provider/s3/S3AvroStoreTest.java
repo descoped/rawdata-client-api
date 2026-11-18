@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.s3;
 
+import io.descoped.rawdata.provider.avro.AvroStore;
 import io.descoped.rawdata.provider.s3.test.S3Mock;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -136,5 +138,25 @@ class S3AvroStoreTest {
 
     private static String errorCode(IOException e) {
         return ((AwsServiceException) e.getCause()).awsErrorDetails().errorCode();
+    }
+
+    /**
+     * An opened segment reads the object it was opened on ({@code If-Match} on its ETag): once the object is replaced
+     * (only by hand, the engine never replaces a segment), its reads fail instead of mixing two objects.
+     *
+     * @throws IOException if S3 fails
+     */
+    @Test
+    void anOpenedSegmentIsPinnedToItsETag() throws IOException {
+        S3Client s3 = S3Mock.client();
+        String prefix = "pinned-" + UUID.randomUUID() + "/";
+        try (S3AvroStore store = new S3AvroStore(s3, S3Mock.BUCKET, prefix, null, null)) {
+            assertTrue(store.create("t", 0, new byte[]{1, 2, 3}));
+            AvroStore.Segment opened = store.open("t", 0).orElseThrow();
+            assertArrayEquals(new byte[]{2, 3}, opened.read(1, 2));
+            s3.putObject(put -> put.bucket(S3Mock.BUCKET).key(prefix + "t/segments/0000000000000000000.avro"),
+                    RequestBody.fromBytes(new byte[]{9, 9, 9}));
+            assertThrows(IOException.class, () -> opened.read(0, 3));
+        }
     }
 }

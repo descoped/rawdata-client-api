@@ -5,18 +5,21 @@ import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.spi.PollingRawdataConsumer;
 
 import java.util.Deque;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
 /**
- * Reads a topic segment by segment and polls for the next; a publish through the same client wakes it at once. A
- * start position (a cursor or a seek) is a lower bound on the ids: the consumer finds the first segment that reaches
- * it and skips the messages before it.
+ * Reads a topic segment by segment and polls for the next; an upload through the same client wakes it at once. A
+ * segment is streamed in ranges, so only one range of it is in memory, and at most {@value #BATCH} messages are
+ * buffered at a time. A start position (a cursor or a seek) is a lower bound on the ids: the consumer finds the first
+ * segment that reaches it, reading only segment headers, and skips the messages before it.
  */
 final class AvroRawdataConsumer extends PollingRawdataConsumer {
 
+    static final int BATCH = 1000;
+
     private final AvroRawdataClient client;
+    private AvroSegmentReader reader; // guarded by the turn: the segment being read, null between segments
     private long next = -1; // guarded by the turn: the segment to read next; -1 until the start is found
     private UUID from; // guarded by the turn: the lower bound on ids, null once passed
     private boolean fromInclusive; // guarded by the turn
@@ -38,12 +41,19 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
             next = client.firstSegmentReaching(topic(), from);
         }
         while (buffer.isEmpty()) {
-            List<RawdataMessage> messages = client.segment(topic(), next);
-            if (messages == null) {
-                return;
+            if (reader == null) {
+                reader = client.reader(topic(), next);
+                if (reader == null) {
+                    return; // not uploaded yet
+                }
             }
-            next++;
-            for (RawdataMessage message : messages) {
+            for (int read = 0; read < BATCH; read++) {
+                RawdataMessage message = client.next(reader, topic(), next);
+                if (message == null) {
+                    reader = null; // the segment is read: nothing to release, the next one is opened when wanted
+                    next++;
+                    break;
+                }
                 if (from == null || passes(message.id())) {
                     buffer.addLast(message);
                     from = null; // ids only grow from here
@@ -59,6 +69,7 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
 
     @Override
     protected void reposition(long timestamp) {
+        reader = null;
         next = -1;
         from = RawdataIds.beginningOf(timestamp);
         fromInclusive = true;

@@ -4,11 +4,15 @@ import io.descoped.rawdata.provider.avro.AvroStore;
 import io.descoped.rawdata.provider.avro.AvroTopicFolders;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
@@ -56,9 +60,45 @@ final class FilesystemAvroStore implements AvroStore {
         }
     }
 
+    /**
+     * Opens a segment, pinned to its file: a segment's name is only ever linked once, never replaced, and each read
+     * checks the name still leads to the file that was opened (its file key, where the file system has one).
+     */
     @Override
-    public Optional<byte[]> read(String topic, long segment) throws IOException {
-        return readIfExists(segment(topic, segment));
+    public Optional<Segment> open(String topic, long segment) throws IOException {
+        Path file = segment(topic, segment);
+        BasicFileAttributes opened;
+        try {
+            opened = Files.readAttributes(file, BasicFileAttributes.class);
+        } catch (NoSuchFileException e) {
+            return Optional.empty();
+        }
+        Object key = opened.fileKey();
+        long size = opened.size();
+        return Optional.of(new Segment() {
+            @Override
+            public long size() {
+                return size;
+            }
+
+            @Override
+            public byte[] read(long offset, int length) throws IOException {
+                try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+                    if (key != null && !key.equals(Files.readAttributes(file, BasicFileAttributes.class).fileKey())) {
+                        throw new IOException("Segment " + file + " is no longer the file that was opened");
+                    }
+                    ByteBuffer bytes = ByteBuffer.allocate((int) Math.max(0, Math.min(length, size - offset)));
+                    while (bytes.hasRemaining()) {
+                        if (channel.read(bytes, offset + bytes.position()) < 0) {
+                            throw new IOException("Segment " + file + " is shorter than when it was opened");
+                        }
+                    }
+                    return bytes.array();
+                } catch (NoSuchFileException e) {
+                    throw new IOException("Segment " + file + " was removed while it was read", e);
+                }
+            }
+        });
     }
 
     @Override

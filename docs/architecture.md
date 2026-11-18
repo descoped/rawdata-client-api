@@ -85,8 +85,8 @@ when it finds nothing.
 ### The Avro engine: conditional create of numbered segments
 
 `AvroRawdataClient` keeps a topic in an `AvroStore` as segments numbered 0, 1, 2… without gaps. Each segment is one
-Avro file holding one publish. The store guarantees one thing: `create(topic, n, bytes)` succeeds only if segment `n`
-does not exist, and readers see the whole segment or nothing.
+Avro file holding one upload window. The store guarantees one thing: `create(topic, n, bytes)` succeeds only if
+segment `n` does not exist, and readers see the whole segment or nothing.
 
 - **filesystem:** a hard link from a temporary file.
 - **gcs:** an upload with the `ifGenerationMatch=0` precondition, through GCS's JSON API on the JDK's HTTP client
@@ -106,7 +106,22 @@ starts, it recovers the windows a crash left; see [recovery](providers/upload-wi
 
 - **Finding the last segment** (`lastSegment`): from the last one seen, probe forward in doubling steps, then halve
   the step between the last that exists and the first that does not.
-- **Starting a consumer at an id** (`firstSegmentReaching`): a binary search over the segments' last ids.
+- **Starting a consumer at an id** (`firstSegmentReaching`): a binary search over the segments' last ids, read from
+  their headers alone.
+
+#### Reading large segments in ranges
+
+A segment can be as large as `avro-file.max.bytes` (64 MiB by default), so nothing reads one whole:
+- **The header's summary.** Each segment's Avro header holds its first id, last id, count and the offset of its last
+  block (`rawdata.first-id`, `rawdata.last-id`, `rawdata.count`, `rawdata.last-block`), as 2.x's file name did. A
+  window's header is written when it opens, so these are fixed-width placeholders, filled in place when it is sealed.
+- **Seek** reads one range of 8 KiB per step of its binary search, the header.
+- **`lastMessage`** reads the last segment's header and its last block, which `AvroSegments.decodeBlock` decodes.
+- **A consumer** streams a segment through `AvroSegmentReader`, 4 MiB at a time, and buffers at most 1000 messages.
+  Avro checks each block's sync marker, so a range that comes back wrong fails instead of giving wrong messages.
+- **Pinned.** `AvroStore.open` pins a segment to the object found then: the GCS generation, the S3 ETag, the file's
+  key on disk. A segment that changed under a reader (only by hand: the engine never replaces one) fails the read
+  instead of mixing two objects. An opened segment holds no connection or file, so a dropped reader leaks nothing.
 - **A message is visible and durable once its window is uploaded.** Closing a producer uploads the open window and
   waits; closing the client does it for every topic. That is graceful shutdown.
 

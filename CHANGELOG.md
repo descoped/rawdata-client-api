@@ -67,6 +67,9 @@ code. Java 17 or newer.
 - The upload window of 2.x stays, fixed. A producer buffers on a local disk and uploads one Avro file per window,
   which closes on `avro-file.max.seconds` (now also by a timer, without new publishes), on `avro-file.max.bytes`,
   or when a producer closes. Messages are visible and durable once their window is uploaded.
+- Large segments are read in ranges, as 2.x read through a seekable channel. Each segment's header holds its first
+  and last id, count and last-block offset, as 2.x's file name did. A seek reads only headers, `lastMessage` only the
+  last block, and a consumer streams a segment 4 MiB at a time instead of downloading it whole.
 - Each window is a segment, numbered without gaps and created only if its number is free (a hard link, or an upload
   with the `ifGenerationMatch=0` precondition). A number already taken means another writer
   (`RawdataWriterConflictException`).
@@ -78,6 +81,7 @@ code. Java 17 or newer.
     blocks, but only right after the topic's end;
   - a leftover that no longer fits is kept as `*.invalid`;
   - a lock file keeps a buffer folder to one process;
+  - reads are pinned to the object they opened (the GCS generation, the S3 ETag, the file on disk);
   - `avro-file.max.pending-uploads` (default 4) bounds the windows waiting for upload.
   - `avro-file.close-timeout-seconds` (default 30) bounds how long `close()` waits for the uploads; what is not
     uploaded by then stays on disk for the next writer.

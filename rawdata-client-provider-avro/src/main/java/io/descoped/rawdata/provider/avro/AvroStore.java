@@ -6,7 +6,10 @@ import java.util.Set;
 
 /**
  * Where an {@link AvroRawdataClient} keeps its topics: a folder, a bucket. A topic is a sequence of segments numbered
- * 0, 1, 2 and so on, each an Avro file holding the messages of one publish, and a set of metadata entries.
+ * 0, 1, 2 and so on, each an Avro file holding the messages of one upload window, and a set of metadata entries.
+ * <p>
+ * Segments are large (up to {@code avro-file.max.bytes}), so they are read in ranges through {@link #open}: a seek
+ * reads only a segment's header, {@code lastMessage} only its last block, and a consumer streams it.
  * <p>
  * The client relies on two properties of {@link #create}: a segment is created only if no segment with its number
  * exists, and readers see the whole segment or nothing. Writers of a topic, in this process or another, therefore
@@ -30,14 +33,55 @@ public interface AvroStore extends AutoCloseable {
     boolean create(String topic, long segment, byte[] content) throws IOException;
 
     /**
-     * Reads a segment.
+     * Opens a segment for reading in ranges. The segment is pinned to the object found now: its reads return that
+     * object's bytes, or fail, never another object's. It holds no open resources, so it needs no closing.
+     *
+     * @param topic   the topic
+     * @param segment the segment number
+     * @return the segment, or empty if there is no such segment
+     * @throws IOException if the store fails
+     */
+    Optional<Segment> open(String topic, long segment) throws IOException;
+
+    /**
+     * Reads a whole segment.
      *
      * @param topic   the topic
      * @param segment the segment number
      * @return the Avro file, or empty if there is no such segment
      * @throws IOException if the store fails
      */
-    Optional<byte[]> read(String topic, long segment) throws IOException;
+    default Optional<byte[]> read(String topic, long segment) throws IOException {
+        Optional<Segment> opened = open(topic, segment);
+        if (opened.isEmpty()) {
+            return Optional.empty();
+        }
+        Segment found = opened.get();
+        return Optional.of(found.read(0, Math.toIntExact(found.size())));
+    }
+
+    /**
+     * A segment opened for reading: its size, and its bytes in ranges.
+     */
+    interface Segment {
+
+        /**
+         * The segment's size.
+         *
+         * @return the size in bytes
+         */
+        long size();
+
+        /**
+         * Reads a range of the segment.
+         *
+         * @param offset where the range starts, at most {@link #size()}
+         * @param length how many bytes to read; fewer are returned only where the segment ends
+         * @return the bytes
+         * @throws IOException if the store fails, or the segment is no longer the object that was opened
+         */
+        byte[] read(long offset, int length) throws IOException;
+    }
 
     /**
      * Whether a segment exists.

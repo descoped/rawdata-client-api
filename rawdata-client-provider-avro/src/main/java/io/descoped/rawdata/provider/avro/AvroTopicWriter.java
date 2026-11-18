@@ -63,7 +63,6 @@ final class AvroTopicWriter {
     private static final String OF_TOPIC = " of topic ";
     private static final String CLOSING = "Closing the upload window" + OF_TOPIC;
     private static final String FAILED = " failed";
-    private static final int MAX_AVRO_SYNC_INTERVAL = 1 << 30; // Avro never ends a block by itself; endBlock does
 
     private final AvroRawdataClient client;
     private final AvroStore store;
@@ -93,6 +92,9 @@ final class AvroTopicWriter {
         UUID lastId;
         int count;
         long blockBytes;
+        UUID firstId;
+        long blockStart; // where the block being filled starts
+        long previousBlockStart; // where the block before it starts
         boolean torn; // a write failed in the middle of a call: only the forced blocks may be kept
         ScheduledFuture<?> timer;
 
@@ -189,6 +191,9 @@ final class AvroTopicWriter {
             Window window = current;
             List<RawdataMessage> stored = withIds.apply(window.lastId); // may refuse the batch before anything is written
             append(window, stored);
+            if (window.firstId == null) {
+                window.firstId = stored.get(0).id();
+            }
             window.lastId = stored.get(stored.size() - 1).id();
             window.count += stored.size();
             if (window.blockBytes >= settings.syncInterval()) {
@@ -330,7 +335,7 @@ final class AvroTopicWriter {
         FileOutputStream out = new FileOutputStream(file.toFile());
         DataFileWriter<GenericRecord> writer = AvroSegments.writer(segment, tail.lastId());
         try {
-            writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL);
+            writer.setSyncInterval(AvroSegments.MAX_AVRO_SYNC_INTERVAL); // Avro never ends a block by itself; endBlock does
             writer.setFlushOnEveryBlock(true);
             writer.create(AvroSegments.MESSAGE, out);
             out.getChannel().force(true); // the header, so a crash right after leaves a readable window
@@ -340,6 +345,7 @@ final class AvroTopicWriter {
             throw e;
         }
         Window window = new Window(file, segment, tail.lastId(), out, writer);
+        window.blockStart = writer.sync(); // the end of the header
         current = window;
         // The timer hands the close to the executor: a topic whose uploads are slow never holds up another's timer.
         window.timer = client.scheduler().schedule(() -> client.executor().execute(() -> closeIfStill(window)),
@@ -368,9 +374,23 @@ final class AvroTopicWriter {
      * Writes the block being filled and forces it to disk, so a crash loses at most the calls after it.
      */
     private static void endBlock(Window window) throws IOException {
-        window.writer.sync();
+        window.previousBlockStart = window.blockStart;
+        window.blockStart = window.writer.sync();
         window.out.getChannel().force(false);
         window.blockBytes = 0;
+    }
+
+    /**
+     * Writes the last block, closes the file and fills in its summary in the header, forcing it to disk: the window
+     * as it is uploaded.
+     */
+    private static void finish(Window window) throws IOException {
+        long lastBlock = window.blockBytes > 0 ? window.blockStart : window.previousBlockStart;
+        window.writer.close(); // writes the block being filled
+        if (window.count > 0) {
+            AvroSegments.fillSummary(window.file,
+                    new AvroSegments.Summary(window.firstId, window.lastId, window.count, lastBlock));
+        }
     }
 
     /**
@@ -383,9 +403,7 @@ final class AvroTopicWriter {
         if (window.timer != null) {
             window.timer.cancel(false);
         }
-        window.writer.flush();
-        window.out.getChannel().force(true);
-        window.writer.close();
+        finish(window);
         if (window.count == 0) {
             Files.deleteIfExists(window.file);
             return;
@@ -526,9 +544,7 @@ final class AvroTopicWriter {
             if (window.torn) {
                 window.out.close(); // drops Avro's unwritten block: only whole calls stay on disk
             } else {
-                window.writer.flush();
-                window.out.getChannel().force(true);
-                window.writer.close();
+                finish(window);
             }
             if (window.count == 0 && !window.torn) {
                 Files.deleteIfExists(window.file);
@@ -591,7 +607,7 @@ final class AvroTopicWriter {
         }
         byte[] content = sealed && leftover.complete()
                 ? Files.readAllBytes(file)
-                : AvroSegments.encode(leftover.messages(), leftover.segment(), leftover.previousId());
+                : AvroSegments.encode(leftover.messages(), leftover.segment(), leftover.previousId(), settings.syncInterval());
         UUID lastId = leftover.messages().get(leftover.messages().size() - 1).id();
         if (leftover.segment() <= tail.segment()) {
             Optional<byte[]> stored = store.read(topic, leftover.segment());

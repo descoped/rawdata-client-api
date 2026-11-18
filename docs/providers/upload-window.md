@@ -102,5 +102,9 @@ Record `RawdataMessage`, the 2.x schema:
 | `position` | string |
 | `data` | map of bytes, the message's content, in the order it was put |
 
-The file's header also holds `rawdata.segment` and `rawdata.previous-id`: the segment the window becomes, and the id
-of the message before it. Recovery uses them.
+The file's header also holds:
+- `rawdata.segment` and `rawdata.previous-id`: the segment the window becomes, and the id of the message before it.
+  Recovery uses them.
+- The summary: `rawdata.first-id`, `rawdata.last-id`, `rawdata.count` and `rawdata.last-block` (the offset of the last
+  block), as 2.x kept them in the file name. A seek reads only headers, and `lastMessage` only the last block. They
+  are filled in when the window is sealed; until then they are placeholders.
