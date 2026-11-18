@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -106,7 +107,7 @@ class S3AvroStoreTest {
                 // nothing to close
             }
         };
-        try (S3AvroStore store = new S3AvroStore(conflicting, "b", "", null, null, () -> credentialsClosed.set(true))) {
+        try (S3AvroStore store = new S3AvroStore(conflicting, "b", "", null, null, () -> credentialsClosed.set(true), null)) {
             assertTrue(store.create("t", 0, new byte[]{1}));
             assertEquals(3, puts.get());
         }
@@ -158,5 +159,106 @@ class S3AvroStoreTest {
                     RequestBody.fromBytes(new byte[]{9, 9, 9}));
             assertThrows(IOException.class, () -> opened.read(0, 3));
         }
+    }
+
+    /**
+     * A put that finds its key taken looks at the object's size and CRC32C before it downloads anything: another
+     * writer's segment costs one HEAD; a match is confirmed byte for byte.
+     *
+     * @throws IOException if the store fails
+     */
+    @Test
+    void aTakenKeyIsComparedByChecksumBeforeItIsDownloaded() throws IOException {
+        byte[] mine = {1, 2, 3, 4};
+        AtomicInteger gets = new AtomicInteger();
+        java.util.concurrent.atomic.AtomicReference<byte[]> stored = new java.util.concurrent.atomic.AtomicReference<>();
+        S3Client taken = new S3Client() {
+            @Override
+            public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
+                assertEquals(S3AvroStore.crc32c(mine), request.checksumCRC32C(), "the put carries its CRC32C");
+                throw (S3Exception) S3Exception.builder().statusCode(412).build();
+            }
+
+            @Override
+            public software.amazon.awssdk.services.s3.model.HeadObjectResponse headObject(
+                    software.amazon.awssdk.services.s3.model.HeadObjectRequest request) {
+                assertEquals(software.amazon.awssdk.services.s3.model.ChecksumMode.ENABLED, request.checksumMode());
+                return software.amazon.awssdk.services.s3.model.HeadObjectResponse.builder()
+                        .contentLength((long) stored.get().length).checksumCRC32C(S3AvroStore.crc32c(stored.get())).build();
+            }
+
+            @Override
+            public software.amazon.awssdk.core.ResponseBytes<software.amazon.awssdk.services.s3.model.GetObjectResponse> getObjectAsBytes(
+                    software.amazon.awssdk.services.s3.model.GetObjectRequest request) {
+                gets.incrementAndGet();
+                return software.amazon.awssdk.core.ResponseBytes.fromByteArray(
+                        software.amazon.awssdk.services.s3.model.GetObjectResponse.builder().build(), stored.get());
+            }
+
+            @Override
+            public String serviceName() {
+                return "s3";
+            }
+
+            @Override
+            public void close() {
+                // nothing to close
+            }
+        };
+        try (S3AvroStore store = new S3AvroStore(taken, "b", "", null, null)) {
+            stored.set(new byte[]{9, 9, 9, 9}); // another writer's, same size
+            assertFalse(store.create("t", 0, mine));
+            assertEquals(0, gets.get(), "told apart by its CRC32C, not downloaded");
+            stored.set(mine.clone()); // our own put, its response lost
+            assertTrue(store.create("t", 0, mine));
+            assertEquals(1, gets.get(), "a match is confirmed byte for byte");
+        }
+    }
+
+    /**
+     * The interceptor reports S3's throttled responses (503 SlowDown) on each attempt the SDK retries.
+     */
+    @Test
+    void throttledResponsesAreReported() {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger throttled = new AtomicInteger();
+        software.amazon.awssdk.http.SdkHttpClient http = new software.amazon.awssdk.http.SdkHttpClient() {
+            @Override
+            public software.amazon.awssdk.http.ExecutableHttpRequest prepareRequest(software.amazon.awssdk.http.HttpExecuteRequest request) {
+                return new software.amazon.awssdk.http.ExecutableHttpRequest() {
+                    @Override
+                    public software.amazon.awssdk.http.HttpExecuteResponse call() {
+                        int status = calls.incrementAndGet() < 3 ? 503 : 200;
+                        return software.amazon.awssdk.http.HttpExecuteResponse.builder()
+                                .response(software.amazon.awssdk.http.SdkHttpResponse.builder().statusCode(status)
+                                        .putHeader("Content-Length", "0").build())
+                                .build();
+                    }
+
+                    @Override
+                    public void abort() {
+                        // nothing to abort
+                    }
+                };
+            }
+
+            @Override
+            public void close() {
+                // nothing to close
+            }
+        };
+        S3Throttling throttling = new S3Throttling();
+        throttling.onThrottled(throttled::incrementAndGet);
+        try (S3Client s3 = S3Client.builder().httpClient(http).region(Region.US_EAST_1)
+                .credentialsProvider(AnonymousCredentialsProvider.create())
+                .endpointOverride(URI.create("http://127.0.0.1:1")).forcePathStyle(true)
+                .overrideConfiguration(override -> override.addExecutionInterceptor(throttling)
+                        .retryStrategy(retry -> retry.maxAttempts(5).backoffStrategy(software.amazon.awssdk.retries.api.BackoffStrategy.retryImmediately())
+                                .throttlingBackoffStrategy(software.amazon.awssdk.retries.api.BackoffStrategy.retryImmediately())))
+                .build()) {
+            s3.headObject(head -> head.bucket("b").key("k"));
+        }
+        assertEquals(3, calls.get());
+        assertEquals(2, throttled.get());
     }
 }

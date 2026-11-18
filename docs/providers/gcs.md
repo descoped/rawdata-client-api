@@ -17,7 +17,7 @@ needs no Google libraries: its only dependency besides the Avro engine is Jackso
 | `gcs.endpoint` | `https://storage.googleapis.com` | another endpoint, for example an emulator's `http://localhost:4443` |
 | `gcs.listing.min-interval-seconds` | `1` | how often a waiting consumer looks for new messages, in seconds; `0` as often as it asks |
 | `local-temp-folder` | | required; where producers buffer, see [the upload window](upload-window.md) |
-| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds` | `60`, 64 MiB, 512 KiB, `4`, `30` | the window; see [the upload window](upload-window.md) |
+| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds`, `avro-file.upload.max-concurrency` | `60`, 64 MiB, 512 KiB, `4`, `30`, `16` | the window; see [the upload window](upload-window.md) |
 
 ### Credentials
 

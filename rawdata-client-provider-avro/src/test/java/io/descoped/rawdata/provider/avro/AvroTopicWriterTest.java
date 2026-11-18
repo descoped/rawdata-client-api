@@ -123,7 +123,7 @@ class AvroTopicWriterTest {
     }
 
     private AvroRawdataClient client(GatedStore store, long maxBytes, int maxPending) {
-        return new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, maxBytes, 64, maxPending, 30), 10);
+        return new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, maxBytes, 64, maxPending, 30, 16), 10);
     }
 
     private static RawdataMessage message(String position, int size) {
@@ -219,7 +219,7 @@ class AvroTopicWriterTest {
     void closingWaitsAtMostTheCloseTimeout() throws Exception {
         GatedStore store = new GatedStore();
         store.gated = true;
-        AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, 1 << 20, 64, 4, 1), 10);
+        AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, 1 << 20, 64, 4, 1, 16), 10);
         RawdataProducer producer = client.producer("t");
         producer.publish(message("a", 1));
         long started = System.nanoTime();

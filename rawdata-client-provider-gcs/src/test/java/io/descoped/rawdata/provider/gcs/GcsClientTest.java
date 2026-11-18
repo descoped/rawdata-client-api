@@ -36,6 +36,42 @@ class GcsClientTest {
     /**
      * 404 means absent, 412 a failed precondition; other errors are not retried and carry GCS's message.
      */
+    /**
+     * A throttled response (429, 503) is reported on every attempt, also when a retry then succeeds.
+     *
+     * @throws Exception if the test fails unexpectedly
+     */
+    @Test
+    void throttledResponsesAreReported() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger throttled = new AtomicInteger();
+        try (LocalHttp gcs = new LocalHttp(request -> switch (calls.incrementAndGet()) {
+            case 1 -> LocalHttp.Response.json(429, "{}");
+            case 2 -> LocalHttp.Response.json(503, "{}");
+            case 3 -> LocalHttp.Response.json(500, "{}");
+            default -> LocalHttp.Response.json(200, "{\"generation\":\"7\"}");
+        })) {
+            GcsClient client = new GcsClient(gcs.root(), GcsCredentials.NONE);
+            client.onThrottled(throttled::incrementAndGet);
+            assertEquals(7, client.generation("b", "o").getAsLong());
+            assertEquals(2, throttled.get(), "429 and 503, not 500");
+        }
+    }
+
+    /**
+     * An upload carries its CRC32C, so GCS refuses bytes damaged on the way.
+     *
+     * @throws Exception if the test fails unexpectedly
+     */
+    @Test
+    void anUploadCarriesItsCrc32c() throws Exception {
+        try (LocalHttp gcs = new LocalHttp(request -> LocalHttp.Response.json(200, "{}"))) {
+            GcsClient client = new GcsClient(gcs.root(), GcsCredentials.NONE);
+            client.upload("b", "o", "avro/binary", "123456789".getBytes(java.nio.charset.StandardCharsets.US_ASCII), 0);
+            assertEquals("crc32c=4waSgw==", gcs.requests.get(0).header("X-Goog-Hash"), "CRC32C of 123456789 is e3069283");
+        }
+    }
+
     @Test
     void statusesMeanWhatTheySay() throws Exception {
         try (LocalHttp gcs = new LocalHttp(request -> switch (request.method()) {

@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.utils.SdkAutoCloseable;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ChecksumMode;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
@@ -15,14 +16,17 @@ import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.zip.CRC32C;
 
 /**
  * Topics in a bucket: {@code <prefix><topic>/segments/<number>.avro}, the number in 19 digits, and
@@ -30,8 +34,10 @@ import java.util.function.Supplier;
  * {@code If-None-Match: *}, so S3 creates it only if no object has its key: two writers never both create it, and
  * readers see a whole object or none.
  * <p>
- * The SDK retries a failed put. If a put succeeded but its response was lost, the retry fails its condition (412); the
- * store then reads the object, and if it holds the bytes it put (an Avro file carries a random sync marker, so no
+ * Every segment put carries its CRC32C ({@code x-amz-checksum-crc32c}), so S3 refuses bytes damaged on the way. The
+ * SDK retries a failed put. If a put succeeded but its response was lost, the retry fails its condition (412); the
+ * store then compares the object's size and CRC32C with its own, and only if they match reads the object. If it holds
+ * the bytes it put (an Avro file carries a random sync marker, so no
  * other writer's file is the same) the segment counts as created. When S3 answers 409 (a conditional put raced
  * another on the same key), the store waits a little and tries again, to get the outcome of the race.
  * <p>
@@ -59,10 +65,11 @@ final class S3AvroStore implements AvroStore {
     private final ServerSideEncryption encryption;
     private final String kmsKeyId;
     private final SdkAutoCloseable credentials;
+    private final S3Throttling throttling;
     private volatile boolean bucketSeen;
 
     S3AvroStore(S3Client s3, String bucket, String prefix, ServerSideEncryption encryption, String kmsKeyId) {
-        this(s3, bucket, prefix, encryption, kmsKeyId, null);
+        this(s3, bucket, prefix, encryption, kmsKeyId, null, null);
     }
 
     /**
@@ -72,9 +79,11 @@ final class S3AvroStore implements AvroStore {
      * @param kmsKeyId    the KMS key for {@code aws:kms}, or null for the account's default key
      * @param credentials the credentials provider to close with the client (the SDK does not close one it was
      *                    given), or null
+     * @param throttling  the interceptor the client was built with, which reports throttling, or null
      */
     S3AvroStore(S3Client s3, String bucket, String prefix, ServerSideEncryption encryption, String kmsKeyId,
-                SdkAutoCloseable credentials) {
+                SdkAutoCloseable credentials, S3Throttling throttling) {
+        this.throttling = throttling;
         this.s3 = s3;
         this.bucket = bucket;
         this.prefix = prefix;
@@ -88,11 +97,12 @@ final class S3AvroStore implements AvroStore {
         String key = segment(topic, segment);
         for (int conflicts = 0; ; conflicts++) {
             try {
-                s3.putObject(put(key, "avro/binary").ifNoneMatch("*").build(), RequestBody.fromBytes(content));
+                s3.putObject(put(key, "avro/binary").ifNoneMatch("*").checksumCRC32C(crc32c(content)).build(),
+                        RequestBody.fromBytes(content)); // S3 refuses the put if the bytes it got differ
                 return true;
             } catch (AwsServiceException e) {
                 if (e.statusCode() == PRECONDITION_FAILED) {
-                    return read(topic, segment).map(stored -> Arrays.equals(content, stored)).orElse(false); // our own put, if a retry found it
+                    return holds(key, content); // our own put, if a retry found it
                 }
                 if (e.statusCode() != CONFLICT || conflicts == MAX_CONFLICTS) {
                     throw failed(PUTTING + key, e);
@@ -101,6 +111,45 @@ final class S3AvroStore implements AvroStore {
                 throw failed(PUTTING + key, e);
             }
             waitAfterConflict(conflicts); // another conditional put on the key was in flight; ask again for the outcome
+        }
+    }
+
+    /**
+     * Whether a taken key holds these bytes: its size and CRC32C first, so another writer's segment is told apart
+     * without downloading it; only when they match are the bytes compared.
+     */
+    private boolean holds(String key, byte[] content) throws IOException {
+        HeadObjectResponse head;
+        try {
+            head = s3.headObject(request -> request.bucket(bucket).key(key).checksumMode(ChecksumMode.ENABLED));
+        } catch (AwsServiceException e) {
+            if (e.statusCode() == NOT_FOUND) {
+                return false;
+            }
+            throw failed("Looking up " + key, e);
+        } catch (SdkException e) {
+            throw failed("Looking up " + key, e);
+        }
+        if (head.contentLength() != content.length
+                || head.checksumCRC32C() != null && !head.checksumCRC32C().equals(crc32c(content))) {
+            return false;
+        }
+        return get(key).map(stored -> Arrays.equals(content, stored)).orElse(false);
+    }
+
+    /**
+     * The CRC32C of bytes as S3 writes it: base64 of the 4 bytes, big-endian.
+     */
+    static String crc32c(byte[] content) {
+        CRC32C crc = new CRC32C();
+        crc.update(content);
+        return Base64.getEncoder().encodeToString(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
+    }
+
+    @Override
+    public void onThrottled(Runnable listener) {
+        if (throttling != null) {
+            throttling.onThrottled(listener);
         }
     }
 

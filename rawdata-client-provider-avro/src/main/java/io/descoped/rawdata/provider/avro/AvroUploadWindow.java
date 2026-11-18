@@ -23,9 +23,11 @@ import java.util.Objects;
  *                          ({@value #MAX_PENDING_UPLOADS}, default 4)
  * @param closeTimeoutSeconds the longest closing a producer or the client waits for the uploads, in seconds
  *                          ({@value #CLOSE_TIMEOUT_SECONDS}, default 30); windows not uploaded by then stay on disk
+ * @param maxUploadConcurrency the most uploads of a client at once, across its topics ({@value #MAX_UPLOAD_CONCURRENCY},
+ *                          default 16); the client starts at 4 and adapts to throttling ({@link AvroUploadLimiter})
  */
 public record AvroUploadWindow(Path localTempFolder, long maxSeconds, long maxBytes, int syncInterval, int maxPendingUploads,
-                               long closeTimeoutSeconds) {
+                               long closeTimeoutSeconds, int maxUploadConcurrency) {
 
     /** The local folder that buffers windows. */
     public static final String LOCAL_TEMP_FOLDER = "local-temp-folder";
@@ -39,12 +41,15 @@ public record AvroUploadWindow(Path localTempFolder, long maxSeconds, long maxBy
     public static final String MAX_PENDING_UPLOADS = "avro-file.max.pending-uploads";
     /** The longest closing waits for the uploads, in seconds. */
     public static final String CLOSE_TIMEOUT_SECONDS = "avro-file.close-timeout-seconds";
+    /** The most uploads of a client at once. */
+    public static final String MAX_UPLOAD_CONCURRENCY = "avro-file.upload.max-concurrency";
 
     private static final long DEFAULT_MAX_SECONDS = 60;
     private static final long DEFAULT_MAX_BYTES = 64L * 1024 * 1024;
     private static final long DEFAULT_SYNC_INTERVAL = 512L * 1024;
     private static final long DEFAULT_MAX_PENDING_UPLOADS = 4;
     private static final long DEFAULT_CLOSE_TIMEOUT_SECONDS = 30;
+    private static final long DEFAULT_MAX_UPLOAD_CONCURRENCY = 16;
 
     /**
      * Checks the values.
@@ -55,6 +60,7 @@ public record AvroUploadWindow(Path localTempFolder, long maxSeconds, long maxBy
      * @param syncInterval      the size of an Avro block in bytes
      * @param maxPendingUploads how many closed windows may wait for upload
      * @param closeTimeoutSeconds the longest closing waits for the uploads, in seconds
+     * @param maxUploadConcurrency the most uploads of a client at once
      * @throws IllegalArgumentException if one is out of range
      */
     public AvroUploadWindow {
@@ -64,6 +70,7 @@ public record AvroUploadWindow(Path localTempFolder, long maxSeconds, long maxBy
         positive(SYNC_INTERVAL, syncInterval);
         positive(MAX_PENDING_UPLOADS, maxPendingUploads);
         positive(CLOSE_TIMEOUT_SECONDS, closeTimeoutSeconds);
+        positive(MAX_UPLOAD_CONCURRENCY, maxUploadConcurrency);
     }
 
     /**
@@ -80,7 +87,8 @@ public record AvroUploadWindow(Path localTempFolder, long maxSeconds, long maxBy
                 AvroConfiguration.positive(configuration, MAX_BYTES, DEFAULT_MAX_BYTES),
                 Math.toIntExact(AvroConfiguration.positive(configuration, SYNC_INTERVAL, DEFAULT_SYNC_INTERVAL)),
                 Math.toIntExact(AvroConfiguration.positive(configuration, MAX_PENDING_UPLOADS, DEFAULT_MAX_PENDING_UPLOADS)),
-                AvroConfiguration.positive(configuration, CLOSE_TIMEOUT_SECONDS, DEFAULT_CLOSE_TIMEOUT_SECONDS));
+                AvroConfiguration.positive(configuration, CLOSE_TIMEOUT_SECONDS, DEFAULT_CLOSE_TIMEOUT_SECONDS),
+                Math.toIntExact(AvroConfiguration.positive(configuration, MAX_UPLOAD_CONCURRENCY, DEFAULT_MAX_UPLOAD_CONCURRENCY)));
     }
 
     private static void positive(String key, long value) {

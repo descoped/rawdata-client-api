@@ -8,6 +8,7 @@ import org.apache.avro.generic.GenericRecord;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -451,7 +452,7 @@ final class AvroTopicWriter {
                 next = pending.peekFirst();
             }
             try {
-                if (!store.create(topic, next.segment(), Files.readAllBytes(next.file()))) {
+                if (!upload(next)) {
                     fail(new RawdataWriterConflictException(topic));
                     return;
                 }
@@ -473,6 +474,28 @@ final class AvroTopicWriter {
                 notifyAll();
             }
             client.uploaded(topic, new AvroRawdataClient.Tail(next.segment(), next.lastId()));
+        }
+    }
+
+    /**
+     * Creates a sealed window's segment, as one of the client's uploads at once ({@link AvroUploadLimiter}).
+     *
+     * @return false if the segment was taken
+     */
+    private boolean upload(Sealed sealed) throws IOException {
+        AvroUploadLimiter limiter = client.limiter();
+        try {
+            limiter.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("Interrupted while waiting to upload segment " + sealed.segment());
+        }
+        boolean created = false;
+        try {
+            created = store.create(topic, sealed.segment(), Files.readAllBytes(sealed.file()));
+            return created;
+        } finally {
+            limiter.release(created);
         }
     }
 

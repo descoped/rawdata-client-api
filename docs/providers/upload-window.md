@@ -33,6 +33,7 @@ consumers need the messages.
 | `avro-file.sync.interval` | `524288` (512 KiB) | the size of an Avro block |
 | `avro-file.max.pending-uploads` | `4` | sealed windows that may wait for upload before `publish` waits |
 | `avro-file.close-timeout-seconds` | `30` | the longest `close()` waits for the uploads |
+| `avro-file.upload.max-concurrency` | `16` | the most uploads of a client at once, across its topics |
 
 Values are read as [dynamic-configuration](https://github.com/descoped/dynamic-configuration) reads them:
 - numbers are strict: `60`, not `60s` and not ` 60`;
@@ -73,6 +74,12 @@ shared tests use it.
   when it is uploaded. The writer fails with `RawdataWriterConflictException`. Its windows not yet uploaded are kept
   as `*.invalid` files and never deleted. Every later publish of that client to the topic fails (see
   [one writer per topic](../contract.md#one-writer-per-topic)).
+- **Throttling.** A client runs at most a few uploads at once across its topics, and adapts (AIMD, as TCP does). It
+  starts at 4, adds one with each upload that succeeds, up to `avro-file.upload.max-concurrency`, and halves when the
+  store is throttled (GCS 429 or 503, S3 503 `SlowDown`) or a request times out, at most once a second. A topic's own
+  uploads still run one at a time, in order.
+- **Damaged uploads.** Every upload carries its CRC32C (`X-Goog-Hash` on GCS, `x-amz-checksum-crc32c` on S3), and the
+  store refuses bytes that changed on the way; the upload is then retried.
 - **One process per buffer folder.** A writer holds a lock file in its topic's folder. A second client using the
   same folder fails with "in use".
 

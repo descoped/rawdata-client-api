@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.net.http.HttpTimeoutException;
+import java.util.zip.CRC32C;
+import java.util.Base64;
+import java.nio.ByteBuffer;
 import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -37,6 +41,8 @@ final class GcsClient {
     private static final int UNAUTHORIZED = 401;
     private static final int NOT_FOUND = 404;
     private static final int PRECONDITION_FAILED = 412;
+    private static final int TOO_MANY_REQUESTS = 429;
+    private static final int SERVICE_UNAVAILABLE = 503;
     private static final int MAX_ATTEMPTS = 6;
     private static final long FIRST_BACKOFF_MILLIS = 200;
     private static final long MAX_BACKOFF_MILLIS = 5_000;
@@ -58,6 +64,8 @@ final class GcsClient {
         this(HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build(), endpoint, credentials);
     }
 
+    private volatile Runnable throttled = () -> { };
+
     GcsClient(HttpClient http, String endpoint, GcsCredentials credentials) {
         this.http = http;
         this.endpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
@@ -73,8 +81,10 @@ final class GcsClient {
     boolean upload(String bucket, String object, String contentType, byte[] content, long generation) throws IOException {
         URI uri = URI.create(endpoint + "/upload/storage/v1/b/" + encode(bucket) + "/o?uploadType=media&name=" + encode(object)
                 + "&ifGenerationMatch=" + generation);
+        String hash = "crc32c=" + crc32c(content); // GCS refuses the upload (400) if the bytes it got differ
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri)
                 .header("Content-Type", contentType)
+                .header("X-Goog-Hash", hash)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(content)));
         if (response.statusCode() == PRECONDITION_FAILED) {
             return false;
@@ -99,12 +109,29 @@ final class GcsClient {
     }
 
     /**
-     * An object's generation and size.
+     * An object's generation, size and checksum.
      *
      * @param generation the generation
      * @param size       the size in bytes
+     * @param crc32c     the CRC32C as GCS gives it (base64 of the 4 bytes, big-endian), or null if it gave none
      */
-    record ObjectInfo(long generation, long size) {
+    record ObjectInfo(long generation, long size, String crc32c) {
+    }
+
+    /**
+     * The CRC32C of bytes as GCS writes it: base64 of the 4 bytes, big-endian.
+     */
+    static String crc32c(byte[] content) {
+        CRC32C crc = new CRC32C();
+        crc.update(content);
+        return Base64.getEncoder().encodeToString(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
+    }
+
+    /**
+     * Registers what to do when GCS throttles (429, 503) or a request times out, on any attempt.
+     */
+    void onThrottled(Runnable listener) {
+        this.throttled = listener;
     }
 
     /**
@@ -113,14 +140,16 @@ final class GcsClient {
      * @return them, or empty if there is no such object
      */
     Optional<ObjectInfo> info(String bucket, String object) throws IOException {
-        URI uri = URI.create(objectUri(bucket, object) + "?fields=generation,size");
+        URI uri = URI.create(objectUri(bucket, object) + "?fields=generation,size,crc32c");
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri).GET());
         if (response.statusCode() == NOT_FOUND) {
             return Optional.empty();
         }
         expect(response, "Reading the metadata of " + object);
         JsonNode json = JSON.readTree(response.body());
-        return Optional.of(new ObjectInfo(number(json, "generation", object), number(json, "size", object)));
+        JsonNode crc32c = json.path("crc32c");
+        return Optional.of(new ObjectInfo(number(json, "generation", object), number(json, "size", object),
+                crc32c.isTextual() ? crc32c.asText() : null));
     }
 
     private static long number(JsonNode json, String field, String object) throws IOException {
@@ -246,12 +275,18 @@ final class GcsClient {
         for (int attempt = 1; ; attempt++) {
             try {
                 HttpResponse<byte[]> response = sendOnce(request);
+                if (response.statusCode() == TOO_MANY_REQUESTS || response.statusCode() == SERVICE_UNAVAILABLE) {
+                    throttled.run();
+                }
                 if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
                     return response;
                 }
             } catch (GcsCredentials.RefusedException e) {
                 throw e;
             } catch (IOException e) {
+                if (e instanceof HttpTimeoutException) {
+                    throttled.run();
+                }
                 if (attempt == MAX_ATTEMPTS) {
                     throw e;
                 }
