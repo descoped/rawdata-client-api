@@ -28,6 +28,9 @@
     </modules>
 
     <properties>
+        <!-- Surefire's JVM arguments; empty unless the coverage profile's JaCoCo agent sets it. A module that adds its
+             own refers to it as @{argLine}. -->
+        <argLine></argLine>
         <java.version>17</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
