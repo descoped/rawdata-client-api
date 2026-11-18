@@ -44,11 +44,6 @@
                 <artifactId>rawdata-client-provider-gcs</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency>
-                <groupId>io.descoped.rawdata</groupId>
-                <artifactId>rawdata-copy-util</artifactId>
-                <version>${project.version}</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 

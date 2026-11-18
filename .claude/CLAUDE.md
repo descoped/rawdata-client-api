@@ -17,7 +17,7 @@ tool that copies topics between providers. One Maven reactor, group `io.descoped
 | `rawdata-client-provider-postgres` | `io.descoped.rawdata.provider.postgres` | provider `postgres`: PostgreSQL 18 only, HikariCP, pgjdbc; shared tables `rawdata_message`, `rawdata_content`, `rawdata_metadata` keyed by topic |
 | `rawdata-client-provider-avro` | `io.descoped.rawdata.provider.avro` | the Avro engine (`AvroRawdataClient` on an `AvroStore`) and provider `filesystem` (Avro files in a local folder) |
 | `rawdata-client-provider-gcs` | `io.descoped.rawdata.provider.gcs` (automatic) | provider `gcs`: the Avro engine on a Google Cloud Storage bucket |
-| `rawdata-copy-util` | n/a yet | copies topics from one provider to another (not written yet) |
+| `rawdata-copy-util` | `io.descoped.rawdata.copy` | `rawdata-copy` (`RawdataCopyTool`): a command-line tool that copies topics between providers and clouds, resuming after the target's last id; distributed as `rawdata-copy-<version>.zip` (jar and `lib/`) on GitHub releases, not on Central and not in the BOM |
 
 Until 2026-11 every module was a repository of its own; their histories were imported here with `git filter-repo`
 (old tags prefixed with the module name, e.g. `rawdata-client-api/2.0.0`). 3.0.0 is the first version built from
@@ -32,12 +32,14 @@ this repository, and the work toward it is under way module by module.
 - **One reactor, one version.** Every module inherits the root POM and is released with it; modules depend on each
   other with `${project.version}`. Dependency versions are properties in the root POM, not `dependencyManagement`, so
   the BOM manages the rawdata modules only.
-- **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs`: the Google
-  Cloud libraries are not modules, and requiring the names Java derives from their jar names would break when Google
-  names them, so it is an automatic module with a fixed `Automatic-Module-Name`. A module whose exported API exposes another module's types `requires
-  transitive` it. The API module declares `uses` for `RawdataClientInitializer`. Providers are registered both with
-  `provides` in `module-info.java` and in `META-INF/services`, so they work on the module path and the class path
-  (gcs: `META-INF/services` only, which the module system reads for an automatic module).
+- **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs` (owner's
+  decision, 2026-11-18): the Google Cloud libraries are not modules, and requiring the names Java derives from their
+  jar names would break when Google names them, so it is an automatic module with a fixed `Automatic-Module-Name`. The
+  Google libraries also split packages among themselves (`gax-grpc` and `proto-google-common-protos` both have
+  `com.google.longrunning`), so `gcs`, and the copy tool that bundles it, run on the class path only. A module whose
+  exported API exposes another module's types `requires transitive` it. The API module declares `uses` for
+  `RawdataClientInitializer`. Providers are registered both with `provides` in `module-info.java` and in
+  `META-INF/services`, so they work on the module path and the class path (gcs: `META-INF/services` only).
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
   metadata behave the same in every provider, and the shared contract tests check it. Topic names are validated and
   never spliced into SQL, file paths or object names.
@@ -55,7 +57,8 @@ this repository, and the work toward it is under way module by module.
   **No SNAPSHOTs** are published, by CI or by hand: the Portal's free tier limits monthly publishing (owner's
   decision, 2026-11-17). CI publishes nothing. Maven 3.10 sends a server's credentials only to the hosts it knows for
   that id, and the id `central` is bound to Maven Central, so the server `central` in `~/.m2/settings.xml` must list
-  `https://central.sonatype.com` in `repositoryOrigins`.
+  `https://central.sonatype.com` in `repositoryOrigins`. `rawdata-copy-util` is a program, excluded from the Central
+  bundle (`excludeArtifacts`); its zip goes on the GitHub release (owner's decision, 2026-11-18).
 - **SonarCloud**: one project, `descoped_rawdata-client-project`, for the whole reactor.
 
 ## Testing

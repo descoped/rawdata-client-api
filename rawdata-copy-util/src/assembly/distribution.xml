@@ -1,0 +1,22 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 https://maven.apache.org/xsd/assembly-2.2.0.xsd">
+    <!-- rawdata-copy-<version>.zip: the runnable jar and lib/, for a GitHub release. Unzip and run
+         java -jar rawdata-copy-<version>/rawdata-copy-util-<version>.jar -->
+    <id>distribution</id>
+    <formats>
+        <format>zip</format>
+    </formats>
+    <baseDirectory>rawdata-copy-${project.version}</baseDirectory>
+    <files>
+        <file>
+            <source>${project.build.directory}/${project.build.finalName}.jar</source>
+        </file>
+    </files>
+    <fileSets>
+        <fileSet>
+            <directory>${project.build.directory}/lib</directory>
+            <outputDirectory>lib</outputDirectory>
+        </fileSet>
+    </fileSets>
+</assembly>
