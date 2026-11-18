@@ -43,7 +43,7 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>no-grpc</id>
+                        <id>google-exclusions</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -114,7 +114,7 @@
                  OpenTelemetry metrics exporter are left out. So are the legacy jars the HTTP path never loads: Apache
                  HttpClient 4 (end of life) and Google's adapter to it (the client uses the JDK's HTTP), Cloud
                  Monitoring and the OpenTelemetry SDK (metrics export only), com.google.android:annotations and
-                 threeten-extra. 56 dependencies instead of 98. The tests against the fake GCS and the JPMS smoke test check
+                 threeten-extra. The tests against the fake GCS and the JPMS smoke test check
                  that nothing missing is loaded. Kept, because the HTTP path loads them: google-http-client-appengine,
                  OpenCensus, jsr305, threetenbp. -->
             <exclusions>

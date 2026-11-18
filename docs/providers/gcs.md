@@ -41,9 +41,9 @@ Messages are visible and durable when `publish` returns, one object per publish:
 
 The provider uses the JSON API over HTTP with the JDK's HTTP client. Left out of google-cloud-storage, because that
 path never loads them: Google's gRPC transport, Cloud Monitoring and the OpenTelemetry SDK (metrics export), and
-legacy jars such as Apache HttpClient 4 (end of life). 56 dependencies remain instead of 98; the build fails if a
-Google update brings an excluded one back. The Google Cloud libraries split packages among themselves, so they cannot be modules: put them on the class
-path and the rawdata jars on the module path (see [getting started](../getting-started.md#the-module-path)), or
-everything on the class path.
+legacy jars such as Apache HttpClient 4 (end of life); the build fails if a Google update brings one back. The
+Google Cloud libraries split packages among themselves, so they cannot be modules: put them on the class path and
+the rawdata jars on the module path (see [getting started](../getting-started.md#the-module-path)), or everything on
+the class path.
 
 The tests run against [fake-gcs-server](https://github.com/fsouza/fake-gcs-server) in Docker.
