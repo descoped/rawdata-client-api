@@ -85,7 +85,7 @@ class GcsProviderTest {
 
         Map<String, String> absolute = FakeGcs.configuration("/x/");
         IllegalArgumentException prefix = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(absolute));
-        assertTrue(tooLong.getMessage().contains("gcs.prefix"), tooLong.getMessage());
+        assertTrue(prefix.getMessage().contains("gcs.prefix"), prefix.getMessage());
 
         Map<String, String> noSlash = FakeGcs.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {
