@@ -113,7 +113,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.postgres=ALL-UNNAMED,org.junit.jupiter.api,io.descoped.rawdata.tck --add-opens io.descoped.rawdata.provider.postgres/io.descoped.rawdata.provider.postgres.test=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
+                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.postgres=ALL-UNNAMED,org.junit.jupiter.api --add-opens io.descoped.rawdata.provider.postgres/io.descoped.rawdata.provider.postgres.test=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
                         </configuration>
                     </plugin>
                 </plugins>
