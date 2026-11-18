@@ -30,31 +30,47 @@ GCS server); Maven comes with the wrapper.
 
 For manual runs against PostgreSQL 18: `docker compose up -d` in `rawdata-client-provider-postgres`.
 
-## Copying topics
+## Copying topics and moving between stores
 
-`rawdata-copy-util` builds a runnable jar that copies topics from one store to another, keeping ids and order: a
-backup, or a move between providers. When a target topic has messages, the copy continues after its last id, so a
-copy that stopped can be run again.
+`rawdata-copy` copies topics from one store to another, keeping ids and order: a backup, or a move from one provider
+or cloud to another, for example from `gcs` to `postgres` on another cloud. When a target topic has messages, the copy
+continues after its last id, so a copy that stopped can be run again.
+
+It is distributed as `rawdata-copy-<version>.zip` (the jar and `lib/` with every provider) on GitHub releases, not
+on Maven Central. To build it: `./mvnw -pl rawdata-copy-util -am package -DskipTests`, which writes
+`rawdata-copy-util/target/rawdata-copy-<version>.zip`.
 
 ```properties
 # copy.properties: a source.* and a target.* provider configuration
 source.rawdata.client.provider=gcs
 source.gcs.bucket-name=my-bucket
 target.rawdata.client.provider=postgres
-target.postgres.driver.host=localhost
+target.postgres.driver.host=db.example.com
 target.postgres.driver.user=rdc
-target.postgres.driver.password=rdc
+target.postgres.driver.password=secret
 target.postgres.driver.database=rdc
 ```
 
 ```sh
-./mvnw -pl rawdata-copy-util -am package -DskipTests
-java -jar rawdata-copy-util/target/rawdata-copy-util-3.0.0-SNAPSHOT.jar --config copy.properties --metadata topic-a topic-b:renamed
-java -jar rawdata-copy-util/target/rawdata-copy-util-3.0.0-SNAPSHOT.jar --help
+unzip rawdata-copy-<version>.zip
+java -jar rawdata-copy-<version>/rawdata-copy-util-<version>.jar --config copy.properties --metadata topic-a topic-b:renamed
+java -jar rawdata-copy-<version>/rawdata-copy-util-<version>.jar --help
 ```
 
-The jar finds the providers in `target/lib`; it runs on the class path (the Google Cloud libraries do not work on
-the module path). Exit status 0: copied; 1: a copy failed; 2: wrong arguments or configuration.
+It runs on the class path (the Google Cloud libraries do not work on the module path). Exit status 0: copied; 1: a
+copy failed, run it again to continue; 2: wrong arguments or configuration, or a store that cannot be opened, nothing
+copied.
+
+To move a running system to another store:
+
+1. Copy every topic while the old system runs (`--metadata` to bring checkpoints and other metadata along).
+2. Stop the producers on the old store.
+3. Run the same copy again: it copies only what came since.
+4. Point the producers, and then the consumers, at the new store.
+
+Nothing may write to a target topic before the last copy of step 3. A message written there first would move the
+topic's last id past the messages still to be copied, and the copy, which continues after the last id, would skip
+them.
 
 ## License
 

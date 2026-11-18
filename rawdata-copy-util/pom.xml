@@ -13,8 +13,8 @@
     <packaging>jar</packaging>
 
     <name>Rawdata Copy Utility</name>
-    <description>A command-line tool that copies topics from one rawdata provider to another, with every provider on its
-        class path.
+    <description>rawdata-copy, a command-line tool that copies topics from one rawdata provider to another, with every
+        provider on its class path. Distributed as a zip on GitHub releases, not published to Maven Central.
     </description>
 
     <build>
@@ -47,6 +47,29 @@
                         <configuration>
                             <includeScope>runtime</includeScope>
                             <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- target/rawdata-copy-<version>.zip, the jar and lib/, attached to GitHub releases. Not a Maven
+                 artifact: the module is excluded from publishing to Central (root POM, profile central). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>distribution</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>src/assembly/distribution.xml</descriptor>
+                            </descriptors>
+                            <finalName>rawdata-copy-${project.version}</finalName>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <attach>false</attach>
                         </configuration>
                     </execution>
                 </executions>
@@ -87,6 +110,13 @@
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Where HikariCP and the Google Cloud client log; warnings and errors only (simplelogger.properties). -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -97,12 +127,6 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
             <version>${testcontainers.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>${logback.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

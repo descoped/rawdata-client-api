@@ -198,7 +198,8 @@ class RawdataCopyToolTest {
             "", "--config", "--unknown x", "a", "--config missing.properties a", "--config CONFIG",
             "--config CONFIG --from-id 00000000-0000-4000-8000-000000000000 a",
             "--config CONFIG --from-time yesterday a", "--config CONFIG --from-time 1 --from-id ID a",
-            "--config CONFIG a/b", "--config CONFIG --batch-size 0 a", "--config CONFIG --idle-timeout-ms x a"})
+            "--config CONFIG a/b", "--config CONFIG --batch-size 0 a", "--config CONFIG --idle-timeout-ms x a",
+            "--config --metadata a"})
     void wrongArgumentsAreReported(String line) throws Exception {
         Path config = config(filesystem("source"), filesystem("target"));
         String[] args = line.isEmpty() ? new String[0] : line.replace("CONFIG", config.toString())
@@ -214,11 +215,58 @@ class RawdataCopyToolTest {
         assertTrue(err().contains("target.rawdata.client.provider"), err());
     }
 
+    /**
+     * A store that cannot be opened, because its provider does not exist or refuses the configuration, is a usage
+     * error: nothing is copied.
+     */
     @Test
-    void aFailedCopyIsReported() throws Exception {
-        Path config = config(Map.of(RawdataClient.PROVIDER_KEY, "no-such-provider"), filesystem("target"));
-        assertEquals(RawdataCopyTool.FAILED, run("--config", config.toString(), "a"));
-        assertTrue(err().contains("copy failed"), err());
+    void aRefusedProviderConfigurationIsAUsageError() throws Exception {
+        Path unknown = config(Map.of(RawdataClient.PROVIDER_KEY, "no-such-provider"), filesystem("target"));
+        assertEquals(RawdataCopyTool.USAGE, run("--config", unknown.toString(), "a"));
+        assertTrue(err().contains("Cannot open the source store"), err());
+        Path incomplete = config(filesystem("source"), Map.of(RawdataClient.PROVIDER_KEY, "postgres"));
+        assertEquals(RawdataCopyTool.USAGE, run("--config", incomplete.toString(), "a"));
+        assertTrue(err().contains("Cannot open the target store"), err());
+    }
+
+    /**
+     * A copy that fails names its topic; the topics before it are copied.
+     */
+    @Test
+    void aFailedCopyNamesItsTopic() throws Exception {
+        Map<String, String> source = filesystem("source");
+        publish(source, "good", 0, 3);
+        Path broken = folder.resolve("source").resolve("broken").resolve("segments");
+        Files.createDirectories(broken);
+        Files.writeString(broken.resolve("0000000000000000000.avro"), "not an Avro file");
+        Path config = config(source, filesystem("target"));
+        assertEquals(RawdataCopyTool.FAILED, run("--config", config.toString(), "--idle-timeout-ms", "100", "good", "broken"));
+        assertEquals("good -> good: 3 messages\n", out().replace(System.lineSeparator(), "\n"));
+        assertTrue(err().contains("broken -> broken: copy failed; run again to continue"), err());
+    }
+
+    /**
+     * A start point later than the target's last id is where the copy starts, and the report says so.
+     */
+    @Test
+    void aStartPointLaterThanTheTargetsLastIdWins() throws Exception {
+        Map<String, String> source = filesystem("source");
+        Map<String, String> target = filesystem("target");
+        long base = System.currentTimeMillis() - 100_000;
+        try (RawdataClient client = RawdataClient.create(source); RawdataProducer producer = client.producer("a")) {
+            for (int i = 0; i < 10; i++) {
+                producer.publish(RawdataMessage.builder().id(RawdataIds.beginningOf(base + 1000L * i)).position("m" + i).build());
+            }
+        }
+        Path config = config(source, target);
+        UUID early = RawdataIds.beginningOf(base + 2000);
+        UUID late = RawdataIds.beginningOf(base + 7000);
+        assertEquals(RawdataCopyTool.OK, run("--config", config.toString(), "--idle-timeout-ms", "100", "--from-time", String.valueOf(base + 8000), "a"), err());
+        assertEquals("a -> a: 2 messages from " + RawdataIds.beginningOf(base + 8000) + "\n", out().replace(System.lineSeparator(), "\n"));
+        assertEquals(RawdataCopyTool.OK, run("--config", config.toString(), "--idle-timeout-ms", "100", "--from-id", early.toString(), "a"), err());
+        assertTrue(out().startsWith("a -> a: 0 messages after "), "the target's later last id wins: " + out());
+        assertEquals(List.of("m8", "m9"), read(target, "a").stream().map(RawdataMessage::position).toList());
+        assertTrue(RawdataIds.ORDER.compare(late, early) > 0);
     }
 
     @Test

@@ -18,7 +18,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,13 +30,15 @@ import java.util.UUID;
 
 /**
  * Copies topics from one rawdata store to another, keeping the ids and the order: a backup, or a move from one
- * provider to another. A copy continues where an earlier one stopped: when the target topic has messages, it starts
- * after the target's last id.
+ * provider or cloud to another. A copy continues where an earlier one stopped: when the target topic has messages, it
+ * starts after the target's last id.
  * <pre>
  * rawdata-copy --config copy.properties [options] topic[:target-topic]...
  * </pre>
  * The configuration file holds two provider configurations, one with keys that start with {@code source.} and one
  * with {@code target.}, each with {@code rawdata.client.provider}. Run with {@code --help} for the options.
+ * <p>
+ * A command-line tool: it reports on standard output and standard error, not through a logger.
  */
 public final class RawdataCopyTool {
 
@@ -43,12 +48,13 @@ public final class RawdataCopyTool {
     public static final int OK = 0;
 
     /**
-     * Exit status: a copy failed; topics before it were copied.
+     * Exit status: a copy failed; the topics before it were copied, and a new run continues where it stopped.
      */
     public static final int FAILED = 1;
 
     /**
-     * Exit status: the arguments or the configuration are wrong; nothing was copied.
+     * Exit status: the arguments or the configuration are wrong, or a store cannot be opened (a provider that refuses
+     * its configuration, a database that does not answer); nothing was copied.
      */
     public static final int USAGE = 2;
 
@@ -59,13 +65,19 @@ public final class RawdataCopyTool {
             messages, the copy starts after its last id, so a copy that stopped can be run again.
 
               --config <file>          properties with source.* and target.* provider configurations (required)
-              --metadata               also copy each topic's metadata entries, replacing the target's
+              --metadata               also copy each topic's metadata entries, overwriting target entries with the
+                                       same key; the target's other entries stay
               --from-id <uuid>         start at this id (inclusive) instead of the beginning
               --from-time <time>       start at this time: an ISO-8601 instant or epoch milliseconds
               --batch-size <n>         messages per publish to the target (default 1000)
               --idle-timeout-ms <ms>   stop when the source has had nothing new for this long (default 1000)
               --help                   show this text
+
+            Exit status: 0 copied; 1 a copy failed (run again to continue); 2 wrong arguments or configuration, or a
+            store that cannot be opened (nothing copied).
             """;
+
+    private static final String PREFIX = "rawdata-copy: ";
 
     private RawdataCopyTool() {
     }
@@ -75,6 +87,7 @@ public final class RawdataCopyTool {
      *
      * @param args the arguments
      */
+    @SuppressWarnings("java:S106") // a command-line tool writes to the console
     public static void main(String[] args) {
         System.exit(run(args, System.out, System.err));
     }
@@ -89,73 +102,117 @@ public final class RawdataCopyTool {
      */
     public static int run(String[] args, PrintStream out, PrintStream err) {
         Options options;
-        Map<String, String> source;
-        Map<String, String> target;
+        Map<String, String> configuration;
         try {
             options = Options.parse(args);
             if (options.help) {
                 out.print(USAGE_TEXT);
                 return OK;
             }
-            Map<String, String> configuration = load(options.config);
-            source = part(configuration, "source.");
-            target = part(configuration, "target.");
+            configuration = load(options.config);
         } catch (IllegalArgumentException e) {
-            err.println("rawdata-copy: " + e.getMessage());
-            err.println();
-            err.print(USAGE_TEXT);
-            return USAGE;
+            return usage(err, e.getMessage());
         }
-        try (RawdataClient from = RawdataClient.create(source); RawdataClient to = RawdataClient.create(target)) {
-            for (Options.Topic topic : options.topics) {
-                copy(from, to, topic, options, out);
-            }
-            return OK;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            err.println("rawdata-copy: interrupted");
-            return FAILED;
-        } catch (RuntimeException e) {
-            err.println("rawdata-copy: copy failed: " + e);
-            return FAILED;
+        RawdataClient from = null;
+        RawdataClient to = null;
+        try {
+            from = client(configuration, "source.");
+            to = client(configuration, "target.");
+            return copyAll(from, to, options, out, err);
+        } catch (IllegalArgumentException | UncheckedConfigurationException e) {
+            return usage(err, e.getMessage());
+        } finally {
+            close(to);
+            close(from);
         }
     }
 
-    private static void copy(RawdataClient from, RawdataClient to, Options.Topic topic, Options options, PrintStream out) throws InterruptedException {
+    private static int copyAll(RawdataClient from, RawdataClient to, Options options, PrintStream out, PrintStream err) {
+        for (Options.Topic topic : options.topics) {
+            try {
+                out.println(copy(from, to, topic, options));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                err.println(PREFIX + topic + ": interrupted; run again to continue");
+                return FAILED;
+            } catch (RuntimeException e) {
+                err.println(PREFIX + topic + ": copy failed; run again to continue: " + e);
+                return FAILED;
+            }
+        }
+        return OK;
+    }
+
+    private static String copy(RawdataClient from, RawdataClient to, Options.Topic topic, Options options) throws InterruptedException {
         UUID start = options.fromId;
-        boolean inclusive = true;
         if (start == null && options.fromTime != null) {
             start = RawdataIds.beginningOf(options.fromTime);
         }
-        RawdataMessage last = to.lastMessage(topic.target);
-        if (last != null && (start == null || RawdataIds.ORDER.compare(last.id(), start) >= 0)) {
-            start = last.id(); // continue after what the target has
-            inclusive = false;
-        }
+        RawdataMessage last = to.lastMessage(topic.target());
+        boolean resume = last != null && (start == null || RawdataIds.ORDER.compare(last.id(), start) >= 0);
         long messages;
-        try (RawdataConsumer consumer = start == null ? from.consumer(topic.source) : from.consumer(topic.source, start, inclusive);
-             RawdataProducer producer = to.producer(topic.target)) {
+        try (RawdataConsumer consumer = consumer(from, topic.source(), resume ? last.id() : start, !resume);
+             RawdataProducer producer = to.producer(topic.target())) {
             messages = RawdataCopy.copy(consumer, producer, options.batchSize, options.idleTimeout);
         }
-        StringBuilder report = new StringBuilder(topic.source).append(" -> ").append(topic.target).append(": ")
-                .append(messages).append(messages == 1 ? " message" : " messages");
-        if (last != null) {
+        StringBuilder report = new StringBuilder().append(topic).append(": ").append(plural(messages, "message", "messages"));
+        if (resume) {
             report.append(" after ").append(last.id());
+        } else if (start != null) {
+            report.append(" from ").append(start);
         }
         if (options.metadata) {
-            RawdataMetadataClient sourceMetadata = from.metadata(topic.source);
-            RawdataMetadataClient targetMetadata = to.metadata(topic.target);
-            int entries = 0;
-            for (String key : sourceMetadata.keys()) {
-                byte[] value = sourceMetadata.get(key);
-                if (value != null) { // removed since the listing
-                    targetMetadata.put(key, value);
-                    entries++;
-                }
-            }
-            report.append(", ").append(entries).append(entries == 1 ? " metadata entry" : " metadata entries");
+            report.append(", ").append(plural(copyMetadata(from.metadata(topic.source()), to.metadata(topic.target())),
+                    "metadata entry", "metadata entries"));
         }
-        out.println(report);
+        return report.toString();
+    }
+
+    private static RawdataConsumer consumer(RawdataClient from, String topic, UUID start, boolean inclusive) {
+        return start == null ? from.consumer(topic) : from.consumer(topic, start, inclusive);
+    }
+
+    private static long copyMetadata(RawdataMetadataClient source, RawdataMetadataClient target) {
+        long entries = 0;
+        for (String key : source.keys()) {
+            byte[] value = source.get(key);
+            if (value != null) { // removed since the listing
+                target.put(key, value);
+                entries++;
+            }
+        }
+        return entries;
+    }
+
+    private static String plural(long count, String one, String many) {
+        return count + " " + (count == 1 ? one : many);
+    }
+
+    private static int usage(PrintStream err, String message) {
+        err.println(PREFIX + message);
+        err.println();
+        err.print(USAGE_TEXT);
+        return USAGE;
+    }
+
+    /**
+     * Creates the client of one part of the configuration. A store that cannot be opened, because the provider
+     * refuses its configuration or the store does not answer, is a usage error, whatever exception it throws.
+     */
+    private static RawdataClient client(Map<String, String> configuration, String prefix) {
+        Map<String, String> part = part(configuration, prefix);
+        try {
+            return RawdataClient.create(part);
+        } catch (RuntimeException e) {
+            throw new UncheckedConfigurationException("Cannot open the " + prefix.substring(0, prefix.length() - 1)
+                    + " store: " + e.getMessage(), e);
+        }
+    }
+
+    private static void close(RawdataClient client) {
+        if (client != null) {
+            client.close();
+        }
     }
 
     private static Map<String, String> load(Path file) {
@@ -190,11 +247,27 @@ public final class RawdataCopyTool {
     }
 
     /**
+     * A store cannot be opened.
+     */
+    static final class UncheckedConfigurationException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        UncheckedConfigurationException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
      * The parsed arguments.
      */
     static final class Options {
 
         record Topic(String source, String target) {
+            @Override
+            public String toString() {
+                return source + " -> " + target;
+            }
         }
 
         Path config;
@@ -208,44 +281,52 @@ public final class RawdataCopyTool {
 
         static Options parse(String[] args) {
             Options options = new Options();
-            for (int i = 0; i < args.length; i++) {
-                String arg = args[i];
-                switch (arg) {
-                    case "--help", "-h" -> options.help = true;
-                    case "--metadata" -> options.metadata = true;
-                    case "--config" -> options.config = Path.of(value(args, ++i, arg));
-                    case "--from-id" -> options.fromId = id(value(args, ++i, arg));
-                    case "--from-time" -> options.fromTime = time(value(args, ++i, arg));
-                    case "--batch-size" -> options.batchSize = (int) positive(value(args, ++i, arg), arg);
-                    case "--idle-timeout-ms" -> options.idleTimeout = Duration.ofMillis(positive(value(args, ++i, arg), arg));
-                    default -> {
-                        if (arg.startsWith("-")) {
-                            throw new IllegalArgumentException("Unknown option " + arg);
-                        }
-                        options.topics.add(topic(arg));
-                    }
-                }
+            Deque<String> remaining = new ArrayDeque<>(Arrays.asList(args));
+            while (!remaining.isEmpty()) {
+                options.take(remaining.removeFirst(), remaining);
             }
-            if (options.help) {
-                return options;
-            }
-            if (options.config == null) {
-                throw new IllegalArgumentException("--config is required");
-            }
-            if (options.topics.isEmpty()) {
-                throw new IllegalArgumentException("Name at least one topic");
-            }
-            if (options.fromId != null && options.fromTime != null) {
-                throw new IllegalArgumentException("Give --from-id or --from-time, not both");
+            if (!options.help) {
+                options.check();
             }
             return options;
         }
 
-        private static String value(String[] args, int i, String option) {
-            if (i >= args.length) {
+        private void take(String arg, Deque<String> remaining) {
+            switch (arg) {
+                case "--help", "-h" -> help = true;
+                case "--metadata" -> metadata = true;
+                case "--config" -> config = Path.of(value(remaining, arg));
+                case "--from-id" -> fromId = id(value(remaining, arg));
+                case "--from-time" -> fromTime = time(value(remaining, arg));
+                case "--batch-size" -> batchSize = (int) positive(value(remaining, arg), arg);
+                case "--idle-timeout-ms" -> idleTimeout = Duration.ofMillis(positive(value(remaining, arg), arg));
+                default -> {
+                    if (arg.startsWith("-")) {
+                        throw new IllegalArgumentException("Unknown option " + arg);
+                    }
+                    topics.add(topic(arg));
+                }
+            }
+        }
+
+        private void check() {
+            if (config == null) {
+                throw new IllegalArgumentException("--config is required");
+            }
+            if (topics.isEmpty()) {
+                throw new IllegalArgumentException("Name at least one topic");
+            }
+            if (fromId != null && fromTime != null) {
+                throw new IllegalArgumentException("Give --from-id or --from-time, not both");
+            }
+        }
+
+        private static String value(Deque<String> remaining, String option) {
+            String value = remaining.pollFirst();
+            if (value == null || value.startsWith("--")) {
                 throw new IllegalArgumentException(option + " needs a value");
             }
-            return args[i];
+            return value;
         }
 
         private static Topic topic(String arg) {
