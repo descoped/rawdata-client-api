@@ -11,7 +11,7 @@ rules, and how the build keeps them.
 2. **One version of each library** in every module's compile and runtime dependencies.
 3. **Versions are properties in the root POM** (`slf4j.version`, `jackson.version`, …), not `dependencyManagement`.
    The BOM (`rawdata-client-bom`) manages the rawdata modules only.
-4. **Nothing a provider never loads**: unused transports and telemetry are excluded, and banned so they stay out.
+4. **Few dependencies.** The JDK first: `gcs` talks to GCS on `java.net.http` instead of Google's client libraries.
 5. **No SNAPSHOT dependencies**, and modules depend on each other with `${project.version}`.
 
 ## How the build keeps them
@@ -28,27 +28,11 @@ not the newer. So:
 
 | Library | Declared in | Excluded from |
 |---|---|---|
-| `slf4j-api` | postgres, avro | HikariCP, Avro, google-cloud-storage |
-| `jackson-core`, `jackson-databind` | avro | Avro, google-cloud-storage (and `jackson-annotations`) |
-| `commons-codec` | avro | Avro (through commons-compress), google-cloud-storage |
-| `checker-qual` | gcs, provided scope only | google-cloud-storage |
+| `slf4j-api` | postgres, avro | HikariCP, Avro |
+| `jackson-core`, `jackson-databind` | avro (and gcs, which uses it) | Avro |
+| `commons-codec` | avro | Avro (through commons-compress) |
 
 To see what a module resolves: `./mvnw dependency:tree -pl <module>`.
-
-### Exclusions and bans in `gcs`
-
-`google-cloud-storage` brings far more than the provider loads. The provider uses Google's JSON API over HTTP, so
-`gcs` excludes what that path never loads:
-- gRPC (except `grpc-api` and `grpc-context`) and its GCS stubs;
-- Conscrypt;
-- the OpenTelemetry SDK and Cloud Monitoring (metrics export);
-- Apache HttpClient 4 and Google's adapter to it;
-- `com.google.android:annotations` and `threeten-extra`.
-
-The enforcer execution `google-exclusions` bans the same artifacts. If a Google update adds or renames one, the build
-fails, and the new artifact goes on the exclusions list.
-
-(Replacing `google-cloud-storage` with a small client on the JDK's `HttpClient` is planned; it removes this list.)
 
 ## Adding a library
 

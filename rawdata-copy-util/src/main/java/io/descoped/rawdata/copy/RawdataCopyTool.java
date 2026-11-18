@@ -130,7 +130,7 @@ public final class RawdataCopyTool {
     }
 
     /**
-     * Sends java.util.logging, which the Google Cloud libraries use, to slf4j, so that all library logging comes out
+     * Sends java.util.logging, which the PostgreSQL driver uses, to slf4j, so that all library logging comes out
      * one way (System.Logger goes there through slf4j-jdk-platform-logging). Once per JVM.
      */
     static synchronized void routeJavaUtilLoggingToSlf4j() {

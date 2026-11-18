@@ -63,7 +63,6 @@ public final class Smoke {
             gcs.put(RawdataClient.PROVIDER_KEY, "gcs");
             gcs.put("gcs.bucket-name", "rawdata");
             gcs.put("gcs.credentials", "none");
-            gcs.put("gcs.project-id", "smoke");
             gcs.put("gcs.endpoint", gcsEndpoint);
             gcs.put("gcs.prefix", layout + "/");
             gcs.put("gcs.poll-interval-ms", "50");

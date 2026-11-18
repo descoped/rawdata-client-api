@@ -1,10 +1,5 @@
 package io.descoped.rawdata.provider.gcs;
 
-import com.google.auth.Credentials;
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.cloud.NoCredentials;
-import com.google.cloud.storage.StorageOptions;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
 import io.descoped.rawdata.provider.avro.AvroConfiguration;
@@ -12,24 +7,25 @@ import io.descoped.rawdata.provider.avro.AvroRawdataClient;
 import io.descoped.service.provider.api.ProviderName;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
+import java.net.http.HttpClient;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * The {@code gcs} provider: topics as Avro files in a Google Cloud Storage bucket.
+ * The {@code gcs} provider: topics as Avro files in a Google Cloud Storage bucket, through the GCS JSON API on the
+ * JDK's HTTP client.
  * <p>
  * Configuration:
  * <ul>
  *     <li>{@code gcs.bucket-name}: the bucket (required).</li>
  *     <li>{@code gcs.prefix}: a folder in the bucket for the topics, for example {@code rawdata/} (default none).</li>
- *     <li>{@code gcs.credentials}: {@code application-default} (default: Application Default Credentials),
- *     {@code service-account} (a key file, {@code gcs.service-account.key-file}) or {@code none} (for an
- *     emulator).</li>
- *     <li>{@code gcs.project-id}: the project (default: from the environment).</li>
+ *     <li>{@code gcs.credentials}: {@code application-default} (default: Application Default Credentials: the key
+ *     file in {@code GOOGLE_APPLICATION_CREDENTIALS}, gcloud's application default credentials, or the metadata
+ *     server of a Google Cloud runtime), {@code service-account} (a key file, {@code gcs.service-account.key-file})
+ *     or {@code none} (for an emulator).</li>
  *     <li>{@code gcs.endpoint}: another endpoint than Google's, for example an emulator's
  *     {@code http://localhost:4443}.</li>
  *     <li>{@code gcs.poll-interval-ms}: how often a waiting consumer looks for new messages (default 1000).</li>
@@ -44,7 +40,6 @@ public final class GcsRawdataClientInitializer implements RawdataClientInitializ
     static final String PREFIX = "gcs.prefix";
     static final String CREDENTIALS = "gcs.credentials";
     static final String KEY_FILE = "gcs.service-account.key-file";
-    static final String PROJECT = "gcs.project-id";
     static final String ENDPOINT = "gcs.endpoint";
     static final String POLL_INTERVAL = "gcs.poll-interval-ms";
 
@@ -70,16 +65,10 @@ public final class GcsRawdataClientInitializer implements RawdataClientInitializ
         String bucket = AvroConfiguration.required(configuration, BUCKET);
         String prefix = prefix(AvroConfiguration.optional(configuration, PREFIX, ""));
         long pollInterval = AvroConfiguration.positive(configuration, POLL_INTERVAL, 1000);
-        StorageOptions.Builder options = StorageOptions.newBuilder().setCredentials(credentials(configuration));
-        String project = AvroConfiguration.optional(configuration, PROJECT, null);
-        if (project != null) {
-            options.setProjectId(project);
-        }
-        String endpoint = AvroConfiguration.optional(configuration, ENDPOINT, null);
-        if (endpoint != null) {
-            options.setHost(endpoint);
-        }
-        return new AvroRawdataClient(new GcsAvroStore(options.build().getService(), bucket, prefix), pollInterval);
+        String endpoint = AvroConfiguration.optional(configuration, ENDPOINT, GcsClient.DEFAULT_ENDPOINT);
+        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        GcsClient client = new GcsClient(http, endpoint, credentials(configuration, http));
+        return new AvroRawdataClient(new GcsAvroStore(client, bucket, prefix), pollInterval);
     }
 
     private static String prefix(String prefix) {
@@ -92,18 +81,16 @@ public final class GcsRawdataClientInitializer implements RawdataClientInitializ
         return prefix.endsWith("/") ? prefix : prefix + "/";
     }
 
-    private static Credentials credentials(Map<String, String> configuration) {
+    private static GcsCredentials credentials(Map<String, String> configuration, HttpClient http) {
         String kind = AvroConfiguration.optional(configuration, CREDENTIALS, "application-default");
         try {
             switch (kind) {
                 case "application-default":
-                    return GoogleCredentials.getApplicationDefault();
+                    return GcsCredentials.applicationDefault(System.getenv(), Path.of(System.getProperty("user.home")), http);
                 case "service-account":
-                    try (InputStream key = Files.newInputStream(Path.of(AvroConfiguration.required(configuration, KEY_FILE)))) {
-                        return ServiceAccountCredentials.fromStream(key);
-                    }
+                    return GcsCredentials.fromFile(Path.of(AvroConfiguration.required(configuration, KEY_FILE)), http);
                 case "none":
-                    return NoCredentials.getInstance();
+                    return GcsCredentials.NONE;
                 default:
                     throw new IllegalArgumentException("Configuration '" + CREDENTIALS
                             + "' must be application-default, service-account or none: " + kind);

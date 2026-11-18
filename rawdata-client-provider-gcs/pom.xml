@@ -13,74 +13,32 @@
     <packaging>jar</packaging>
 
     <name>Rawdata Client Provider GCS</name>
-    <description>The gcs RawdataClient provider: topics as Avro files in a Google Cloud Storage bucket.</description>
+    <description>The gcs RawdataClient provider: topics as Avro files in a Google Cloud Storage bucket, through the GCS JSON API on the JDK's HTTP client.</description>
 
     <build>
         <plugins>
-            <!-- No module-info: the Google Cloud libraries are not modules, and a module-info would have to require
-                 the names Java derives from their jar file names, which change when Google names its modules. The jar
-                 is an automatic module with a stable name instead, and its provider is registered in
-                 META-INF/services. The Google libraries split packages among themselves (google-cloud-core and
-                 proto-google-common-protos both have com.google.cloud), so they cannot be modules: an application
-                 puts this jar on the module path and the Google libraries on the class path, or everything on the
-                 class path (src/it/jpms/run.sh does both). -->
+            <!-- The credential and client tests play Google's endpoints with the JDK's HTTP server; the tests are
+                 compiled into the module, which reads it only for them. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <configuration>
-                    <archive>
-                        <manifestEntries>
-                            <Automatic-Module-Name>io.descoped.rawdata.provider.gcs</Automatic-Module-Name>
-                        </manifestEntries>
-                    </archive>
-                </configuration>
-            </plugin>
-            <!-- Keeps the exclusions on google-cloud-storage from quietly lapsing: a Google release that adds or
-                 renames a gRPC, Conscrypt, OpenTelemetry or excluded legacy artifact fails the build instead of
-                 growing the provider again. Add the new artifact to the exclusions. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
+                <artifactId>maven-compiler-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>google-exclusions</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
+                        <id>default-testCompile</id>
                         <configuration>
-                            <rules>
-                                <bannedDependencies>
-                                    <excludes>
-                                        <exclude>io.grpc</exclude>
-                                        <exclude>com.google.api:gax-grpc</exclude>
-                                        <exclude>com.google.api.grpc:gapic-google-cloud-storage-v2</exclude>
-                                        <exclude>com.google.api.grpc:grpc-google-cloud-storage-v2</exclude>
-                                        <exclude>com.google.api.grpc:proto-google-cloud-monitoring-v3</exclude>
-                                        <exclude>com.google.cloud:google-cloud-core-grpc</exclude>
-                                        <exclude>com.google.cloud.opentelemetry</exclude>
-                                        <exclude>io.opentelemetry.contrib</exclude>
-                                        <exclude>org.conscrypt</exclude>
-                                        <exclude>dev.cel</exclude>
-                                        <exclude>org.apache.httpcomponents</exclude>
-                                        <exclude>com.google.http-client:google-http-client-apache-v2</exclude>
-                                        <exclude>com.google.cloud:google-cloud-monitoring</exclude>
-                                        <exclude>io.opentelemetry:opentelemetry-sdk*</exclude>
-                                        <exclude>io.opentelemetry.semconv</exclude>
-                                        <exclude>com.google.android:annotations</exclude>
-                                        <exclude>org.threeten:threeten-extra</exclude>
-                                    </excludes>
-                                    <includes>
-                                        <include>io.grpc:grpc-api</include>
-                                        <include>io.grpc:grpc-context</include>
-                                    </includes>
-                                </bannedDependencies>
-                            </rules>
+                            <compilerArgs combine.children="append">
+                                <arg>--add-modules</arg>
+                                <arg>jdk.httpserver</arg>
+                                <arg>--add-reads</arg>
+                                <arg>io.descoped.rawdata.provider.gcs=jdk.httpserver</arg>
+                            </compilerArgs>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
             <!-- The tests run a fake GCS server in Docker through Testcontainers, whose dependencies are automatic
-                 modules with split packages, so they run on the class path. -->
+                 modules with split packages, so they run on the class path. The module path is covered by the JPMS
+                 smoke test. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -97,203 +55,11 @@
             <artifactId>rawdata-client-provider-avro</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <!-- Compile only: javac on JDK 17 warns (-Werror) when the annotations on Google's classes are missing.
-             Provided, so applications do not get it from here (pgjdbc brings its own with postgres). -->
+        <!-- The GCS JSON API's responses and the credentials files; the same version as the Avro engine's. -->
         <dependency>
-            <groupId>org.checkerframework</groupId>
-            <artifactId>checker-qual</artifactId>
-            <version>${checker-qual.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-storage</artifactId>
-            <version>${google-cloud-storage.version}</version>
-            <!-- The provider uses the JSON API over HTTP (StorageOptions.newBuilder()), never the gRPC transport, so
-                 gRPC (except grpc-api and grpc-context, which the HTTP client loads), its GCS stubs, Conscrypt and the
-                 OpenTelemetry metrics exporter are left out. So are the legacy jars the HTTP path never loads: Apache
-                 HttpClient 4 (end of life) and Google's adapter to it (the client uses the JDK's HTTP), Cloud
-                 Monitoring and the OpenTelemetry SDK (metrics export only), com.google.android:annotations and
-                 threeten-extra. The tests against the fake GCS and the JPMS smoke test check
-                 that nothing missing is loaded. Kept, because the HTTP path loads them: google-http-client-appengine,
-                 OpenCensus, jsr305, threetenbp. -->
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.httpcomponents</groupId>
-                    <artifactId>httpclient</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.httpcomponents</groupId>
-                    <artifactId>httpcore</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.http-client</groupId>
-                    <artifactId>google-http-client-apache-v2</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.cloud</groupId>
-                    <artifactId>google-cloud-monitoring</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk-common</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk-metrics</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk-trace</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk-logs</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry.semconv</groupId>
-                    <artifactId>opentelemetry-semconv</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.android</groupId>
-                    <artifactId>annotations</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.threeten</groupId>
-                    <artifactId>threeten-extra</artifactId>
-                </exclusion>
-                <!-- One version of each in applications: these come through rawdata-client-provider-avro, at the
-                     newest version; checker-qual (annotations, not needed at run time) is declared below for compiling
-                     only. -->
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-databind</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-annotations</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>commons-codec</groupId>
-                    <artifactId>commons-codec</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.checkerframework</groupId>
-                    <artifactId>checker-qual</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-alts</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-auth</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-googleapis</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-grpclb</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-inprocess</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-netty-shaded</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-opentelemetry</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-protobuf</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-protobuf-lite</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-rls</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-services</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-stub</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-util</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.grpc</groupId>
-                    <artifactId>grpc-xds</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.api</groupId>
-                    <artifactId>gax-grpc</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.api.grpc</groupId>
-                    <artifactId>gapic-google-cloud-storage-v2</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.api.grpc</groupId>
-                    <artifactId>grpc-google-cloud-storage-v2</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.api.grpc</groupId>
-                    <artifactId>proto-google-cloud-monitoring-v3</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.cloud</groupId>
-                    <artifactId>google-cloud-core-grpc</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.cloud.opentelemetry</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>io.opentelemetry.contrib</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.conscrypt</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>dev.cel</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>io.descoped.rawdata</groupId>
@@ -320,5 +86,30 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.provider.gcs, even
+             though Surefire is set to the class path. These arguments open the test packages to JUnit and let them
+             read the test modules (see the postgres module). Maven and CI never activate this profile. -->
+        <profile>
+            <id>intellij</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>@{argLine} --add-modules jdk.httpserver --add-reads io.descoped.rawdata.provider.gcs=ALL-UNNAMED,org.junit.jupiter.api,jdk.httpserver --add-opens io.descoped.rawdata.provider.gcs/io.descoped.rawdata.provider.gcs=ALL-UNNAMED,org.junit.platform.commons --add-opens io.descoped.rawdata.provider.gcs/io.descoped.rawdata.provider.gcs.test=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

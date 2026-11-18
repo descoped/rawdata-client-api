@@ -13,7 +13,7 @@ topic across processes.
         (HikariCP, pgjdbc)                 (Avro engine, filesystem)
                                                    ▲
                                      rawdata-client-provider-gcs
-                                     (google-cloud-storage)
+                                     (java.net.http, Jackson)
 
    rawdata-copy-util: the API at compile time, every provider at run time
 ```
@@ -85,7 +85,8 @@ Avro file holding one publish. The store guarantees one thing: `create(topic, n,
 does not exist, and readers see the whole segment or nothing.
 
 - **filesystem:** a hard link from a temporary file.
-- **gcs:** an upload with the `ifGenerationMatch=0` precondition.
+- **gcs:** an upload with the `ifGenerationMatch=0` precondition, through GCS's JSON API on the JDK's HTTP client
+  (`GcsClient`), with tokens from `GcsCredentials`.
 
 A publish:
 1. finds the last segment `n` and its last id;

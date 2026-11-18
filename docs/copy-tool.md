@@ -27,9 +27,9 @@ java -jar rawdata-copy-<version>/rawdata-copy-util-<version>.jar --config copy.p
 java -jar rawdata-copy-<version>/rawdata-copy-util-<version>.jar --help
 ```
 
-It runs on the class path (the Google Cloud libraries cannot all be modules). Exit status 0: copied; 1: a
-copy failed, run it again to continue; 2: wrong arguments or configuration, or a store that cannot be opened, nothing
-copied.
+It runs with `java -jar` (the class path), or as a module: `java -p rawdata-copy-util-<version>.jar:lib -m
+io.descoped.rawdata.copy/io.descoped.rawdata.copy.RawdataCopyTool`. Exit status 0: copied; 1: a copy failed, run it
+again to continue; 2: wrong arguments or configuration, or a store that cannot be opened, nothing copied.
 
 ## Moving a running system to another store or cloud
 

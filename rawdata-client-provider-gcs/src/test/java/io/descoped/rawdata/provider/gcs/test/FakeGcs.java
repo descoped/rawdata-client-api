@@ -1,15 +1,22 @@
 package io.descoped.rawdata.provider.gcs.test;
 
-import com.google.cloud.NoCredentials;
-import com.google.cloud.storage.BucketInfo;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.descoped.rawdata.api.RawdataClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * A fake GCS server (fsouza/fake-gcs-server) in Docker, shared by the tests of a run, with one bucket.
@@ -22,6 +29,8 @@ public final class FakeGcs {
     public static final String BUCKET = "rawdata";
 
     private static final int PORT = 4443;
+    private static final HttpClient HTTP = HttpClient.newHttpClient();
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     @SuppressWarnings("resource") // stopped by Testcontainers when the JVM exits
     private static final GenericContainer<?> SERVER = new GenericContainer<>("fsouza/fake-gcs-server:1.56.1")
@@ -31,42 +40,53 @@ public final class FakeGcs {
 
     static {
         SERVER.start();
-        Storage storage = storage();
-        try {
-            storage.create(BucketInfo.of(BUCKET));
-        } finally {
-            close(storage);
+        HttpResponse<String> created = send(HttpRequest.newBuilder(URI.create(endpoint() + "/storage/v1/b?project=test"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"name\":\"" + BUCKET + "\"}")));
+        if (created.statusCode() != 200) {
+            throw new IllegalStateException("Cannot create the bucket: HTTP " + created.statusCode() + " " + created.body());
         }
     }
 
     private FakeGcs() {
     }
 
-    static String endpoint() {
+    /**
+     * The fake server's endpoint.
+     *
+     * @return {@code http://host:port}
+     */
+    public static String endpoint() {
         return "http://" + SERVER.getHost() + ":" + SERVER.getMappedPort(PORT);
     }
 
     /**
-     * A storage client of the fake server, for checking what the provider wrote.
+     * The objects under a prefix and their content types, for checking what the provider wrote.
      *
-     * @return a new client; close it with {@link #close(Storage)}
+     * @param prefix the prefix
+     * @return object name to content type, sorted by name
      */
-    public static Storage storage() {
-        return StorageOptions.newBuilder().setHost(endpoint()).setProjectId("test").setCredentials(NoCredentials.getInstance())
-                .build().getService();
+    public static Map<String, String> objects(String prefix) {
+        HttpResponse<String> listed = send(HttpRequest.newBuilder(URI.create(endpoint() + "/storage/v1/b/" + BUCKET + "/o?prefix="
+                + URLEncoder.encode(prefix, StandardCharsets.UTF_8))).GET());
+        try {
+            Map<String, String> objects = new TreeMap<>();
+            for (JsonNode item : JSON.readTree(listed.body()).path("items")) {
+                objects.put(item.path("name").asText(), item.path("contentType").asText());
+            }
+            return objects;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
-    /**
-     * Closes a storage client.
-     *
-     * @param storage the client
-     */
-    public static void close(Storage storage) {
+    private static HttpResponse<String> send(HttpRequest.Builder request) {
         try {
-            storage.close();
+            return HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (Exception e) {
             throw new IllegalStateException(e);
         }
     }
@@ -77,7 +97,6 @@ public final class FakeGcs {
         configuration.put("gcs.bucket-name", BUCKET);
         configuration.put("gcs.prefix", prefix);
         configuration.put("gcs.credentials", "none");
-        configuration.put("gcs.project-id", "test");
         configuration.put("gcs.endpoint", endpoint());
         configuration.put("gcs.poll-interval-ms", "50");
         return configuration;
