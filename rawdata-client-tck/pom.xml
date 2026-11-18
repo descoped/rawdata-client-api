@@ -27,6 +27,12 @@
             <artifactId>rawdata-client-api</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- For the store TCK, AvroStoreContractTest, run by the providers built on the Avro engine. -->
+        <dependency>
+            <groupId>io.descoped.rawdata</groupId>
+            <artifactId>rawdata-client-provider-avro</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>

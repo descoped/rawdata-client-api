@@ -12,6 +12,9 @@ import java.util.UUID;
  * A message is immutable. Content goes in and comes out as copies: changing an array passed to
  * {@link Builder#put(String, byte[])} or returned by {@link #get(String)} never changes the message. Messages are
  * made by {@link #builder()} only, so a store can keep a message as it is.
+ * <p>
+ * The position, the ordering group and the content keys may be any string without the NUL character (U+0000), which
+ * a PostgreSQL text column cannot hold, so every provider stores the same messages.
  */
 public sealed interface RawdataMessage permits RawdataDefaultMessage {
 
@@ -177,7 +180,8 @@ public sealed interface RawdataMessage permits RawdataDefaultMessage {
          * @param key     the content key
          * @param payload the content
          * @return this builder
-         * @throws NullPointerException if the key or the payload is null
+         * @throws NullPointerException     if the key or the payload is null
+         * @throws IllegalArgumentException if the key has a NUL character (U+0000)
          */
         Builder put(String key, byte[] payload);
 
@@ -218,7 +222,8 @@ public sealed interface RawdataMessage permits RawdataDefaultMessage {
          * Builds the message.
          *
          * @return the message
-         * @throws IllegalArgumentException if the position is missing
+         * @throws IllegalArgumentException if the position is missing, or the position or the ordering group has a NUL
+         *                                  character (U+0000)
          */
         RawdataMessage build();
     }

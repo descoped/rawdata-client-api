@@ -23,6 +23,7 @@
         <module>rawdata-client-tck</module>
         <module>rawdata-client-provider-postgres</module>
         <module>rawdata-client-provider-avro</module>
+        <module>rawdata-client-provider-filesystem</module>
         <module>rawdata-client-provider-gcs</module>
         <module>rawdata-client-provider-s3</module>
         <module>rawdata-copy-util</module>

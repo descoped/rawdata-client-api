@@ -29,7 +29,7 @@ final class MemoryRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public byte[] get(String key) {
-        Objects.requireNonNull(key, "key");
+        RawdataMetadataClient.requireValidKey(key);
         checkOpen();
         byte[] value = topic.metadata.get(key);
         return value == null ? null : value.clone();
@@ -37,7 +37,7 @@ final class MemoryRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public RawdataMetadataClient put(String key, byte[] value) {
-        Objects.requireNonNull(key, "key");
+        RawdataMetadataClient.requireValidKey(key);
         Objects.requireNonNull(value, "value");
         checkOpen();
         topic.metadata.put(key, value.clone());
@@ -46,7 +46,7 @@ final class MemoryRawdataMetadataClient implements RawdataMetadataClient {
 
     @Override
     public RawdataMetadataClient remove(String key) {
-        Objects.requireNonNull(key, "key");
+        RawdataMetadataClient.requireValidKey(key);
         checkOpen();
         topic.metadata.remove(key);
         return this;

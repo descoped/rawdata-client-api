@@ -86,7 +86,7 @@ final class AvroRawdataMetadataClient implements RawdataMetadataClient {
     }
 
     private static String name(String key) {
-        return "k" + HEX.formatHex(Objects.requireNonNull(key, "key").getBytes(StandardCharsets.UTF_8));
+        return "k" + HEX.formatHex(RawdataMetadataClient.requireValidKey(key).getBytes(StandardCharsets.UTF_8));
     }
 
     private static boolean isName(String name) {

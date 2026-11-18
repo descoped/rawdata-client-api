@@ -2,8 +2,10 @@ package io.descoped.rawdata.provider.postgres;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.pool.HikariPool;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
+import io.descoped.rawdata.api.RawdataException;
 import io.descoped.service.provider.api.ProviderName;
 
 import java.util.Map;
@@ -77,7 +79,13 @@ public class PostgresRawdataClientInitializer implements RawdataClientInitialize
         config.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
         config.setMaximumPoolSize(positive(configuration, MAX_POOL_SIZE, 10));
 
-        HikariDataSource dataSource = new HikariDataSource(config);
+        HikariDataSource dataSource;
+        try {
+            dataSource = new HikariDataSource(config);
+        } catch (HikariPool.PoolInitializationException e) {
+            // the database cannot be reached or does not exist: a store failure, as in every provider
+            throw new RawdataException("PostgreSQL: " + e.getMessage(), e);
+        }
         try {
             PostgresSchema.create(new Jdbc(dataSource));
         } catch (RuntimeException e) {

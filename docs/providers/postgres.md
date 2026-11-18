@@ -34,11 +34,16 @@ The first client creates them if they are missing, under an advisory lock, so cl
 them once. A database role that may only `SELECT`, `INSERT`, `UPDATE` and `DELETE` on existing tables can run a
 client; creating them needs the `CREATE` privilege once.
 
-## Order across processes
+## Writing
 
 A publish takes the topic's transaction-level advisory lock (`pg_advisory_xact_lock`), reads the topic's last id,
-gives the new ids after it and inserts, all in one transaction. Writers of a topic so commit one after another, in id
-order, and a consumer that has read up to an id never misses a later commit.
+gives the new ids after it and inserts, all in one transaction, so a consumer that has read up to an id never misses
+a later commit. If the last id is not the last this client wrote, another process wrote the topic, and the publish
+throws `RawdataWriterConflictException` and rolls back (see
+[one writer per topic](../contract.md#one-writer-per-topic)).
+
+A metadata key is at most 2000 bytes in UTF-8, below what a PostgreSQL index entry holds; a longer one is refused
+with `IllegalArgumentException`.
 
 ## For development
 

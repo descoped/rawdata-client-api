@@ -31,7 +31,8 @@ Version 3.0.0 is in progress on `master`; the last release is 2.0.0. 3.0 is a cl
 | `rawdata-client-api` | the API, the provider service, the `spi` base classes, and the `memory` and `discard` providers |
 | `rawdata-client-tck` | the contract every provider passes, as JUnit 6 tests to extend |
 | `rawdata-client-provider-postgres` | provider `postgres`, on PostgreSQL 18 |
-| `rawdata-client-provider-avro` | provider `filesystem` (Avro files in a local folder), and the Avro engine that `gcs` and `s3` share |
+| `rawdata-client-provider-avro` | the Avro engine that `filesystem`, `gcs` and `s3` share |
+| `rawdata-client-provider-filesystem` | provider `filesystem` (Avro files in a local folder) |
 | `rawdata-client-provider-gcs` | provider `gcs` (Avro files in a Google Cloud Storage bucket) |
 | `rawdata-client-provider-s3` | provider `s3` (Avro files in an Amazon S3 bucket) |
 | `rawdata-copy-util` | `rawdata-copy`, a command-line tool that copies topics between stores and clouds |
@@ -76,7 +77,7 @@ src/it/jpms/run.sh               # JPMS smoke test: every provider on the module
 ```
 pom.xml                              parent and aggregator: versions as properties, plugins, profiles
 rawdata-client-api/                  the API module
-rawdata-client-tck/                  the provider contract tests
+rawdata-client-tck/                  the provider contract tests (TCK)
 rawdata-client-provider-*/           one module per provider
 rawdata-copy-util/                   the copy tool and its zip
 rawdata-client-bom/                  the BOM
@@ -99,7 +100,8 @@ For using the library:
 
 For working on the code:
 
-- [Architecture](docs/architecture.md): how the modules fit together, and how ordering across processes works.
+- [Architecture](docs/architecture.md): how the modules fit together, and how each provider keeps a topic in order
+  with one writer.
 - [Building and testing](docs/building-and-testing.md): the build, the test suites, CI, coverage and the IDE.
 - [Dependencies](docs/dependencies.md): versions, convergence, exclusions and how to add a library.
 - [Writing a provider](docs/writing-a-provider.md): the provider service, the base classes, `AvroStore`, the TCK.
@@ -115,7 +117,7 @@ review). Before you open one:
 - build and test on JDK 17 (`./mvnw verify javadoc:javadoc`, and `src/it/jpms/run.sh` for module or dependency
   changes);
 - keep to the invariants in [`.claude/CLAUDE.md`](.claude/CLAUDE.md): Java 17, one version of each dependency, the
-  latest stable libraries, one contract for every provider;
+  latest stable libraries, one contract for every provider (a behaviour change goes in the shared contract tests);
 - update the docs and the [CHANGELOG](CHANGELOG.md) with the change.
 
 Security issues: see [SECURITY.md](SECURITY.md).

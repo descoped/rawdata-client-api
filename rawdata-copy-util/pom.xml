@@ -100,7 +100,7 @@
         </dependency>
         <dependency>
             <groupId>io.descoped.rawdata</groupId>
-            <artifactId>rawdata-client-provider-avro</artifactId>
+            <artifactId>rawdata-client-provider-filesystem</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>

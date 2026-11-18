@@ -64,6 +64,11 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
     static final String POLL_INTERVAL = "s3.poll-interval-ms";
 
     /**
+     * Attempts per request, as in {@code gcs}: the SDK retries throttling, 5xx and I/O errors with backoff.
+     */
+    private static final int MAX_ATTEMPTS = 6;
+
+    /**
      * Creates the initializer; called by the service loader.
      */
     public S3RawdataClientInitializer() {
@@ -96,6 +101,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
                         .connectionTimeout(Duration.ofSeconds(10))
                         .socketTimeout(Duration.ofMinutes(5)))
                 .credentialsProvider(credentials)
+                .overrideConfiguration(override -> override.retryStrategy(retry -> retry.maxAttempts(MAX_ATTEMPTS)))
                 .forcePathStyle(pathStyle(configuration, bucket));
         String region = AvroConfiguration.optional(configuration, REGION, null);
         if (region != null) {

@@ -1,19 +1,19 @@
 # Architecture
 
 How the modules fit together, and how each provider keeps the [contract](contract.md), in particular the order of a
-topic across processes.
+topic and its one writer.
 
 ## Modules and their dependencies
 
 ```
-                         rawdata-client-api  ◄── rawdata-client-tck (tests)
+                         rawdata-client-api  ◄── rawdata-client-tck (tests; also the store TCK)
                          (API, spi, memory, discard)
-                        ▲          ▲           ▲
+                        ▲                     ▲
         rawdata-client-provider-postgres   rawdata-client-provider-avro
-        (HikariCP, pgjdbc)                 (Avro engine, filesystem)
-                                                   ▲
-                          rawdata-client-provider-gcs   rawdata-client-provider-s3
-                          (java.net.http, Jackson)      (AWS SDK for Java 2)
+        (HikariCP, pgjdbc)                 (the Avro engine: AvroRawdataClient, AvroStore)
+                                              ▲              ▲              ▲
+                         rawdata-client-provider-filesystem  -gcs           -s3
+                         (local folder)        (java.net.http, Jackson)   (AWS SDK for Java 2)
 
    rawdata-copy-util: the API at compile time, every provider at run time
 ```
@@ -33,7 +33,8 @@ topic across processes.
   `postgres` and the Avro engine are built on them.
 - **`rawdata-client-tck`** holds `RawdataClientContractTest`, the contract as abstract JUnit 6 tests. Each provider's
   test module extends it with its configuration.
-- **The providers** depend on the API, and `gcs` and `s3` also on the Avro engine. No provider depends on another one's
+- **The providers** depend on the API, and `filesystem`, `gcs` and `s3` also on the Avro engine, which is not a
+  provider itself. No provider depends on another one's
   internals.
 
 ## Finding a provider
@@ -59,21 +60,24 @@ An id is a UUIDv7 (`RawdataIds`), with the layout PostgreSQL 18's `uuidv7()` use
 `RawdataIds.ORDER` compares ids as unsigned 128-bit numbers, the order PostgreSQL sorts `uuid` in. `UUID.compareTo`
 is signed, and is never used for ids.
 
-A topic only grows at its end. This is the hard part of every provider: two writers, in two processes, must never
-both write after the same last id. Otherwise a consumer that has read up to an id could miss a message committed
-later with a smaller one. The providers solve it in two ways.
+A topic only grows at its end, and only one process writes it. A provider must keep the producers of its client in
+order, and must notice when another process wrote: a client remembers where it last wrote a topic (before its first
+publish, where the topic ended), and a publish that finds more after that throws `RawdataWriterConflictException`
+and writes nothing. The providers do it in two ways.
 
 ### `postgres`: an advisory lock per topic
 
 `PostgresRawdataProducer` writes a publish in one transaction:
 1. It takes `pg_advisory_xact_lock(TOPIC_LOCK, hashtext(topic))`, a lock per topic that PostgreSQL releases at commit
    or rollback.
-2. It reads the topic's last id from `rawdata_message`.
+2. It reads the topic's last id from `rawdata_message`. If this client wrote the topic before and the last id is not
+   the last it wrote, another process wrote: the publish throws `RawdataWriterConflictException` and rolls back.
 3. `withIds` gives the new messages ids after that id.
 4. It inserts them into `rawdata_message` and `rawdata_content` and commits.
 
-Writers of a topic therefore commit one at a time, in id order. Connections run at READ COMMITTED, so the read in
-step 2 sees every earlier commit. The topic is always a bind parameter, never part of the SQL.
+Producers of one client take turns per topic, so they never look like another writer to each other. Connections run
+at READ COMMITTED, so the read in step 2 sees every earlier commit. The topic is always a bind parameter, never part
+of the SQL.
 
 The consumer (`PostgresRawdataConsumer`) reads in pages of `prefetch-size` after the last id it has read, and polls
 when it finds nothing.
@@ -90,12 +94,13 @@ does not exist, and readers see the whole segment or nothing.
 - **s3:** a `PutObject` with `If-None-Match: *`, through the AWS SDK for Java 2.
 
 A publish:
-1. finds the last segment `n` and its last id;
-2. gives ids after it;
+1. takes the last segment `n` this client wrote (before its first publish to the topic, the topic's last segment);
+2. gives ids after its last id;
 3. creates segment `n + 1`.
 
-If another writer created `n + 1` first, the create fails. The publish then reads the new last segment and tries
-again with fresh ids. Segments are thus created one after another, and ids grow in segment order.
+If segment `n + 1` exists, another process wrote the topic: the publish throws `RawdataWriterConflictException` and
+writes nothing. (A create that finds its own bytes, after a retry whose first response was lost, counts as
+created.) Segments are thus created one after another, and ids grow in segment order.
 
 - **Finding the last segment** (`lastSegment`): from the last one seen, probe forward in doubling steps, then halve
   the step between the last that exists and the first that does not.

@@ -47,6 +47,14 @@ The SDK's default chains found nothing: set `AWS_PROFILE` (and run `aws sso logi
 **`s3` fails with a TLS error on a bucket name with dots.** Virtual-hosted HTTPS cannot serve such names; don't set
 `s3.path-style-access=false` for them. See [bucket names with dots](providers/s3.md#bucket-names-with-dots).
 
-**A metadata key is refused with `IllegalArgumentException`.** The file-based providers limit a key's length:
+**A metadata key is refused with `IllegalArgumentException`.** Each provider limits a key's length, as its store allows:
 - `filesystem`: 127 bytes in UTF-8;
-- `gcs`, `s3`: about 500 bytes, because the object name, with the prefix and topic, must fit in 1024 bytes.
+- `gcs`, `s3`: about 500 bytes, because the object name, with the prefix and topic, must fit in 1024 bytes;
+- `postgres`: 2000 bytes.
+
+A key with the NUL character is refused by every provider. See [metadata](contract.md#metadata).
+
+**A publish throws `RawdataWriterConflictException`.** Another process published to the topic since this client last
+wrote it: only one process may write a topic. Find the other writer (two instances of a service, or an old one still
+running after a restart) and stop one; a new client then starts from the topic's end. See
+[one writer per topic](contract.md#one-writer-per-topic).

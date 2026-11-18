@@ -1,7 +1,8 @@
 # The `filesystem` provider
 
-Topics as Avro files in a local folder. Artifact `rawdata-client-provider-avro`, module
-`io.descoped.rawdata.provider.avro`; it also holds the Avro engine that [`gcs`](gcs.md) shares.
+Topics as Avro files in a local folder. Artifact `rawdata-client-provider-filesystem`, module
+`io.descoped.rawdata.provider.filesystem`, on the Avro engine (`rawdata-client-provider-avro`) that [`gcs`](gcs.md)
+and [`s3`](s3.md) share.
 
 ## Configuration
 
@@ -28,11 +29,12 @@ trailing `.`, and `~` before a Windows device name (`con`, `nul`, `com1`…), so
 apart on case-insensitive file systems such as macOS's and Windows'. Metadata files are named `k` and the hexadecimal
 of the key's UTF-8 bytes, so a metadata key is at most 127 bytes.
 
-## Order across processes
+## Writing a segment
 
 A publish writes its segment to a temporary file in the topic folder, then hard-links it to the next segment number,
-which fails if another writer took that number first; the publish then reads the new last segment and tries the next
-number. Writers in several processes on one folder so keep the topic in order, and readers never see part of a file.
+which fails if the number is taken: then another process wrote the topic, and the publish throws
+`RawdataWriterConflictException` (see [one writer per topic](../contract.md#one-writer-per-topic)). Readers never see
+part of a file.
 The folder must be on a file system with hard links and atomic moves: a local file system on Linux, macOS or
 Windows. A writer that crashes between the two steps leaves a `.*.tmp` file behind; nothing reads it, and it can be
 deleted.

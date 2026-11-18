@@ -34,7 +34,7 @@ Java 17 or newer. Import the BOM, then add the API and the providers you use:
 |---|---|
 | `rawdata-client-api` | the API, and `memory` and `discard` |
 | `rawdata-client-provider-postgres` | `postgres` |
-| `rawdata-client-provider-avro` | `filesystem` |
+| `rawdata-client-provider-filesystem` | `filesystem` (brings `rawdata-client-provider-avro`) |
 | `rawdata-client-provider-gcs` | `gcs` (brings `rawdata-client-provider-avro`) |
 | `rawdata-client-provider-s3` | `s3` (brings `rawdata-client-provider-avro` and the AWS SDK) |
 

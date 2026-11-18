@@ -1,7 +1,23 @@
 # The contract
 
 Every provider keeps this contract, and the shared contract tests (`RawdataClientContractTest` in
-`rawdata-client-tck`) check it for each one. Code written against one provider works against another.
+`rawdata-client-tck`) check it for each one: a provider is compliant when it passes them unchanged. Code written
+against one provider works against another, and a system can move from one provider to another with the
+[copy tool](copy-tool.md). A few limits follow the store and are on each provider's page: how long a metadata key may
+be, and what a store accepts at most.
+
+## One writer per topic
+
+**Only one process writes a topic.** In that process, any number of producers of its client may publish to it; the
+client keeps them in order. Consumers may be in any process.
+
+If another process publishes to the topic anyway (a misconfiguration, or a new writer started while the old one
+still runs), the writer that finds the topic moved under it fails: its `publish` throws
+`RawdataWriterConflictException`, which names the topic, and writes nothing. The client keeps failing to publish to
+that topic, so two writers never merge into one stream. The other writer goes on; a client created after the other
+writer stopped starts from the topic's current end. Every provider detects it the same way: a client remembers where
+it last wrote a topic (or where the topic ended when it started writing), and a publish that finds more after that
+fails.
 
 ## Topics
 
@@ -22,6 +38,10 @@ A message has:
 - `orderingGroup()` and `sequenceNumber()`: optional, for producers that write one sequence from several threads.
 - content: named byte arrays, `put(name, bytes)` / `get(name)`, in the order they were put.
 
+The position, the ordering group and the content names may be any string without the NUL character (U+0000), which
+a PostgreSQL text column cannot hold; the builder refuses NUL with `IllegalArgumentException`, so every provider
+stores the same messages.
+
 Messages are immutable, and content is copied in and out: changing an array you published, or one you read, changes
 nothing in the store.
 
@@ -32,7 +52,7 @@ millisecond, and random bits (`RawdataIds`). `message.timestamp()` is the millis
 unsigned 128-bit numbers, `RawdataIds.ORDER`, the order PostgreSQL sorts `uuid` in; never compare ids with
 `UUID.compareTo`, which is signed.
 
-A topic only grows at its end, whichever producer writes, in this process or another:
+A topic only grows at its end:
 
 - An id the producer gives is greater than every id in the topic, also within one millisecond and when the clock
   goes back.
@@ -72,7 +92,24 @@ A consumer is for one thread at a time. A client can be shared.
 
 `client.metadata(topic)` reads and writes the topic's entries: a key and bytes, for example a checkpoint. Every
 metadata client of a topic sees the same entries. `keys()` is a sorted snapshot, `get` returns a copy or null, `put`
-replaces, `remove` does nothing for a missing key. A file-based provider limits the length of a key (see its page).
+replaces, `remove` does nothing for a missing key.
+
+A key is any string without NUL, the empty string, `..` and `/` included, and case matters. Every provider takes
+keys of up to 127 bytes in UTF-8 (`RawdataMetadataClient.PORTABLE_KEY_BYTES`); some take longer ones:
+
+| Provider | Longest key, UTF-8 bytes |
+|---|---|
+| `filesystem` | 127 |
+| `gcs`, `s3` | (1024 − the prefix, topic and `/metadata/k`) / 2, about 500 |
+| `postgres` | 2000 |
+| `memory` | no limit |
+
+A longer key, or one with NUL, is refused by `put`, `get` and `remove` with `IllegalArgumentException`.
+
+## A store that does not exist
+
+A client on a store that does not exist (a missing bucket or database, a folder that cannot be created) fails with
+`RawdataException`, when it is created or on its first use. It never reports an empty topic.
 
 ## Closing
 

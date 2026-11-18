@@ -4,11 +4,13 @@ import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataCopy;
+import io.descoped.rawdata.api.RawdataException;
 import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataMetadataClient;
 import io.descoped.rawdata.api.RawdataNoSuchPositionException;
 import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.rawdata.api.RawdataWriterConflictException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -40,11 +43,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * The contract every {@link RawdataClient} provider keeps, as JUnit tests. A provider's test extends this class and
  * says how to configure a client; every test gets a fresh client and its own topic, so tests do not see each other's
  * messages even when the provider keeps data between clients.
+ * <p>
+ * A provider is compliant when it passes these tests unchanged: an application can then swap it for another. A
+ * provider's own tests only add what the API cannot see (its SQL, its files or objects, its configuration). Only one
+ * process writes a topic; tests with a second client on the same store play another process.
  */
 @Timeout(60)
 public abstract class RawdataClientContractTest {
@@ -71,6 +79,38 @@ public abstract class RawdataClientContractTest {
      * @return the configuration
      */
     protected abstract Map<String, String> configuration();
+
+    /**
+     * Whether two clients made from {@link #configuration()} share a store, as two processes on one database, folder
+     * or bucket do. True for every provider that keeps data outside the client; the tests with a second client are
+     * skipped where it is false.
+     *
+     * @return true if clients share the store
+     */
+    protected boolean clientsShareTheStore() {
+        return true;
+    }
+
+    /**
+     * The longest metadata key the provider takes for a topic, in UTF-8 bytes, as its documentation states; empty if
+     * it has no limit. Every provider takes at least {@link RawdataMetadataClient#PORTABLE_KEY_BYTES}.
+     *
+     * @param topic the topic, for stores where the limit depends on it
+     * @return the limit, or empty
+     */
+    protected OptionalInt metadataKeyLimit(String topic) {
+        return OptionalInt.empty();
+    }
+
+    /**
+     * A configuration of the provider whose store does not exist, for example a missing bucket, database or folder;
+     * null if the provider has no such thing.
+     *
+     * @return the configuration, or null
+     */
+    protected Map<String, String> missingStoreConfiguration() {
+        return null;
+    }
 
     /**
      * Creates the client and a fresh topic name.
@@ -569,7 +609,249 @@ public abstract class RawdataClientContractTest {
         assertArrayEquals(new byte[]{1, 2, 3}, metadata.get("k"));
     }
 
+    /**
+     * A metadata key is any string without NUL, up to the portable length: case, the empty string, dots and slashes
+     * mean nothing special. A key with NUL is refused by every method that takes a key.
+     */
+    @Test
+    public void metadataKeysAreAnyStringWithoutNul() {
+        List<String> keys = List.of("Key", "key", "", "..", "../escape", "a/b", "ü € 😀", ".hidden",
+                "x".repeat(RawdataMetadataClient.PORTABLE_KEY_BYTES));
+        RawdataMetadataClient metadata = client.metadata(topic);
+        for (int i = 0; i < keys.size(); i++) {
+            metadata.put(keys.get(i), new byte[]{(byte) i});
+        }
+        assertEquals(Set.copyOf(keys), metadata.keys());
+        for (int i = 0; i < keys.size(); i++) {
+            assertArrayEquals(new byte[]{(byte) i}, metadata.get(keys.get(i)), keys.get(i));
+        }
+        metadata.remove("..");
+        assertNull(metadata.get(".."));
+        assertNotNull(metadata.get("../escape"));
+        byte[] value = {1};
+        assertThrows(IllegalArgumentException.class, () -> metadata.put("a\0b", value));
+        assertThrows(IllegalArgumentException.class, () -> metadata.get("a\0b"));
+        assertThrows(IllegalArgumentException.class, () -> metadata.remove("a\0b"));
+        assertEquals(keys.size() - 1, metadata.keys().size());
+    }
+
+    /**
+     * A key at the provider's limit works; one byte longer is refused with IllegalArgumentException by put, get and
+     * remove, and nothing is written. A provider without a limit takes a long key.
+     */
+    @Test
+    public void aMetadataKeyOverTheProvidersLimitIsRefused() {
+        RawdataMetadataClient metadata = client.metadata(topic);
+        OptionalInt limit = metadataKeyLimit(topic);
+        assertTrue(limit.orElse(Integer.MAX_VALUE) >= RawdataMetadataClient.PORTABLE_KEY_BYTES, "below the portable length: " + limit);
+        if (limit.isEmpty()) {
+            String longKey = "k".repeat(10_000);
+            metadata.put(longKey, new byte[]{1});
+            assertArrayEquals(new byte[]{1}, metadata.get(longKey));
+            return;
+        }
+        String atLimit = "k".repeat(limit.getAsInt());
+        String overLimit = atLimit + "k";
+        byte[] value = {1};
+        metadata.put(atLimit, value);
+        assertArrayEquals(value, metadata.get(atLimit));
+        assertThrows(IllegalArgumentException.class, () -> metadata.put(overLimit, value));
+        assertThrows(IllegalArgumentException.class, () -> metadata.get(overLimit));
+        assertThrows(IllegalArgumentException.class, () -> metadata.remove(overLimit));
+        assertEquals(Set.of(atLimit), metadata.keys());
+    }
+
+    // ---- one writer, several clients
+
+    /**
+     * Only one process writes a topic. A second client (another process) that publishes starts from the topic's end;
+     * the first client's next publish then finds the topic moved and fails with RawdataWriterConflictException,
+     * writing nothing, and keeps failing. The second writes on, and readers see each message once, in order.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void aSecondWriterMakesTheFirstFailAndTheTopicStaysWhole() throws InterruptedException {
+        assumeTrue(clientsShareTheStore(), "the provider keeps a store per client");
+        try (RawdataClient other = RawdataClient.create(configuration())) {
+            client.producer(topic).publish(message("a"));
+            other.producer(topic).publish(message("b"));
+            RawdataProducer first = client.producer(topic);
+            RawdataMessage c = message("c");
+            RawdataWriterConflictException conflict = assertThrows(RawdataWriterConflictException.class, () -> first.publish(c));
+            assertEquals(topic, conflict.topic());
+            assertThrows(RawdataWriterConflictException.class, () -> client.producer(topic).publish(c), "the client keeps failing");
+            other.producer(topic).publish(message("d"));
+            try (RawdataConsumer consumer = other.consumer(topic)) {
+                assertEquals(List.of("a", "b", "d"), readAll(consumer));
+            }
+            assertEquals("d", client.lastMessage(topic).position());
+        }
+    }
+
+    /**
+     * A writer that starts after another stopped (a restart) continues after the last message.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void aNewWriterContinuesAfterTheLastMessage() throws InterruptedException {
+        assumeTrue(clientsShareTheStore(), "the provider keeps a store per client");
+        publish("a", "b");
+        client.close();
+        client = RawdataClient.create(configuration());
+        publish("c");
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            assertEquals(List.of("a", "b", "c"), readAll(consumer));
+        }
+    }
+
+    /**
+     * A consumer in another client sees what the writer publishes, by waiting.
+     *
+     * @throws Exception if the test fails unexpectedly
+     */
+    @Test
+    public void aConsumerOfAnotherClientSeesWhatIsPublished() throws Exception {
+        assumeTrue(clientsShareTheStore(), "the provider keeps a store per client");
+        try (RawdataClient reader = RawdataClient.create(configuration()); RawdataConsumer consumer = reader.consumer(topic)) {
+            CompletableFuture<? extends RawdataMessage> received = consumer.receiveAsync();
+            client.producer(topic).publish(message("a"));
+            assertEquals("a", received.get(30, TimeUnit.SECONDS).position());
+            assertEquals("a", reader.lastMessage(topic).position());
+        }
+    }
+
+    /**
+     * A publish whose batch is refused (a given id not after the topic's last) writes nothing of the batch, and the
+     * writer goes on.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void aRefusedBatchWritesNothing() throws InterruptedException {
+        publish("a");
+        UUID last = client.lastMessage(topic).id();
+        try (RawdataProducer producer = client.producer(topic)) {
+            RawdataMessage fine = message("b", 3);
+            RawdataMessage stale = RawdataMessage.builder().id(last).position("stale").build();
+            assertThrows(IllegalArgumentException.class, () -> producer.publish(fine, stale));
+            assertEquals("a", client.lastMessage(topic).position());
+            producer.publish(message("c"));
+        }
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            assertEquals(List.of("a", "c"), readAll(consumer));
+        }
+    }
+
+    /**
+     * Many small publishes are all read, in order.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void manySmallPublishesAreAllRead() throws InterruptedException {
+        try (RawdataProducer producer = client.producer(topic)) {
+            for (int i = 0; i < 200; i++) {
+                producer.publish(message("m" + i));
+            }
+        }
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            List<String> read = new ArrayList<>();
+            List<? extends RawdataMessage> batch;
+            while (!(batch = consumer.receiveUpTo(500, Duration.ofSeconds(1))).isEmpty()) {
+                batch.forEach(m -> read.add(m.position()));
+            }
+            List<String> expected = new ArrayList<>();
+            for (int i = 0; i < 200; i++) {
+                expected.add("m" + i);
+            }
+            assertEquals(expected, read);
+        }
+    }
+
+    /**
+     * Seek, a start at a position and a start at an id find their message among many publishes.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void seekAndStartsFindTheirMessageAmongManyPublishes() throws InterruptedException {
+        long base = System.currentTimeMillis() - 1_000_000;
+        try (RawdataProducer producer = client.producer(topic)) {
+            for (int i = 0; i < 100; i++) {
+                producer.publish(RawdataMessage.builder().id(RawdataIds.beginningOf(base + 10L * i)).position("m" + i).build());
+            }
+        }
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            consumer.seek(base + 505);
+            assertEquals("m51", consumer.receive(5, TimeUnit.SECONDS).position());
+            consumer.seek(base + 990);
+            assertEquals("m99", consumer.receive(5, TimeUnit.SECONDS).position());
+            assertNull(consumer.receive(100, TimeUnit.MILLISECONDS));
+            consumer.seek(base);
+            assertEquals("m0", consumer.receive(5, TimeUnit.SECONDS).position());
+        }
+        try (RawdataConsumer consumer = client.consumer(topic, "m70", base + 700, Duration.ZERO)) {
+            assertEquals("m71", consumer.receive(5, TimeUnit.SECONDS).position());
+        }
+        try (RawdataConsumer consumer = client.consumer(topic, RawdataIds.beginningOf(base + 300), true)) {
+            assertEquals("m30", consumer.receive(5, TimeUnit.SECONDS).position());
+        }
+    }
+
+    // ---- a store that does not exist
+
+    /**
+     * A client on a store that does not exist fails, at creation or on use, with a RawdataException; it never reports
+     * an empty topic.
+     */
+    @Test
+    public void aStoreThatDoesNotExistFails() {
+        Map<String, String> missing = missingStoreConfiguration();
+        assumeTrue(missing != null, "the provider has no store that can be missing");
+        RawdataClient broken;
+        try {
+            broken = RawdataClient.create(missing);
+        } catch (RawdataException e) {
+            return; // failing at creation is fine
+        }
+        try (broken) {
+            assertThrows(RawdataException.class, () -> broken.lastMessage(topic));
+            assertThrows(RawdataException.class, () -> broken.metadata(topic).keys());
+            assertThrows(RawdataException.class, () -> broken.metadata(topic).get("k"));
+            RawdataMessage a = message("a");
+            assertThrows(RawdataException.class, () -> broken.producer(topic).publish(a));
+            try (RawdataConsumer consumer = broken.consumer(topic)) {
+                assertThrows(RawdataException.class, () -> consumer.receive(5, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     // ---- topic names
+
+    /**
+     * Topics whose names differ only by case are different topics, with their own messages and metadata.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void topicsDifferingOnlyByCaseStayApart() throws InterruptedException {
+        String upper = topic + "-Case";
+        String lower = topic + "-case";
+        client.producer(upper).publish(message("upper"));
+        client.producer(lower).publish(message("lower"));
+        client.metadata(upper).put("k", new byte[]{1});
+        client.metadata(lower).put("k", new byte[]{2});
+        try (RawdataConsumer consumer = client.consumer(upper)) {
+            assertEquals(List.of("upper"), readAll(consumer));
+        }
+        try (RawdataConsumer consumer = client.consumer(lower)) {
+            assertEquals(List.of("lower"), readAll(consumer));
+        }
+        assertArrayEquals(new byte[]{1}, client.metadata(upper).get("k"));
+        assertArrayEquals(new byte[]{2}, client.metadata(lower).get("k"));
+    }
 
     /**
      * Invalid topic names are refused by every method that takes a topic.

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.descoped.rawdata</groupId>
+        <artifactId>rawdata-client-project</artifactId>
+        <version>3.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>rawdata-client-provider-filesystem</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Rawdata Client Provider Filesystem</name>
+    <description>The filesystem RawdataClient provider: topics as Avro files in a local folder, on the Avro engine.</description>
+
+    <build>
+        <plugins>
+            <!-- The tests are patched into the provider and run on the class path, like those of gcs and s3, so that
+                 the store TCK can reach the store. The module path is covered by the JPMS smoke test. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.descoped.rawdata</groupId>
+            <artifactId>rawdata-client-provider-avro</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.descoped.rawdata</groupId>
+            <artifactId>rawdata-client-tck</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.provider.filesystem,
+             even though Surefire is set to the class path. These arguments open the test packages to JUnit and let
+             them read the test modules (see the postgres module). Maven and CI never activate this profile. -->
+        <profile>
+            <id>intellij</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.filesystem=ALL-UNNAMED,org.junit.jupiter.api --add-opens io.descoped.rawdata.provider.filesystem/io.descoped.rawdata.provider.filesystem=ALL-UNNAMED,org.junit.platform.commons --add-opens io.descoped.rawdata.provider.filesystem/io.descoped.rawdata.provider.filesystem.test=ALL-UNNAMED,org.junit.platform.commons --add-exports org.junit.platform.commons/org.junit.platform.commons.util=ALL-UNNAMED --add-exports org.junit.platform.commons/org.junit.platform.commons.logging=ALL-UNNAMED</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>
