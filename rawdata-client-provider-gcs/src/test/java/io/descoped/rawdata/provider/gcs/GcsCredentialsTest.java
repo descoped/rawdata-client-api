@@ -118,6 +118,27 @@ class GcsCredentialsTest {
     }
 
     /**
+     * A short-lived token is used for half its lifetime, not fetched on every call; invalidate drops it.
+     */
+    @Test
+    void aShortLivedTokenIsKeptForHalfItsLifetime() throws Exception {
+        assertEquals(java.time.Duration.ofMinutes(55), GcsCredentials.Token.lifetime(java.time.Duration.ofHours(1)));
+        assertEquals(java.time.Duration.ofSeconds(120), GcsCredentials.Token.lifetime(java.time.Duration.ofSeconds(240)));
+        assertEquals(java.time.Duration.ZERO, GcsCredentials.Token.lifetime(java.time.Duration.ZERO));
+        try (LocalHttp google = new LocalHttp(request -> LocalHttp.Response.json(200, "{\"access_token\":\"t\",\"expires_in\":240}"))) {
+            MutableClock clock = new MutableClock();
+            GcsCredentials credentials = new GcsCredentials.MetadataServer(google.root(), HTTP, clock);
+            credentials.authorization();
+            clock.now = clock.now.plusSeconds(119);
+            credentials.authorization();
+            assertEquals(1, google.requests.size());
+            credentials.invalidate();
+            credentials.authorization();
+            assertEquals(2, google.requests.size());
+        }
+    }
+
+    /**
      * gcloud's user credentials exchange the refresh token, with the client id and secret.
      */
     @Test

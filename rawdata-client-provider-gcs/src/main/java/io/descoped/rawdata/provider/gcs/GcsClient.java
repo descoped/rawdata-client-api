@@ -33,6 +33,7 @@ final class GcsClient {
 
     private static final int OK = 200;
     private static final int NO_CONTENT = 204;
+    private static final int UNAUTHORIZED = 401;
     private static final int NOT_FOUND = 404;
     private static final int PRECONDITION_FAILED = 412;
     private static final int MAX_ATTEMPTS = 6;
@@ -156,15 +157,24 @@ final class GcsClient {
     }
 
     private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request) throws IOException {
+        boolean refreshed = false;
         for (int attempt = 1; ; attempt++) {
-            HttpRequest.Builder builder = request.get().timeout(REQUEST_TIMEOUT);
-            Optional<String> authorization = credentials.authorization();
-            authorization.ifPresent(value -> builder.header("Authorization", value));
             try {
+                HttpRequest.Builder builder = request.get().timeout(REQUEST_TIMEOUT);
+                Optional<String> authorization = credentials.authorization(); // a token request is retried like the call
+                authorization.ifPresent(value -> builder.header("Authorization", value));
                 HttpResponse<byte[]> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() == UNAUTHORIZED && authorization.isPresent() && !refreshed) {
+                    credentials.invalidate(); // revoked, or the clock is off: once more with a new token
+                    refreshed = true;
+                    attempt--;
+                    continue;
+                }
                 if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
                     return response;
                 }
+            } catch (GcsCredentials.RefusedException e) {
+                throw e;
             } catch (IOException e) {
                 if (attempt == MAX_ATTEMPTS) {
                     throw e;

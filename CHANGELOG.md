@@ -58,7 +58,7 @@ code. Java 17 or newer.
   and `rawdata-client-provider-gcs` (module `io.descoped.rawdata.provider.gcs`). Packages renamed from
   `io.descoped.rawdata.avro`.
 - One Avro file per publish, numbered without gaps, created only if the number is free (a hard link, or an upload
-  with the `doesNotExist` precondition): a message is visible and durable when `publish` returns, and ids follow
+  with the `ifGenerationMatch=0` precondition): a message is visible and durable when `publish` returns, and ids follow
   commit order across processes. The local temp folder, the upload thread and the time and size windows are gone.
 - New layout: `<topic>/segments/<19 digits>.avro` and `<topic>/metadata/k<hex of the key>`. Avro record
   `io.descoped.rawdata.RawdataMessage`: `id` `fixed(16)` named `uuid`, `content` an array of `{name, value}` (was a map

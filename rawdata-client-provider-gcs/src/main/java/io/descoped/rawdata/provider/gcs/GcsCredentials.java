@@ -44,6 +44,11 @@ abstract class GcsCredentials {
     static final String GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token";
     static final String METADATA_HOST = "metadata.google.internal";
 
+    private static final String REFRESH_TOKEN = "refresh_token";
+    private static final String GCLOUD_FILE = "application_default_credentials.json";
+    private static final String METADATA_FLAVOR = "Metadata-Flavor";
+    private static final String GOOGLE = "Google";
+
     private static final Duration REFRESH_MARGIN = Duration.ofMinutes(5);
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -72,6 +77,27 @@ abstract class GcsCredentials {
     abstract Optional<String> authorization() throws IOException;
 
     /**
+     * Forgets a kept token, so that the next {@link #authorization()} fetches a new one: after GCS refused the
+     * token (401), for example because it was revoked or the clock is off.
+     */
+    void invalidate() {
+        // nothing is kept by default
+    }
+
+    /**
+     * Google refused to give a token (a 4xx from the token endpoint, such as {@code invalid_grant}): retrying does
+     * not help.
+     */
+    static final class RefusedException extends IOException {
+
+        private static final long serialVersionUID = 1L;
+
+        RefusedException(String message) {
+            super(message);
+        }
+    }
+
+    /**
      * Reads a credentials file: a service account key or a gcloud user's application default credentials.
      *
      * @param file the JSON file
@@ -89,7 +115,7 @@ abstract class GcsCredentials {
                         json.path("private_key_id").asText(null), json.path("token_uri").asText(GOOGLE_TOKEN_URI), http, Clock.systemUTC());
             case "authorized_user":
                 return new AuthorizedUser(text(json, "client_id", file), text(json, "client_secret", file),
-                        text(json, "refresh_token", file), json.path("token_uri").asText(GOOGLE_TOKEN_URI), http, Clock.systemUTC());
+                        text(json, REFRESH_TOKEN, file), json.path("token_uri").asText(GOOGLE_TOKEN_URI), http, Clock.systemUTC());
             default:
                 throw new IllegalArgumentException("Credentials file " + file + " has type '" + type
                         + "'; the gcs provider supports service_account and authorized_user files, and the metadata server");
@@ -129,13 +155,13 @@ abstract class GcsCredentials {
     private static Path gcloudFile(Map<String, String> environment, Path home) {
         String config = environment.get("CLOUDSDK_CONFIG");
         if (config != null && !config.isBlank()) {
-            return Path.of(config, "application_default_credentials.json");
+            return Path.of(config, GCLOUD_FILE);
         }
         String appData = environment.get("APPDATA");
         if (appData != null && System.getProperty("os.name", "").startsWith("Windows")) {
-            return Path.of(appData, "gcloud", "application_default_credentials.json");
+            return Path.of(appData, "gcloud", GCLOUD_FILE);
         }
-        return home.resolve(".config").resolve("gcloud").resolve("application_default_credentials.json");
+        return home.resolve(".config").resolve("gcloud").resolve(GCLOUD_FILE);
     }
 
     private static String text(JsonNode json, String field, Path file) {
@@ -162,7 +188,7 @@ abstract class GcsCredentials {
 
         private final HttpClient http;
         private final Clock clock;
-        private String token; // guarded by this
+        private String accessToken; // guarded by this
         private Instant refreshAt = Instant.MIN; // guarded by this
 
         Token(HttpClient http, Clock clock) {
@@ -178,17 +204,32 @@ abstract class GcsCredentials {
 
         @Override
         final synchronized Optional<String> authorization() throws IOException {
-            if (token == null || !clock.instant().isBefore(refreshAt)) {
+            if (accessToken == null || !clock.instant().isBefore(refreshAt)) {
                 Instant asked = clock.instant();
                 JsonNode response = call(tokenRequest());
-                String accessToken = response.path("access_token").asText("");
-                if (accessToken.isEmpty()) {
+                String fetched = response.path("access_token").asText("");
+                if (fetched.isEmpty()) {
                     throw new IOException("The token response of " + this + " has no access_token");
                 }
-                token = accessToken;
-                refreshAt = asked.plusSeconds(response.path("expires_in").asLong(0)).minus(REFRESH_MARGIN);
+                accessToken = fetched;
+                refreshAt = asked.plus(lifetime(Duration.ofSeconds(Math.max(0, response.path("expires_in").asLong(0)))));
             }
-            return Optional.of("Bearer " + token);
+            return Optional.of("Bearer " + accessToken);
+        }
+
+        /**
+         * How long a token with this lifetime is used: until five minutes before it expires, or until half its
+         * lifetime is over if that comes first, so a token with little time left is not fetched on every call.
+         */
+        static Duration lifetime(Duration expiresIn) {
+            Duration half = expiresIn.dividedBy(2);
+            Duration beforeExpiry = expiresIn.minus(REFRESH_MARGIN);
+            return beforeExpiry.compareTo(half) > 0 ? beforeExpiry : half;
+        }
+
+        @Override
+        final synchronized void invalidate() {
+            accessToken = null;
         }
 
         final Clock clock() {
@@ -202,10 +243,12 @@ abstract class GcsCredentials {
         JsonNode call(HttpRequest request) throws IOException {
             try {
                 HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-                if (response.statusCode() != 200) {
+                int status = response.statusCode();
+                if (status != 200) {
                     // the body of an OAuth error names the problem (invalid_grant, …) and holds no secret
-                    throw new IOException("Getting an access token for " + this + " failed: HTTP " + response.statusCode() + " "
-                            + new String(response.body(), StandardCharsets.UTF_8));
+                    String message = "Getting an access token for " + this + " failed: HTTP " + status + " "
+                            + new String(response.body(), StandardCharsets.UTF_8);
+                    throw GcsClient.retryable(status) ? new IOException(message) : new RefusedException(message);
                 }
                 return JSON.readTree(response.body());
             } catch (InterruptedException e) {
@@ -308,10 +351,10 @@ abstract class GcsCredentials {
         @Override
         HttpRequest tokenRequest() {
             Map<String, String> fields = new LinkedHashMap<>();
-            fields.put("grant_type", "refresh_token");
+            fields.put("grant_type", REFRESH_TOKEN);
             fields.put("client_id", clientId);
             fields.put("client_secret", clientSecret);
-            fields.put("refresh_token", refreshToken);
+            fields.put(REFRESH_TOKEN, refreshToken);
             return form(tokenUri, fields);
         }
 
@@ -338,7 +381,7 @@ abstract class GcsCredentials {
         @Override
         HttpRequest tokenRequest() {
             return HttpRequest.newBuilder(URI.create(root + "/computeMetadata/v1/instance/service-accounts/default/token"))
-                    .timeout(TIMEOUT).header("Metadata-Flavor", "Google").GET().build();
+                    .timeout(TIMEOUT).header(METADATA_FLAVOR, GOOGLE).GET().build();
         }
 
         /**
@@ -346,10 +389,10 @@ abstract class GcsCredentials {
          */
         boolean answers() {
             HttpRequest probe = HttpRequest.newBuilder(URI.create(root + "/computeMetadata/v1/")).timeout(PROBE_TIMEOUT)
-                    .header("Metadata-Flavor", "Google").GET().build();
+                    .header(METADATA_FLAVOR, GOOGLE).GET().build();
             try {
                 HttpResponse<Void> response = http().send(probe, HttpResponse.BodyHandlers.discarding());
-                return "Google".equals(response.headers().firstValue("Metadata-Flavor").orElse(null));
+                return GOOGLE.equals(response.headers().firstValue(METADATA_FLAVOR).orElse(null));
             } catch (IOException e) {
                 return false;
             } catch (InterruptedException e) {

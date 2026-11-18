@@ -88,7 +88,7 @@ this repository, and the work toward it is under way module by module.
   a local server (`jdk.httpserver`) playing GCS, Google's token endpoint and the metadata server.
 - **Avro invariants**: a topic is segments numbered 0, 1, 2… without gaps, one Avro file per publish, and a publish
   creates the segment after the last only if it does not exist (a hard link on a file system, an upload with the
-  `doesNotExist` precondition on GCS). A writer that loses the race reads the new last segment and tries again, so
+  `ifGenerationMatch=0` precondition on GCS). A writer that loses the race reads the new last segment and tries again, so
   ids grow in segment order across processes. A published message is visible and durable when `publish` returns;
   there is no local buffer or upload thread.
 - **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the

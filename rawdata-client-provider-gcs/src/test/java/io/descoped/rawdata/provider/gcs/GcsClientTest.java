@@ -71,6 +71,70 @@ class GcsClientTest {
         assertEquals("a-b_c.d~%2F%20", GcsClient.encode("a-b_c.d~/ "));
     }
 
+    /**
+     * A listing follows nextPageToken until the last page.
+     */
+    @Test
+    void aListingFollowsItsPages() throws Exception {
+        try (LocalHttp gcs = new LocalHttp(request -> request.query().contains("pageToken=p2")
+                ? LocalHttp.Response.json(200, "{\"items\":[{\"name\":\"f/c\"}]}")
+                : LocalHttp.Response.json(200, "{\"items\":[{\"name\":\"f/a\"},{\"name\":\"f/b\"}],\"nextPageToken\":\"p2\"}"))) {
+            assertEquals(java.util.List.of("f/a", "f/b", "f/c"), new GcsClient(gcs.root(), GcsCredentials.NONE).list("b", "f/"));
+            assertEquals(2, gcs.requests.size());
+        }
+    }
+
+    /**
+     * A failed token request (an I/O error or a 5xx from Google) is retried like the call; a refused one is not.
+     */
+    @Test
+    void aFailedTokenRequestIsRetried() throws Exception {
+        AtomicInteger tokens = new AtomicInteger();
+        try (LocalHttp google = new LocalHttp(request -> request.path().endsWith("/token")
+                ? (tokens.incrementAndGet() == 1 ? LocalHttp.Response.json(503, "{}")
+                : LocalHttp.Response.json(200, "{\"access_token\":\"t\",\"expires_in\":3600}"))
+                : LocalHttp.Response.json(200, "{\"generation\":\"1\"}"))) {
+            GcsCredentials metadata = new GcsCredentials.MetadataServer(google.root(), java.net.http.HttpClient.newHttpClient(), java.time.Clock.systemUTC());
+            assertEquals(1, new GcsClient(google.root(), metadata).generation("b", "o").getAsLong());
+            assertEquals(2, tokens.get());
+        }
+        try (LocalHttp refusing = new LocalHttp(request -> LocalHttp.Response.json(400, "{\"error\":\"invalid_grant\"}"))) {
+            GcsCredentials metadata = new GcsCredentials.MetadataServer(refusing.root(), java.net.http.HttpClient.newHttpClient(), java.time.Clock.systemUTC());
+            assertThrows(GcsCredentials.RefusedException.class, () -> new GcsClient(refusing.root(), metadata).generation("b", "o"));
+            assertEquals(1, refusing.requests.size(), "a refused token is not asked for again");
+        }
+    }
+
+    /**
+     * A 401 drops the kept token and tries once more with a new one; a second 401 is the caller's.
+     */
+    @Test
+    void anUnauthorizedResponseRefreshesTheTokenOnce() throws Exception {
+        AtomicInteger invalidated = new AtomicInteger();
+        GcsCredentials credentials = new GcsCredentials() {
+            @Override
+            java.util.Optional<String> authorization() {
+                return java.util.Optional.of("Bearer " + invalidated.get());
+            }
+
+            @Override
+            void invalidate() {
+                invalidated.incrementAndGet();
+            }
+        };
+        try (LocalHttp gcs = new LocalHttp(request -> "Bearer 0".equals(request.header("Authorization"))
+                ? LocalHttp.Response.json(401, "{}") : LocalHttp.Response.json(200, "{\"generation\":\"7\"}"))) {
+            assertEquals(7, new GcsClient(gcs.root(), credentials).generation("b", "o").getAsLong());
+            assertEquals(1, invalidated.get());
+        }
+        invalidated.set(0);
+        try (LocalHttp gcs = new LocalHttp(request -> LocalHttp.Response.json(401, "{\"error\":{\"message\":\"no\"}}"))) {
+            IOException denied = assertThrows(IOException.class, () -> new GcsClient(gcs.root(), credentials).generation("b", "o"));
+            assertTrue(denied.getMessage().contains("HTTP 401"), denied.getMessage());
+            assertEquals(2, gcs.requests.size());
+        }
+    }
+
     private static GcsCredentials token(String token) {
         return new GcsCredentials() {
             @Override
