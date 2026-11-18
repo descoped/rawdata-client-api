@@ -34,6 +34,26 @@
       "prBodyNotes": [
         "Update `distributionSha256Sum` in `.mvn/wrapper/maven-wrapper.properties` to the SHA-256 of the new `apache-maven-<version>-bin.zip`, after checking the zip against Maven's published `.sha512`."
       ]
+    },
+    {
+      "description": "Docker images in tests and scripts, found by the custom manager below; test-only, CI is the gate",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "A new PostgreSQL major is a decision (the provider supports one version): a pull request, never automerged",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
     }
   ],
   "vulnerabilityAlerts": {
@@ -41,5 +61,19 @@
       "security"
     ],
     "automerge": true
-  }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Docker image tags in Java test code and shell scripts (the Testcontainers images and the JPMS smoke test)",
+      "managerFilePatterns": [
+        "/\\.java$/",
+        "/\\.sh$/"
+      ],
+      "matchStrings": [
+        "(?<depName>postgres|fsouza/fake-gcs-server):(?<currentValue>[0-9][A-Za-z0-9._-]*)"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ]
 }

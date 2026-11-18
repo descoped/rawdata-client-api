@@ -1,7 +1,8 @@
 name: CI
 
 # One job on JDK 17, the baseline: every build compiles with `release 17`, so the bytecode does not depend on the
-# JDK, and 17 is the oldest runtime users have. Every run: build, tests and Javadoc of every module. Pushes to master and release tags, and pull requests from this repository, add coverage and
+# JDK, and 17 is the oldest runtime users have. Every run: build, tests and Javadoc of every module, and the JPMS
+# smoke test. Pushes to master and release tags, and pull requests from this repository, add coverage and
 # the SonarCloud analysis (not gating; pull requests from forks get no token). CI publishes nothing: releases are
 # made by hand (see .claude/CLAUDE.md), and SNAPSHOTs are not published.
 on:
@@ -63,6 +64,11 @@ jobs:
       - name: Build, test, Javadoc and coverage
         if: env.ANALYSE == 'true'
         run: ./mvnw --batch-mode --no-transfer-progress verify javadoc:javadoc -P coverage
+
+      # The application view: a module that requires only the API finds every provider and uses filesystem,
+      # PostgreSQL 18 and a fake GCS, on the module path and on the class path (Docker runs the stores).
+      - name: JPMS smoke test
+        run: src/it/jpms/run.sh
 
       # Analysis only: a SonarCloud outage or token problem must not fail the build, so this step does not gate.
       # On a pull request the scanner reads the pull request number, branch and base from GitHub Actions itself.
