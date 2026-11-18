@@ -72,6 +72,11 @@ this repository, and the work toward it is under way module by module.
   (`postgres:18-alpine`) through Testcontainers, so the build needs Docker. They run on the class path (Testcontainers'
   dependencies are automatic modules with split packages). `docker-compose.yml` in the postgres module starts
   PostgreSQL 18 for manual runs (port 5432, user and database `rdc`, password `rdc`).
+- **IntelliJ IDEA** ignores Surefire's `useModulePath=false` and runs the postgres and copy-util tests on the module
+  path, patched into the main module. A profile `intellij` in those two POMs, active only under IntelliJ's import
+  (property `idea.maven.embedder.version`), gives its test runs the `--add-reads`/`--add-opens` they need through
+  Surefire's `argLine`. Maven and CI never activate it. The root POM's empty `argLine` property keeps `@{argLine}`
+  defined when JaCoCo does not set it.
 - **Postgres invariants**: the topic is a column and always a bind parameter, never SQL text; a publish holds the
   topic's advisory lock (`pg_advisory_xact_lock`) while it reads the last id and writes, so ids grow in commit order
   across processes; the tables are created idempotently under an advisory lock.

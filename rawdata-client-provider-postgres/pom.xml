@@ -93,4 +93,30 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- IntelliJ IDEA runs these tests on the module path, patched into io.descoped.rawdata.provider.postgres, even though Surefire is set to the
+             class path. The module does not open the test package to JUnit or read the test modules, so every test
+             failed there with InaccessibleObjectException. IntelliJ sets idea.maven.embedder.version when it imports
+             the project and passes Surefire's argLine to its test runs; Maven and CI never activate this profile. -->
+        <profile>
+            <id>intellij</id>
+            <activation>
+                <property>
+                    <name>idea.maven.embedder.version</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>@{argLine} --add-reads io.descoped.rawdata.provider.postgres=ALL-UNNAMED,org.junit.jupiter.api,io.descoped.rawdata.tck --add-opens io.descoped.rawdata.provider.postgres/io.descoped.rawdata.provider.postgres.test=ALL-UNNAMED,org.junit.platform.commons</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
