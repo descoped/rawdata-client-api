@@ -32,6 +32,11 @@ this repository, and the work toward it is under way module by module.
 - **One reactor, one version.** Every module inherits the root POM and is released with it; modules depend on each
   other with `${project.version}`. Dependency versions are properties in the root POM, not `dependencyManagement`, so
   the BOM manages the rawdata modules only.
+- **Predictable transitive dependencies.** Applications add these modules next to their own libraries, so every
+  module's compile and runtime tree has one version of each library (enforcer `dependencyConvergence`, test scope
+  excluded). When two libraries bring different versions, the module that first needs it declares it at the newest
+  version (a property in the root POM) and excludes it from the others: slf4j-api from HikariCP and Avro, Jackson
+  and commons-codec from Avro, all of them and checker-qual from google-cloud-storage.
 - **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs` (owner's
   decision, 2026-11-18): the Google Cloud libraries are not modules, and requiring the names Java derives from their
   jar names would break when Google names them, so it is an automatic module with a fixed `Automatic-Module-Name`. The

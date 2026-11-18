@@ -15,6 +15,8 @@ code. Java 17 or newer.
 - New `rawdata-client-tck`: the provider contract as JUnit 6 tests, run for every provider.
 - New `io.descoped.rawdata.api.spi`: `OrderedRawdataProducer` and `PollingRawdataConsumer`, base classes for
   providers.
+- One version of each library in every module's compile and runtime dependencies, checked by the build: slf4j 2,
+  Jackson and commons-codec are declared by the providers at the newest version.
 - Every module is a JPMS module (`gcs` an automatic one, see below). CI checks the providers on the module path and
   the class path.
 
@@ -71,7 +73,8 @@ code. Java 17 or newer.
 ### Copy tool
 
 - New `rawdata-copy` (`rawdata-copy-util`): copies topics between stores, keeping ids and order, and continues after
-  the target's last id. Distributed as `rawdata-copy-<version>.zip` on GitHub releases, not on Maven Central.
+  the target's last id. All its logging, including `System.Logger` and `java.util.logging`, goes through slf4j.
+  Distributed as `rawdata-copy-<version>.zip` on GitHub releases, not on Maven Central.
 
 ## 2.0.0
 

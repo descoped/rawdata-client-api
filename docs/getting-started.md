@@ -39,6 +39,11 @@ Java 17 or newer. Import the BOM, then add the API and the providers you use:
 
 Code depends on the API only; a provider is chosen by configuration and found by the service loader.
 
+Every module's compile and runtime dependencies have one version of each library, the newest stable when the
+release was made; the build fails otherwise (the enforcer's `dependencyConvergence`). The libraries the providers
+share (slf4j-api, Jackson, commons-codec) are declared by the providers themselves, so Maven resolves them to those
+versions in your project too, unless you declare them yourself.
+
 ## A first producer and consumer
 
 ```java
@@ -69,6 +74,21 @@ try (RawdataClient client = RawdataClient.create(configuration)) {
 The provider gives each message a UUIDv7 id when it is published; the topic is read in id order. A consumer that
 should continue where it stopped saves the id of the last message it handled, for example in the topic's
 [metadata](contract.md#metadata), and starts from it next time: `client.consumer(topic, lastId)`.
+
+## Logging
+
+The providers log through the JDK's `System.Logger`; the libraries they use log through slf4j 2 (HikariCP, Avro) and
+`java.util.logging` (the Google Cloud libraries). None of them chooses where logging goes. With slf4j and, for
+example, logback in your application:
+
+| To send | Add | |
+|---|---|---|
+| `System.Logger` to slf4j | `org.slf4j:slf4j-jdk-platform-logging` (runtime) | nothing else; it is a `System.LoggerFinder` |
+| `java.util.logging` to slf4j | `org.slf4j:jul-to-slf4j` | and call `SLF4JBridgeHandler.removeHandlersForRootLogger(); SLF4JBridgeHandler.install();` at startup |
+
+Without the first, `System.Logger` goes to `java.util.logging`, which prints INFO and above to standard error. Use
+the slf4j version the providers bring (`mvn dependency:tree -Dincludes=org.slf4j`). The copy tool does both, with
+slf4j-simple at warn.
 
 ## The module path
 

@@ -8,6 +8,7 @@ import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataMetadataClient;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.rawdata.api.RawdataTopics;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -83,12 +84,15 @@ public final class RawdataCopyTool {
     }
 
     /**
-     * Runs the tool and exits with its status.
+     * Runs the tool and exits with its status. java.util.logging, which the Google Cloud libraries use, is sent to
+     * slf4j first, so that all library logging comes out one way.
      *
      * @param args the arguments
      */
     @SuppressWarnings("java:S106") // a command-line tool writes to the console
     public static void main(String[] args) {
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
         System.exit(run(args, System.out, System.err));
     }
 

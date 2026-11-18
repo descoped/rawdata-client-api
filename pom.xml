@@ -43,6 +43,8 @@
              rawdata-client-bom (which inherits this POM) manages the rawdata modules only. -->
         <service-provider-api.version>3.0.1</service-provider-api.version>
         <slf4j.version>2.0.20</slf4j.version>
+        <jackson.version>2.23.0</jackson.version>
+        <commons-codec.version>1.23.0</commons-codec.version>
         <logback.version>1.6.7</logback.version>
         <hikaricp.version>7.1.0</hikaricp.version>
         <postgresql.version>42.7.14</postgresql.version>
@@ -311,6 +313,15 @@
                                 <requireMavenVersion>
                                     <version>[3.6.3,4)</version>
                                 </requireMavenVersion>
+                                <!-- Predictable dependencies for applications: one version of each library in the
+                                     compile and runtime trees. Where two libraries bring different versions, the
+                                     module declares it at the newest and the other path excludes it. -->
+                                <dependencyConvergence>
+                                    <excludedScopes>
+                                        <excludedScope>test</excludedScope>
+                                        <excludedScope>provided</excludedScope>
+                                    </excludedScopes>
+                                </dependencyConvergence>
                             </rules>
                         </configuration>
                     </execution>

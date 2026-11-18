@@ -4,4 +4,5 @@
  */
 module io.descoped.rawdata.copy {
     requires io.descoped.rawdata.api;
+    requires jul.to.slf4j;
 }
