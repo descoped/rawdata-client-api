@@ -8,6 +8,7 @@ import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataMetadataClient;
 import io.descoped.rawdata.api.RawdataProducer;
 import io.descoped.rawdata.api.RawdataTopics;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -93,7 +94,7 @@ public final class RawdataCopyTool {
     }
 
     /**
-     * Runs the tool.
+     * Runs the tool. The first run sends java.util.logging to slf4j.
      *
      * @param args the arguments
      * @param out  where the progress goes
@@ -101,6 +102,7 @@ public final class RawdataCopyTool {
      * @return {@link #OK}, {@link #FAILED} or {@link #USAGE}
      */
     public static int run(String[] args, PrintStream out, PrintStream err) {
+        routeJavaUtilLoggingToSlf4j();
         Options options;
         Map<String, String> configuration;
         try {
@@ -124,6 +126,17 @@ public final class RawdataCopyTool {
         } finally {
             close(to);
             close(from);
+        }
+    }
+
+    /**
+     * Sends java.util.logging, which the Google Cloud libraries use, to slf4j, so that all library logging comes out
+     * one way (System.Logger goes there through slf4j-jdk-platform-logging). Once per JVM.
+     */
+    static synchronized void routeJavaUtilLoggingToSlf4j() {
+        if (!SLF4JBridgeHandler.isInstalled()) {
+            SLF4JBridgeHandler.removeHandlersForRootLogger();
+            SLF4JBridgeHandler.install();
         }
     }
 

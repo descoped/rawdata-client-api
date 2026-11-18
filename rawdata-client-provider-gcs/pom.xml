@@ -90,6 +90,14 @@
             <artifactId>rawdata-client-provider-avro</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Compile only: javac on JDK 17 warns (-Werror) when the annotations on Google's classes are missing.
+             Provided, so applications do not get it from here (pgjdbc brings its own with postgres). -->
+        <dependency>
+            <groupId>org.checkerframework</groupId>
+            <artifactId>checker-qual</artifactId>
+            <version>${checker-qual.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
@@ -99,6 +107,33 @@
                  OpenTelemetry metrics exporter are left out: 70 jars instead of 98. The tests against the fake GCS
                  and the JPMS smoke test check that nothing missing is loaded. -->
             <exclusions>
+                <!-- One version of each in applications: these come through rawdata-client-provider-avro, at the
+                     newest version; checker-qual (annotations, not needed at run time) is declared below for compiling
+                     only. -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-annotations</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>commons-codec</groupId>
+                    <artifactId>commons-codec</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
+                </exclusion>
                 <exclusion>
                     <groupId>io.grpc</groupId>
                     <artifactId>grpc-alts</artifactId>
