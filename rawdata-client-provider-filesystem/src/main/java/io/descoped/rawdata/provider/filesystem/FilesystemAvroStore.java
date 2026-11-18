@@ -10,7 +10,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -129,7 +128,6 @@ final class FilesystemAvroStore implements AvroStore {
     private Path topicFolder(String topic) {
         return folder.resolve(AvroTopicFolders.folderName(topic));
     }
-
 
     private Path segment(String topic, long segment) {
         return topicFolder(topic).resolve("segments").resolve(String.format("%019d.avro", segment));

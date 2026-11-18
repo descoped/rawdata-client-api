@@ -228,11 +228,14 @@ public final class AvroRawdataClient implements RawdataClient {
      * The writer of a topic, started on the first publish. Called with the topic's publish lock held.
      */
     AvroTopicWriter writer(String topic) {
-        AvroTopicWriter writer = writers.get(topic);
-        if (writer == null) {
+        AvroTopicWriter writer = writers.computeIfAbsent(topic, t -> {
             checkOpen();
-            writer = AvroTopicWriter.start(this, topic, window);
-            writers.put(topic, writer);
+            return AvroTopicWriter.start(this, t, window);
+        });
+        if (isClosed()) { // close() may have gone over the writers before this one was added
+            writers.remove(topic, writer);
+            writer.close();
+            throw new RawdataClosedException("client is closed");
         }
         return writer;
     }

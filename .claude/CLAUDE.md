@@ -48,9 +48,11 @@ this repository, and the work toward it is under way module by module.
   and the class path.
 - **Only one process writes a topic** (owner's principle, 2026-11-18). Several producers of that process's client may
   publish; consumers may be anywhere. A provider detects another writer the same way in all of them: a client
-  remembers where it last wrote a topic (before its first publish, where the topic ended), and a publish that finds
-  more after that throws `RawdataWriterConflictException` and writes nothing. Nothing supports or tests several
-  writing processes keeping a common order.
+  remembers where it last wrote a topic (before its first publish, where the topic ended); finding more after that
+  fails with `RawdataWriterConflictException`. postgres throws from that `publish`, writing nothing. The Avro
+  providers find it when a window opens or uploads, so a later `publish`, `flush` or `close` throws, and the windows
+  not uploaded are kept as `*.invalid`, never written. Nothing supports or tests several writing processes keeping
+  a common order.
 - **Design and architecture are Ove's decisions** (2026-11-18). Learn how 2.x does it (old tags such as
   `rawdata-client-provider-gcs/2.0.0`) and ask him before changing a design; fix 2.x's bugs without replacing its
   design. Rawdata Client is a lightweight, cheap way to stream over object storage, not a pubsub or Kafka competitor.

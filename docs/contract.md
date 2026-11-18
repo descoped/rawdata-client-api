@@ -12,12 +12,18 @@ be, and what a store accepts at most.
 client keeps them in order. Consumers may be in any process.
 
 If another process publishes to the topic anyway (a misconfiguration, or a new writer started while the old one
-still runs), the writer that finds the topic moved under it fails: its `publish` throws
-`RawdataWriterConflictException`, which names the topic, and writes nothing. The client keeps failing to publish to
-that topic, so two writers never merge into one stream. The other writer goes on; a client created after the other
-writer stopped starts from the topic's current end. Every provider detects it the same way: a client remembers where
-it last wrote a topic (or where the topic ended when it started writing), and a publish that finds more after that
-fails.
+still runs), the writer that finds the topic moved under it fails with `RawdataWriterConflictException`, which names
+the topic. The client keeps failing to publish to that topic, so two writers never merge into one stream. The other
+writer goes on; a client created after the other writer stopped starts from the topic's current end. Every provider
+detects it the same way: a client remembers where it last wrote a topic (or where the topic ended when it started
+writing), and finds more after that.
+
+When the failure shows depends on when the provider writes:
+- `postgres` writes in `publish`, so that `publish` throws and writes nothing.
+- `filesystem`, `gcs` and `s3` buffer in an [upload window](providers/upload-window.md). The conflict is found when a
+  window opens or uploads, so it is thrown by that `publish`, or by a later `publish`, `flush` or `close`. Messages
+  already accepted into windows that were not uploaded are never written to the topic; they are kept on disk as
+  `*.invalid` files.
 
 ## Topics
 

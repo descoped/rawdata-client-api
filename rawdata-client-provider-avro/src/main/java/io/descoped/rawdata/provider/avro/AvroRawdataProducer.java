@@ -29,7 +29,7 @@ final class AvroRawdataProducer extends OrderedRawdataProducer {
         lock.lock();
         try {
             checkOpen();
-            client.writer(topic).publish(batch, last -> withIds(batch, last));
+            client.writer(topic).publish(last -> withIds(batch, last));
         } finally {
             lock.unlock();
         }

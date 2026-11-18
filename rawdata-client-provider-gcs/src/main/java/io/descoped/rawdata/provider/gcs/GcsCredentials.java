@@ -123,16 +123,12 @@ abstract class GcsCredentials {
     }
 
     /**
-     * Finds the Application Default Credentials, in Google's order: the file in {@code GOOGLE_APPLICATION_CREDENTIALS},
-     * gcloud's {@code application_default_credentials.json} (in {@code CLOUDSDK_CONFIG}, or {@code ~/.config/gcloud},
-     * or {@code %APPDATA%\gcloud} on Windows), and the metadata server ({@code GCE_METADATA_HOST} or
-     * {@code metadata.google.internal}) if it answers.
+     * The metadata server of a Google Cloud runtime (GCE, GKE, Cloud Run): tokens for the runtime's service account.
+     * It is not asked until the first request.
      *
-     * @param environment the environment variables
-     * @param home        the user's home folder
-     * @param http        the client for the token endpoints
+     * @param environment the environment variables; {@code GCE_METADATA_HOST} overrides the server's address
+     * @param http        the client for the metadata server
      * @return the credentials
-     * @throws IOException if none are found, or a file cannot be read
      */
     static GcsCredentials computeEngine(Map<String, String> environment, HttpClient http) {
         String host = environment.getOrDefault("GCE_METADATA_HOST", METADATA_HOST);

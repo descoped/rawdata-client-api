@@ -117,7 +117,7 @@ public final class AvroConfiguration {
         }
         StringBuilder allowed = new StringBuilder();
         for (E constant : type.getEnumConstants()) {
-            allowed.append(allowed.length() == 0 ? "" : ", ").append(constant.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+            allowed.append(allowed.isEmpty() ? "" : ", ").append(constant.name().toLowerCase(Locale.ROOT).replace('_', '-'));
         }
         throw new IllegalArgumentException("Configuration '" + key + "' must be one of " + allowed + ": '" + value + "'");
     }

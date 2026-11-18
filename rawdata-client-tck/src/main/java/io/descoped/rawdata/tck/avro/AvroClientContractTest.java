@@ -159,7 +159,7 @@ public abstract class AvroClientContractTest extends RawdataClientContractTest {
 
     /**
      * After a crash, the next writer of the topic uploads the window the crashed one left, cut back to its complete
-     * blocks, and goes on after it. The crashed writer, should it still run, can no longer write the topic.
+     * blocks, which hold whole publish calls, and goes on after it. The crashed writer, should it still run, can no longer write the topic.
      *
      * @throws Exception if the test fails unexpectedly
      */
@@ -171,9 +171,14 @@ public abstract class AvroClientContractTest extends RawdataClientContractTest {
         RawdataClient lost = RawdataClient.create(crashed);
         try {
             RawdataProducer producer = lost.producer(topic);
-            for (int i = 0; i < 40; i++) {
-                producer.publish(message("m" + i));
-                published.add("m" + i);
+            for (int call = 0; call < 20; call++) {
+                List<RawdataMessage> messages = new ArrayList<>();
+                for (int i = 0; i < 3; i++) {
+                    String position = "c" + call + "-" + i;
+                    messages.add(message(position));
+                    published.add(position);
+                }
+                producer.publish(messages); // a call is written whole or not at all, also through a crash
             }
             // The crash: the window file as the disk holds it, with a torn block at its end, in the restarted folder.
             Path window = onlyWindow(crashed);
@@ -192,6 +197,7 @@ public abstract class AvroClientContractTest extends RawdataClientContractTest {
                 List<String> recovered = read.subList(0, read.size() - 1);
                 assertFalse(recovered.isEmpty(), "the complete blocks are uploaded");
                 assertEquals(published.subList(0, recovered.size()), recovered, "a prefix, in order, without gaps");
+                assertEquals(0, recovered.size() % 3, "whole calls only: " + recovered.size());
             }
             assertThrows(RawdataWriterConflictException.class, () -> awaitPublished(lost, topic),
                     "the crashed writer's segment is taken");

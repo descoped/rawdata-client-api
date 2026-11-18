@@ -36,6 +36,10 @@ import java.util.stream.Stream;
  * uploaded in the background as the topic's next segment while publishes go on in a new window. Uploads of a topic run
  * one at a time, in segment order; a publish waits while {@code avro-file.max.pending-uploads} sealed windows wait.
  * <p>
+ * <b>Whole calls.</b> An Avro block ends only between publish calls, and is then forced to disk, so a crash leaves
+ * whole calls on disk, never part of one. A write that fails in the middle of a call leaves the window as a crash
+ * would: its complete blocks on disk, for recovery.
+ * <p>
  * <b>One writer.</b> The writer starts from the topic's end. A segment number that is taken when a window opens or
  * uploads means another process wrote the topic: the writer fails with {@link RawdataWriterConflictException}, its
  * windows are set aside ({@code .invalid}, never deleted) and every later publish fails.
@@ -53,10 +57,13 @@ import java.util.stream.Stream;
 final class AvroTopicWriter {
 
     private static final System.Logger LOG = System.getLogger(AvroTopicWriter.class.getName());
-    private static final String OPEN = ".window.avro";
-    private static final String SEALED = ".sealed.avro";
-    private static final String INVALID = ".invalid";
-    private static final String LOCK = ".lock";
+    private static final String OPEN_SUFFIX = ".window.avro";
+    private static final String SEALED_SUFFIX = ".sealed.avro";
+    private static final String INVALID_SUFFIX = ".invalid";
+    private static final String LOCK_FILE = ".lock";
+    private static final String OF_TOPIC = " of topic ";
+    private static final String CLOSING = "Closing the upload window" + OF_TOPIC;
+    private static final int MAX_AVRO_SYNC_INTERVAL = 1 << 30; // Avro never ends a block by itself; endBlock does
 
     private final AvroRawdataClient client;
     private final AvroStore store;
@@ -64,12 +71,12 @@ final class AvroTopicWriter {
     private final AvroUploadWindow settings;
     private final Path folder;
     private final FileChannel lockChannel;
-    private final FileLock lock;
+    private final FileLock folderLock;
     private final ReentrantLock appendLock; // the topic's publish lock in the client
 
     // guarded by appendLock
     private AvroRawdataClient.Tail tail; // the last segment this writer created or sealed
-    private Window open;
+    private Window current;
 
     // guarded by this
     private final Deque<Sealed> pending = new ArrayDeque<>();
@@ -86,6 +93,7 @@ final class AvroTopicWriter {
         UUID lastId;
         int count;
         long blockBytes;
+        boolean torn; // a write failed in the middle of a call: only the forced blocks may be kept
         ScheduledFuture<?> timer;
 
         Window(Path file, long segment, UUID previousId, FileOutputStream out, DataFileWriter<GenericRecord> writer) {
@@ -101,14 +109,14 @@ final class AvroTopicWriter {
     }
 
     private AvroTopicWriter(AvroRawdataClient client, String topic, AvroUploadWindow settings, Path folder,
-                            FileChannel lockChannel, FileLock lock) {
+                            FileChannel lockChannel, FileLock folderLock) {
         this.client = client;
         this.store = client.store();
         this.topic = topic;
         this.settings = settings;
         this.folder = folder;
         this.lockChannel = lockChannel;
-        this.lock = lock;
+        this.folderLock = folderLock;
         this.appendLock = client.publishLock(topic);
     }
 
@@ -118,72 +126,87 @@ final class AvroTopicWriter {
      */
     static AvroTopicWriter start(AvroRawdataClient client, String topic, AvroUploadWindow settings) {
         Path folder = settings.localTempFolder().resolve(AvroTopicFolders.folderName(topic));
-        FileChannel channel = null;
+        FileChannel channel;
         try {
             Files.createDirectories(folder);
-            channel = FileChannel.open(folder.resolve(LOCK), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-            FileLock lock;
-            try {
-                lock = channel.tryLock();
-            } catch (OverlappingFileLockException e) {
-                lock = null;
-            }
-            if (lock == null) {
-                throw new RawdataException("The buffer folder " + folder + " of topic '" + topic
-                        + "' is in use by another client: only one process may write a topic");
-            }
-            AvroTopicWriter writer = new AvroTopicWriter(client, topic, settings, folder, channel, lock);
-            try {
-                writer.recover();
-            } catch (RuntimeException e) {
-                writer.release();
-                throw e;
-            }
-            return writer;
+            channel = FileChannel.open(folder.resolve(LOCK_FILE), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         } catch (IOException e) {
-            closeQuietly(channel);
-            throw client.failure("Starting the writer of topic " + topic + " in " + folder, e);
+            throw storeFailure("Opening the buffer folder " + folder + OF_TOPIC + topic, e);
+        }
+        AvroTopicWriter writer;
+        try {
+            writer = new AvroTopicWriter(client, topic, settings, folder, channel, lock(channel, folder, topic));
         } catch (RuntimeException e) {
-            if (channel != null && channel.isOpen()) {
-                closeQuietly(channel);
-            }
+            closeQuietly(channel);
             throw e;
         }
+        try {
+            writer.recover();
+            return writer;
+        } catch (IOException e) {
+            writer.release();
+            throw storeFailure("Recovering the buffer" + OF_TOPIC + topic + " in " + folder, e);
+        } catch (RuntimeException e) {
+            writer.release();
+            throw e;
+        }
+    }
+
+    private static FileLock lock(FileChannel channel, Path folder, String topic) {
+        FileLock lock;
+        try {
+            lock = channel.tryLock();
+        } catch (OverlappingFileLockException e) {
+            lock = null; // another client in this JVM
+        } catch (IOException e) {
+            throw storeFailure("Locking the buffer folder " + folder, e);
+        }
+        if (lock == null) {
+            throw new RawdataException("The buffer folder " + folder + OF_TOPIC + "'" + topic
+                    + "' is in use by another client: only one process may write a topic");
+        }
+        return lock;
     }
 
     // ---- publishing
 
     /**
-     * Appends a call's messages to the open window, opening one if there is none.
+     * Appends a call's messages to the open window, opening one if there is none. The call ends its block when the
+     * block is full, so blocks hold whole calls.
      *
      * @param withIds gives the messages their ids after the given last id, and checks given ones
      */
-    void publish(RawdataMessage[] batch, Function<UUID, List<RawdataMessage>> withIds) {
+    void publish(Function<UUID, List<RawdataMessage>> withIds) {
         appendLock.lock();
         try {
             throwIfFailed();
-            if (open != null && ageSeconds(open) >= settings.maxSeconds()) {
+            if (current != null && ageSeconds(current) >= settings.maxSeconds()) {
                 seal();
             }
-            if (open == null) {
+            if (current == null) {
                 openWindow();
             }
-            Window window = open;
+            Window window = current;
             List<RawdataMessage> stored = withIds.apply(window.lastId); // may refuse the batch before anything is written
-            for (RawdataMessage message : stored) {
-                if (window.blockBytes >= settings.syncInterval()) {
-                    endBlock(window);
+            try {
+                for (RawdataMessage message : stored) {
+                    window.writer.append(AvroSegments.toRecord(message));
+                    window.blockBytes += AvroSegments.estimatedSize(message);
                 }
-                window.writer.append(AvroSegments.toRecord(message));
-                window.blockBytes += AvroSegments.estimatedSize(message);
+            } catch (IOException | RuntimeException e) {
+                window.torn = true; // part of the call is in Avro's block buffer, never written
+                throw e;
             }
             window.lastId = stored.get(stored.size() - 1).id();
             window.count += stored.size();
+            if (window.blockBytes >= settings.syncInterval()) {
+                endBlock(window);
+            }
             if (window.out.getChannel().size() + window.blockBytes >= settings.maxBytes()) {
                 seal();
             }
         } catch (IOException e) {
-            throw fail(client.failure("Writing the upload window of topic " + topic, e));
+            throw fail(storeFailure("Writing the upload window" + OF_TOPIC + topic, e));
         } finally {
             appendLock.unlock();
         }
@@ -198,30 +221,27 @@ final class AvroTopicWriter {
         appendLock.lock();
         try {
             throwIfFailed();
-            if (open != null) {
+            if (current != null) {
                 seal();
             }
         } catch (IOException e) {
-            throw fail(client.failure("Closing the upload window of topic " + topic, e));
+            throw fail(storeFailure(CLOSING + topic, e));
         } finally {
             appendLock.unlock();
         }
-        synchronized (this) {
-            boolean interrupted = false;
-            while ((uploading || !pending.isEmpty()) && failure == null) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                    interrupted = true;
-                    break;
-                }
-            }
-            if (interrupted) {
+        awaitUploads();
+        throwIfFailed();
+    }
+
+    private synchronized void awaitUploads() {
+        while ((uploading || !pending.isEmpty()) && failure == null) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RawdataException("Interrupted while waiting for the upload of topic " + topic);
+                throw new RawdataException("Interrupted while waiting for the upload" + OF_TOPIC + topic);
             }
         }
-        throwIfFailed();
     }
 
     /**
@@ -238,18 +258,14 @@ final class AvroTopicWriter {
             flush();
         } catch (RawdataException e) {
             // A failure is thrown at close if it was never reported, or if data is left that was not uploaded.
-            boolean dataLeft;
-            synchronized (this) {
-                dataLeft = !pending.isEmpty();
-            }
-            if (!reportedBefore || dataLeft || hasOpenData()) {
+            if (!reportedBefore || hasPending() || hasOpenData()) {
                 throw e;
             }
         } finally {
             appendLock.lock();
             try {
-                if (open != null) {
-                    abandonOpenWindow(failure instanceof RawdataWriterConflictException);
+                if (current != null) {
+                    abandonOpenWindow(failureOrNull() instanceof RawdataWriterConflictException);
                 }
             } finally {
                 appendLock.unlock();
@@ -258,10 +274,14 @@ final class AvroTopicWriter {
         }
     }
 
+    private synchronized boolean hasPending() {
+        return !pending.isEmpty();
+    }
+
     private boolean hasOpenData() {
         appendLock.lock();
         try {
-            return open != null && open.count > 0;
+            return current != null && current.count > 0;
         } finally {
             appendLock.unlock();
         }
@@ -272,15 +292,24 @@ final class AvroTopicWriter {
         if (store.exists(topic, segment)) {
             throw fail(new RawdataWriterConflictException(topic)); // another process created it
         }
-        Path file = folder.resolve(name(segment) + OPEN);
+        Path file = folder.resolve(name(segment) + OPEN_SUFFIX);
         FileOutputStream out = new FileOutputStream(file.toFile());
         DataFileWriter<GenericRecord> writer = AvroSegments.writer(segment, tail.lastId());
-        writer.setSyncInterval(Math.max(32, Math.min(1 << 30, 2 * settings.syncInterval()))); // blocks end in endBlock
-        writer.setFlushOnEveryBlock(true);
-        writer.create(AvroSegments.MESSAGE, out);
+        try {
+            writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL);
+            writer.setFlushOnEveryBlock(true);
+            writer.create(AvroSegments.MESSAGE, out);
+            out.getChannel().force(true); // the header, so a crash right after leaves a readable window
+        } catch (IOException | RuntimeException e) {
+            out.close();
+            Files.deleteIfExists(file);
+            throw e;
+        }
         Window window = new Window(file, segment, tail.lastId(), out, writer);
-        open = window;
-        window.timer = client.scheduler().schedule(() -> closeIfStill(window), settings.maxSeconds(), TimeUnit.SECONDS);
+        current = window;
+        // The timer hands the close to the executor: a topic whose uploads are slow never holds up another's timer.
+        window.timer = client.scheduler().schedule(() -> client.executor().execute(() -> closeIfStill(window)),
+                settings.maxSeconds(), TimeUnit.SECONDS);
     }
 
     /**
@@ -289,20 +318,20 @@ final class AvroTopicWriter {
     private void closeIfStill(Window window) {
         appendLock.lock();
         try {
-            if (open == window && failureOrNull() == null) {
+            if (current == window && failureOrNull() == null && !window.torn) {
                 seal();
             }
         } catch (IOException e) {
-            fail(client.failure("Closing the upload window of topic " + topic, e));
+            fail(storeFailure(CLOSING + topic, e));
         } catch (RuntimeException e) {
-            LOG.log(System.Logger.Level.WARNING, "Closing the upload window of topic " + topic + " failed", e);
+            LOG.log(System.Logger.Level.WARNING, CLOSING + topic + " failed", e);
         } finally {
             appendLock.unlock();
         }
     }
 
     /**
-     * Writes the block being filled and forces it to disk, so a crash loses at most the block after it.
+     * Writes the block being filled and forces it to disk, so a crash loses at most the calls after it.
      */
     private static void endBlock(Window window) throws IOException {
         window.writer.sync();
@@ -315,8 +344,8 @@ final class AvroTopicWriter {
      * Called with the publish lock held; waits while too many windows wait for upload.
      */
     private void seal() throws IOException {
-        Window window = open;
-        open = null;
+        Window window = current;
+        current = null;
         if (window.timer != null) {
             window.timer.cancel(false);
         }
@@ -327,26 +356,22 @@ final class AvroTopicWriter {
             Files.deleteIfExists(window.file);
             return;
         }
-        Path sealed = folder.resolve(name(window.segment) + SEALED);
+        Path sealed = folder.resolve(name(window.segment) + SEALED_SUFFIX);
         Files.move(window.file, sealed, StandardCopyOption.ATOMIC_MOVE);
         tail = new AvroRawdataClient.Tail(window.segment, window.lastId);
         enqueue(new Sealed(sealed, window.segment, window.lastId));
     }
 
     private synchronized void enqueue(Sealed sealed) {
-        boolean interrupted = false;
         while (pending.size() >= settings.maxPendingUploads() && failure == null) {
             try {
                 wait();
             } catch (InterruptedException e) {
-                interrupted = true;
-                break;
+                Thread.currentThread().interrupt();
+                break; // queued anyway: the window is sealed on disk and must not be lost
             }
         }
         pending.addLast(sealed); // kept even when the writer failed, so it stays on disk for recovery
-        if (interrupted) {
-            Thread.currentThread().interrupt();
-        }
         if (failure == null && !uploading) {
             uploading = true;
             client.executor().execute(this::drain);
@@ -374,7 +399,7 @@ final class AvroTopicWriter {
                 }
                 Files.delete(next.file());
             } catch (IOException e) {
-                fail(client.failure("Uploading segment " + next.segment() + " of topic " + topic, e));
+                fail(storeFailure("Uploading segment " + next.segment() + OF_TOPIC + topic, e));
                 return;
             } catch (RuntimeException e) {
                 fail(e);
@@ -409,12 +434,19 @@ final class AvroTopicWriter {
         }
         if (cause instanceof RawdataWriterConflictException) {
             LOG.log(System.Logger.Level.ERROR, "Another process writes topic " + topic
-                    + "; this client stops writing it. Windows not uploaded are kept as *" + INVALID + " in " + folder);
+                    + "; this client stops writing it. Windows not uploaded are kept as *" + INVALID_SUFFIX + " in " + folder);
         } else {
-            LOG.log(System.Logger.Level.ERROR, "The writer of topic " + topic + " failed; windows not uploaded stay in "
+            LOG.log(System.Logger.Level.ERROR, "The writer" + OF_TOPIC + topic + " failed; windows not uploaded stay in "
                     + folder + " and are uploaded when a writer of the topic starts again", cause);
         }
         return cause;
+    }
+
+    /**
+     * A store or disk failure, with its cause, also while the client closes.
+     */
+    private static RawdataException storeFailure(String what, IOException e) {
+        return new RawdataException(what + " failed: " + e.getMessage(), e);
     }
 
     private synchronized RuntimeException failureOrNull() {
@@ -433,27 +465,35 @@ final class AvroTopicWriter {
             throw new RawdataWriterConflictException(topic);
         }
         if (cause != null) {
-            throw new RawdataException("The writer of topic " + topic + " failed: " + cause.getMessage(), cause);
+            throw new RawdataException("The writer" + OF_TOPIC + topic + " failed: " + cause.getMessage(), cause);
         }
     }
 
     /**
-     * Closes the open window of a failed writer: set aside on a conflict, else sealed and kept for recovery.
+     * Closes the open window of a failed writer. On a conflict it is set aside. A window torn by a failed write is
+     * left as a crash leaves it, its forced blocks on disk, for recovery to cut back. Otherwise it is forced to disk
+     * and sealed, for the next writer to upload.
      */
     private void abandonOpenWindow(boolean conflict) {
-        Window window = open;
-        open = null;
+        Window window = current;
+        current = null;
         if (window.timer != null) {
             window.timer.cancel(false);
         }
         try {
-            window.writer.close();
-            if (window.count == 0) {
+            if (window.torn) {
+                window.out.close(); // drops Avro's unwritten block: only whole calls stay on disk
+            } else {
+                window.writer.flush();
+                window.out.getChannel().force(true);
+                window.writer.close();
+            }
+            if (window.count == 0 && !window.torn) {
                 Files.deleteIfExists(window.file);
             } else if (conflict) {
                 invalidate(window.file);
-            } else {
-                Files.move(window.file, folder.resolve(name(window.segment) + SEALED), StandardCopyOption.ATOMIC_MOVE);
+            } else if (!window.torn) {
+                Files.move(window.file, folder.resolve(name(window.segment) + SEALED_SUFFIX), StandardCopyOption.ATOMIC_MOVE);
             }
         } catch (IOException e) {
             LOG.log(System.Logger.Level.WARNING, "Closing the window file " + window.file + " failed", e);
@@ -462,8 +502,8 @@ final class AvroTopicWriter {
 
     private void release() {
         try {
-            if (lock.isValid()) {
-                lock.release();
+            if (folderLock.isValid()) {
+                folderLock.release();
             }
         } catch (IOException e) {
             LOG.log(System.Logger.Level.WARNING, "Releasing the lock of " + folder + " failed", e);
@@ -479,7 +519,7 @@ final class AvroTopicWriter {
         try (Stream<Path> files = Files.list(folder)) {
             leftovers = files.filter(file -> {
                 String name = file.getFileName().toString();
-                return name.endsWith(OPEN) || name.endsWith(SEALED);
+                return name.endsWith(OPEN_SUFFIX) || name.endsWith(SEALED_SUFFIX);
             }).sorted().toList(); // the name starts with the segment number in 19 digits
         }
         boolean conflict = false;
@@ -501,7 +541,7 @@ final class AvroTopicWriter {
      * @return false if it does not belong after the topic's end, and was set aside
      */
     private boolean recover(Path file) throws IOException {
-        boolean sealed = file.getFileName().toString().endsWith(SEALED);
+        boolean sealed = file.getFileName().toString().endsWith(SEALED_SUFFIX);
         AvroSegments.Leftover leftover = AvroSegments.readLeftover(file);
         if (leftover == null || leftover.messages().isEmpty()) {
             Files.delete(file); // nothing was appended, or nothing of it reached the disk
@@ -519,7 +559,7 @@ final class AvroTopicWriter {
             }
         } else if (leftover.segment() == tail.segment() + 1 && leftover.previousId().equals(tail.lastId())
                 && store.create(topic, leftover.segment(), content)) {
-            LOG.log(System.Logger.Level.INFO, "Uploaded segment " + leftover.segment() + " of topic " + topic
+            LOG.log(System.Logger.Level.INFO, "Uploaded segment " + leftover.segment() + OF_TOPIC + topic
                     + " that a crash left in " + file + " (" + leftover.messages().size() + " messages"
                     + (leftover.complete() ? "" : ", a torn last block left out") + ")");
             Files.delete(file);
@@ -527,15 +567,15 @@ final class AvroTopicWriter {
             client.uploaded(topic, tail);
             return true;
         }
-        LOG.log(System.Logger.Level.ERROR, "The window " + file + " of topic " + topic + " that a crash left does not "
-                + "follow the topic's end (another process wrote the topic); it is kept as " + file.getFileName() + INVALID);
+        LOG.log(System.Logger.Level.ERROR, "The window " + file + OF_TOPIC + topic + " that a crash left does not "
+                + "follow the topic's end (another process wrote the topic); it is kept as " + file.getFileName() + INVALID_SUFFIX);
         invalidate(file);
         return false;
     }
 
     private void invalidate(Path file) {
         try {
-            Files.move(file, file.resolveSibling(file.getFileName() + INVALID), StandardCopyOption.ATOMIC_MOVE);
+            Files.move(file, file.resolveSibling(file.getFileName() + INVALID_SUFFIX), StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             LOG.log(System.Logger.Level.WARNING, "Setting aside " + file + " failed", e);
         }
@@ -552,12 +592,10 @@ final class AvroTopicWriter {
     }
 
     private static void closeQuietly(FileChannel channel) {
-        if (channel != null) {
-            try {
-                channel.close();
-            } catch (IOException e) {
-                // nothing more to do
-            }
+        try {
+            channel.close();
+        } catch (IOException e) {
+            // nothing more to do
         }
     }
 
