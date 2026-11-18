@@ -11,8 +11,8 @@
 
     <name>Rawdata Client Project</name>
     <description>A provider based API for writing and reading ordered streams of raw data messages, with providers
-        for PostgreSQL and Avro files on Google Cloud Storage or a local folder, and a tool that copies topics from
-        one provider to another.
+        for PostgreSQL and for Avro files in a local folder, Google Cloud Storage or Amazon S3, and a tool that copies
+        topics from one provider to another.
     </description>
     <url>https://github.com/descoped/rawdata-client-project</url>
     <inceptionYear>2019</inceptionYear>
