@@ -24,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -178,8 +179,10 @@ public final class AvroRawdataClient implements RawdataClient {
      * Closes the client: uploads every open window and waits for the uploads, then closes the producers, consumers
      * and store.
      *
-     * @throws RawdataException if an upload failed; the client is closed, and the windows not uploaded stay on disk
-     *                          for the next writer of the topic
+     * @throws RawdataException if an upload failed, or the uploads took longer than
+     *                          {@value AvroUploadWindow#CLOSE_TIMEOUT_SECONDS} (one limit for the whole close); the
+     *                          client is closed, and the windows not uploaded stay on disk for the next writer of the
+     *                          topic
      */
     @Override
     public void close() {
@@ -187,9 +190,10 @@ public final class AvroRawdataClient implements RawdataClient {
             return;
         }
         RawdataException failed = null;
+        long end = System.nanoTime() + closeTimeoutNanos(); // one limit for the whole close, not one per topic
         for (AvroTopicWriter writer : writers.values()) {
             try {
-                writer.close();
+                writer.close(Math.max(0, end - System.nanoTime()));
             } catch (RawdataException e) {
                 failed = failed == null ? e : failed;
             }
@@ -234,7 +238,7 @@ public final class AvroRawdataClient implements RawdataClient {
         });
         if (isClosed()) { // close() may have gone over the writers before this one was added
             writers.remove(topic, writer);
-            writer.close();
+            writer.close(closeTimeoutNanos());
             throw new RawdataClosedException("client is closed");
         }
         return writer;
@@ -246,8 +250,12 @@ public final class AvroRawdataClient implements RawdataClient {
     void producerClosed(String topic) {
         AvroTopicWriter writer = writers.get(topic);
         if (writer != null && !isClosed()) {
-            writer.flush();
+            writer.flush(closeTimeoutNanos());
         }
+    }
+
+    private long closeTimeoutNanos() {
+        return TimeUnit.SECONDS.toNanos(window.closeTimeoutSeconds());
     }
 
     ReentrantLock publishLock(String topic) {

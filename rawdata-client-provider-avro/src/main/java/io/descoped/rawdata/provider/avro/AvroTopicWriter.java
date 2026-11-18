@@ -222,6 +222,17 @@ final class AvroTopicWriter {
      * @throws RawdataException if an upload failed, or another process writes the topic
      */
     void flush() {
+        flush(Long.MAX_VALUE);
+    }
+
+    /**
+     * Closes the open window and waits, at most the given time, until every sealed window is uploaded. Uploads go on
+     * after a timeout.
+     *
+     * @param timeoutNanos the longest to wait, {@code Long.MAX_VALUE} for no limit
+     * @throws RawdataException if an upload failed, another process writes the topic, or the time ran out
+     */
+    void flush(long timeoutNanos) {
         appendLock.lock();
         try {
             throwIfFailed();
@@ -233,34 +244,53 @@ final class AvroTopicWriter {
         } finally {
             appendLock.unlock();
         }
-        awaitUploads();
+        boolean uploaded = awaitUploads(timeoutNanos);
         throwIfFailed();
+        if (!uploaded) {
+            throw new RawdataException("Waiting for the uploads" + OF_TOPIC + topic + " timed out after "
+                    + TimeUnit.NANOSECONDS.toSeconds(timeoutNanos) + " s (" + AvroUploadWindow.CLOSE_TIMEOUT_SECONDS
+                    + "); the windows not uploaded stay in " + folder);
+        }
     }
 
-    private synchronized void awaitUploads() {
+    /**
+     * @return false if the time ran out first
+     */
+    private synchronized boolean awaitUploads(long timeoutNanos) {
+        long end = System.nanoTime() + Math.min(timeoutNanos, Long.MAX_VALUE / 2);
         while ((uploading || !pending.isEmpty()) && failure == null) {
+            long left = end - System.nanoTime();
+            if (left <= 0) {
+                return false;
+            }
             try {
-                wait();
+                TimeUnit.NANOSECONDS.timedWait(this, left);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RawdataException("Interrupted while waiting for the upload" + OF_TOPIC + topic);
             }
         }
+        return true;
     }
 
     /**
-     * Uploads what is buffered, waits, and releases the folder. The writer cannot be used afterwards.
+     * Uploads what is buffered, waits at most the given time, and releases the folder. The writer cannot be used
+     * afterwards; when the time runs out, it stops uploading.
      *
-     * @throws RawdataException if an upload failed; the windows not uploaded stay on disk
+     * @param timeoutNanos the longest to wait for the uploads
+     * @throws RawdataException if an upload failed or the time ran out; the windows not uploaded stay on disk
      */
-    void close() {
+    void close(long timeoutNanos) {
         boolean reportedBefore;
         synchronized (this) {
             reportedBefore = failureReported;
         }
         try {
-            flush();
+            flush(timeoutNanos);
         } catch (RawdataException e) {
+            if (failureOrNull() == null) {
+                fail(e); // timed out or interrupted: no further upload starts; the windows stay for the next writer
+            }
             // A failure is thrown at close if it was never reported, or if data is left that was not uploaded.
             if (!reportedBefore || hasPending() || hasOpenData()) {
                 throw e;
@@ -374,6 +404,10 @@ final class AvroTopicWriter {
                 Thread.currentThread().interrupt();
                 break; // queued anyway: the window is sealed on disk and must not be lost
             }
+        }
+        if (failure instanceof RawdataWriterConflictException) {
+            invalidate(sealed.file()); // sealed after another writer was found: set aside like the rest
+            return;
         }
         pending.addLast(sealed); // kept even when the writer failed, so it stays on disk for recovery
         if (failure == null && !uploading) {

@@ -111,7 +111,8 @@ this repository, and the work toward it is under way module by module.
     per window. A file per publish is wrong: too expensive for buckets and consumers.
   - **The 2.x keys:** `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`,
     `listing.min-interval-seconds`, `gcs.listing.min-interval-seconds`, `gcs.credential-provider`, plus
-    `avro-file.max.pending-uploads`. They are read with dynamic-configuration's value semantics, from a plain map.
+    `avro-file.max.pending-uploads` and `avro-file.close-timeout-seconds` (`close()` waits at most that long, one
+    limit for the whole client). They are read with dynamic-configuration's value semantics, from a plain map.
   - **When a window closes:** on time (a timer), on size, or when a producer of the topic closes. It is then forced
     to disk, sealed (`*.sealed.avro`) and uploaded in the background as the next segment while publishes go on.
   - **Visibility and durability:** a message is visible and durable once its window is uploaded.

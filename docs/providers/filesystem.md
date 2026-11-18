@@ -12,7 +12,7 @@ and [`s3`](s3.md) share.
 | `filesystem.storage-folder` | | required; created if missing |
 | `listing.min-interval-seconds` | `1` | how often a waiting consumer looks for new messages, in seconds; `0` as often as it asks |
 | `local-temp-folder` | | required; where producers buffer, see [the upload window](upload-window.md) |
-| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads` | `60`, 64 MiB, 512 KiB, `4` | the window; see [the upload window](upload-window.md) |
+| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds` | `60`, 64 MiB, 512 KiB, `4`, `30` | the window; see [the upload window](upload-window.md) |
 
 ## Layout
 
