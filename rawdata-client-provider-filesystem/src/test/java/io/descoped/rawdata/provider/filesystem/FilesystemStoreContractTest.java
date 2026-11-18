@@ -37,7 +37,7 @@ class FilesystemStoreContractTest extends AvroStoreContractTest {
         assertArrayEquals(new byte[]{2, 3}, opened.read(1, 2));
         Path file = folder.resolve(AvroTopicFolders.folderName(topic)).resolve("segments").resolve("0000000000000000000.avro");
         Files.delete(file);
-        Files.write(file, new byte[]{9, 9, 9});
+        Files.write(file, new byte[]{9, 9, 9, 9}); // a new file; it may even get the old one's inode
         assertThrows(IOException.class, () -> opened.read(0, 3));
     }
 }

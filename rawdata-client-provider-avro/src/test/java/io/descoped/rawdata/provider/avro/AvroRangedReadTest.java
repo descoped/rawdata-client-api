@@ -50,6 +50,7 @@ class AvroRangedReadTest {
 
         final Map<Long, byte[]> segments = new ConcurrentHashMap<>();
         final AtomicLong bytesRead = new AtomicLong();
+        volatile boolean failNextRead;
 
         @Override
         public boolean create(String topic, long segment, byte[] content) {
@@ -70,7 +71,11 @@ class AvroRangedReadTest {
                 }
 
                 @Override
-                public byte[] read(long offset, int length) {
+                public byte[] read(long offset, int length) throws IOException {
+                    if (failNextRead) {
+                        failNextRead = false;
+                        throw new IOException("the store failed once");
+                    }
                     byte[] range = Arrays.copyOfRange(content, (int) offset, (int) Math.min(content.length, offset + length));
                     bytesRead.addAndGet(range.length);
                     return range;
@@ -224,5 +229,95 @@ class AvroRangedReadTest {
             assertEquals(ids.get(ids.size() - 1), receive(consumer).id());
             assertNull(receive(consumer));
         }
+    }
+
+    /**
+     * A message may hold any bytes, also the header's own keys: filling in the summary searches the header only.
+     *
+     * @throws IOException if encoding fails
+     */
+    @Test
+    void aMessageHoldingTheHeaderKeysIsWrittenAndRecovered() throws IOException {
+        byte[] header = AvroSegments.encode(List.of(RawdataMessage.builder().id(io.descoped.rawdata.api.RawdataIds.next(io.descoped.rawdata.api.RawdataIds.beginningOfTime())).position("x").put("k", new byte[1]).build()),
+                0, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64); // its header holds every key
+        CountingStore store = new CountingStore();
+        RawdataMessage tricky = RawdataMessage.builder().position("tricky").put("payload", header).build();
+        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30), 10)) {
+            client.producer(TOPIC).publish(tricky, message("after"));
+            client.flush(TOPIC);
+            assertEquals("after", client.lastMessage(TOPIC).position());
+        }
+        List<RawdataMessage> recovered = List.of(RawdataMessage.builder().id(io.descoped.rawdata.api.RawdataIds.next(io.descoped.rawdata.api.RawdataIds.beginningOfTime()))
+                .position("tricky").put("payload", header).build());
+        byte[] encoded = AvroSegments.encode(recovered, 1, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64);
+        try (DataFileStream<GenericRecord> stream = AvroSegments.reader(new ByteArrayInputStream(encoded))) {
+            assertEquals(1, AvroSegments.summary(stream).count());
+        }
+    }
+
+    /**
+     * A range read that fails leaves the consumer where it was: the next receive goes on after the last message it
+     * gave, without a gap or a repeat.
+     */
+    @Test
+    void aConsumerGoesOnAfterAFailedRead() {
+        CountingStore store = new CountingStore();
+        List<UUID> ids = write(store);
+        List<UUID> read = new ArrayList<>();
+        try (AvroRawdataClient reader = client(store); RawdataConsumer consumer = reader.consumer(TOPIC)) {
+            for (int i = 0; i < 5; i++) {
+                read.add(receive(consumer).id());
+            }
+            int failures = 0;
+            for (int segment = 0; segment < SEGMENTS; segment++) {
+                store.failNextRead = true; // the next range read fails: here the next segment's first
+                for (; ; ) {
+                    RawdataMessage message;
+                    try {
+                        message = receive(consumer);
+                    } catch (io.descoped.rawdata.api.RawdataException e) {
+                        failures++;
+                        continue;
+                    }
+                    if (message == null) {
+                        break;
+                    }
+                    read.add(message.id());
+                    if (read.size() % (CALLS_PER_SEGMENT * 2) == 0) {
+                        break;
+                    }
+                }
+            }
+            assertTrue(failures > 0, "the store failed");
+        }
+        assertEquals(ids, read);
+    }
+
+    /**
+     * A header that does not fit in the first range is read with a larger one.
+     *
+     * @throws IOException if reading fails
+     */
+    @Test
+    void aHeaderLargerThanTheFirstRangeIsRead() throws IOException {
+        CountingStore store = new CountingStore();
+        List<UUID> ids = write(store);
+        AvroSegments.Summary summary = new AvroSegmentReader(store.open(TOPIC, 0).orElseThrow()).summary(64);
+        assertEquals(ids.get(0), summary.firstId());
+    }
+
+    /**
+     * The last block is checked: bytes from another offset do not decode as a block.
+     */
+    @Test
+    void aLastBlockFromTheWrongOffsetFails() throws IOException {
+        CountingStore store = new CountingStore();
+        write(store);
+        byte[] content = store.segments.get(0L);
+        long lastBlock = new AvroSegmentReader(store.open(TOPIC, 0).orElseThrow()).summary().lastBlock();
+        org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
+                () -> AvroSegments.decodeBlock(Arrays.copyOfRange(content, (int) lastBlock + 7, content.length)));
+        org.junit.jupiter.api.Assertions.assertThrows(IOException.class,
+                () -> AvroSegments.decodeBlock(Arrays.copyOfRange(content, (int) lastBlock, content.length - 1)));
     }
 }

@@ -93,6 +93,7 @@ final class AvroTopicWriter {
         int count;
         long blockBytes;
         UUID firstId;
+        long headerBytes; // where the first block starts
         long blockStart; // where the block being filled starts
         long previousBlockStart; // where the block before it starts
         boolean torn; // a write failed in the middle of a call: only the forced blocks may be kept
@@ -346,6 +347,7 @@ final class AvroTopicWriter {
         }
         Window window = new Window(file, segment, tail.lastId(), out, writer);
         window.blockStart = writer.sync(); // the end of the header
+        window.headerBytes = window.blockStart;
         current = window;
         // The timer hands the close to the executor: a topic whose uploads are slow never holds up another's timer.
         window.timer = client.scheduler().schedule(() -> client.executor().execute(() -> closeIfStill(window)),
@@ -389,7 +391,7 @@ final class AvroTopicWriter {
         window.writer.close(); // writes the block being filled
         if (window.count > 0) {
             AvroSegments.fillSummary(window.file,
-                    new AvroSegments.Summary(window.firstId, window.lastId, window.count, lastBlock));
+                    new AvroSegments.Summary(window.firstId, window.lastId, window.count, lastBlock), window.headerBytes);
         }
     }
 

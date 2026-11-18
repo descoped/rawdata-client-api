@@ -147,7 +147,9 @@ final class GcsClient {
         if (response.statusCode() == NOT_FOUND) {
             throw new IOException("Generation " + generation + " of " + object + " is gone: it was replaced or deleted");
         }
-        expect(response, "Downloading " + range + " of " + object);
+        if (response.statusCode() != PARTIAL_CONTENT) {
+            expect(response, "Downloading " + range + " of " + object);
+        }
         byte[] body = response.body();
         if (response.statusCode() == OK && (offset > 0 || body.length > length)) {
             throw new IOException("GCS sent the whole of " + object + " for " + range); // the Range header was ignored
@@ -291,7 +293,7 @@ final class GcsClient {
 
     private static void expect(HttpResponse<byte[]> response, String what) throws IOException {
         int status = response.statusCode();
-        if (status != OK && status != NO_CONTENT && status != PARTIAL_CONTENT) {
+        if (status != OK && status != NO_CONTENT) {
             throw new IOException(what + " failed: HTTP " + status + " " + message(response.body()));
         }
     }

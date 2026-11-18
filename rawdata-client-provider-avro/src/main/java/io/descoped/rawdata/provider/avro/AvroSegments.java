@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,6 +72,7 @@ final class AvroSegments {
     private static final String NO_NUMBER = number(0);
     /** More than a header ever takes: the schema, the meta entries and the sync marker. */
     private static final int MAX_HEADER_BYTES = 64 * 1024;
+    private static final int SYNC_BYTES = 16;
     /** Avro never ends a block by itself; the writer ends blocks between publish calls. */
     static final int MAX_AVRO_SYNC_INTERVAL = 1 << 30;
 
@@ -107,11 +109,13 @@ final class AvroSegments {
         UUID firstId = null;
         UUID lastId = null;
         long blockStart;
+        long headerEnd;
         long previousBlockStart = 0;
         try (DataFileWriter<GenericRecord> writer = writer(segment, previousId)) {
             writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL);
             writer.create(MESSAGE, out);
             blockStart = writer.sync();
+            headerEnd = blockStart;
             long bytes = 0;
             for (RawdataMessage message : messages) {
                 if (bytes >= blockBytes) {
@@ -132,7 +136,10 @@ final class AvroSegments {
         }
         byte[] file = out.toByteArray();
         if (!messages.isEmpty()) {
-            fillSummary(file, new Summary(firstId, lastId, messages.size(), blockStart));
+            Summary summary = new Summary(firstId, lastId, messages.size(), blockStart);
+            for (Map.Entry<Integer, byte[]> value : summaryValues(Arrays.copyOf(file, (int) headerEnd), summary).entrySet()) {
+                System.arraycopy(value.getValue(), 0, file, value.getKey(), value.getValue().length);
+            }
         }
         return file;
     }
@@ -153,30 +160,33 @@ final class AvroSegments {
     }
 
     /**
-     * Fills in the summary of a closed window file, in place, and forces the file to disk.
+     * Fills in the summary of a closed window file, in place, and forces the file to disk. Only the header is searched,
+     * never the messages, whose bytes may hold anything.
+     *
+     * @param headerBytes the header's length: where the first block starts
      */
-    static void fillSummary(Path file, Summary summary) throws IOException {
+    static void fillSummary(Path file, Summary summary, long headerBytes) throws IOException {
+        if (headerBytes > MAX_HEADER_BYTES) {
+            throw new IOException("The header of " + file + " is " + headerBytes + " bytes, more than a header takes");
+        }
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
-            ByteBuffer header = ByteBuffer.allocate((int) Math.min(channel.size(), MAX_HEADER_BYTES));
-            while (header.hasRemaining() && channel.read(header, header.position()) >= 0) {
-                // read the start of the file
+            ByteBuffer header = ByteBuffer.allocate((int) headerBytes);
+            while (header.hasRemaining()) {
+                if (channel.read(header, header.position()) < 0) {
+                    throw new IOException("The file " + file + " is shorter than its header");
+                }
             }
-            byte[] bytes = header.array();
-            for (Map.Entry<Integer, byte[]> value : summaryValues(bytes, summary).entrySet()) {
+            for (Map.Entry<Integer, byte[]> value : summaryValues(header.array(), summary).entrySet()) {
                 channel.write(ByteBuffer.wrap(value.getValue()), value.getKey());
             }
             channel.force(true);
         }
     }
 
-    private static void fillSummary(byte[] file, Summary summary) {
-        for (Map.Entry<Integer, byte[]> value : summaryValues(file, summary).entrySet()) {
-            System.arraycopy(value.getValue(), 0, file, value.getKey(), value.getValue().length);
-        }
-    }
-
     /**
      * Where each summary value goes in the header, and its bytes.
+     *
+     * @param header the header alone
      */
     private static Map<Integer, byte[]> summaryValues(byte[] header, Summary summary) {
         Map<Integer, byte[]> values = new LinkedHashMap<>();
@@ -244,22 +254,54 @@ final class AvroSegments {
     }
 
     /**
-     * Decodes one block: its count, its size, its records (the files are not compressed) and its sync marker.
+     * Decodes the last block of a file: its count, its size, its records (the files are not compressed) and its sync
+     * marker. The block must fill the bytes exactly, and its records its size exactly, so a wrong offset or a short
+     * range fails instead of decoding garbage.
      *
      * @param block the bytes from the block's start to the end of the file
      */
     static List<RawdataMessage> decodeBlock(byte[] block) throws IOException {
-        BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(block, null);
-        long count = decoder.readLong();
-        decoder.readLong(); // the size in bytes
+        int[] at = {0};
+        long count = readVarLong(block, at);
+        long size = readVarLong(block, at);
+        if (count < 1 || size < 0 || at[0] + size + SYNC_BYTES != block.length) {
+            throw new IOException("Not the last block of a segment: " + count + " records of " + size + " bytes in "
+                    + block.length + " bytes");
+        }
+        BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(block, at[0], (int) size, null);
         GenericDatumReader<GenericRecord> reader = datumReader();
         List<RawdataMessage> messages = new ArrayList<>();
         GenericRecord read = null;
-        for (long i = 0; i < count; i++) {
-            read = reader.read(read, decoder);
-            messages.add(toMessage(read));
+        try {
+            for (long i = 0; i < count; i++) {
+                read = reader.read(read, decoder);
+                messages.add(toMessage(read));
+            }
+            if (!decoder.isEnd()) {
+                throw new IOException("The block's records end before its size");
+            }
+        } catch (AvroRuntimeException | IndexOutOfBoundsException e) {
+            throw new IOException("The block does not decode: " + e.getMessage(), e);
         }
         return messages;
+    }
+
+    /**
+     * Reads a long as Avro writes it: a zig-zag variable-length integer.
+     */
+    private static long readVarLong(byte[] bytes, int[] at) throws IOException {
+        long value = 0;
+        for (int shift = 0; shift < 64; shift += 7) {
+            if (at[0] >= bytes.length) {
+                throw new IOException("A block header cut short");
+            }
+            int b = bytes[at[0]++] & 0xff;
+            value |= (long) (b & 0x7f) << shift;
+            if ((b & 0x80) == 0) {
+                return (value >>> 1) ^ -(value & 1);
+            }
+        }
+        throw new IOException("A malformed block header");
     }
 
     /**

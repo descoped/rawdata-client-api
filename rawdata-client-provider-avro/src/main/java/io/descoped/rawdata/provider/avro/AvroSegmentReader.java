@@ -12,8 +12,9 @@ import java.util.List;
 
 /**
  * Reads a segment in ranges, as 2.x read a window through a seekable channel: a stream of its messages that holds one
- * range in memory, its header's summary, and its last block alone. Avro checks each block's sync marker, so a range
- * that came back wrong fails instead of giving wrong messages.
+ * range in memory, its header's summary, and its last block alone. A range that comes back wrong fails instead of
+ * giving wrong messages: in the stream, Avro checks each block's sync marker; the last block must fill the rest of the
+ * segment exactly and end with the last id the header names.
  */
 final class AvroSegmentReader {
 
@@ -34,7 +35,14 @@ final class AvroSegmentReader {
      * The segment's summary, from its header: one small range.
      */
     AvroSegments.Summary summary() throws IOException {
-        for (int range = HEADER_RANGE; ; range *= 8) {
+        return summary(HEADER_RANGE);
+    }
+
+    /**
+     * The summary, reading a first range of the given size, and larger ones if the header does not fit in it.
+     */
+    AvroSegments.Summary summary(int firstRange) throws IOException {
+        for (int range = firstRange; ; range *= 8) {
             byte[] start = segment.read(0, (int) Math.min(range, segment.size()));
             try (DataFileStream<GenericRecord> header = AvroSegments.reader(new ByteArrayInputStream(start))) {
                 return AvroSegments.summary(header);
@@ -51,12 +59,14 @@ final class AvroSegmentReader {
      * The segment's last message: reads the header and the last block only.
      */
     RawdataMessage lastMessage() throws IOException {
-        long lastBlock = summary().lastBlock();
+        AvroSegments.Summary summary = summary();
+        long lastBlock = summary.lastBlock();
         List<RawdataMessage> messages = AvroSegments.decodeBlock(segment.read(lastBlock, Math.toIntExact(segment.size() - lastBlock)));
-        if (messages.isEmpty()) {
-            throw new IOException("The last block of the segment is empty");
+        RawdataMessage last = messages.get(messages.size() - 1);
+        if (!last.id().equals(summary.lastId())) {
+            throw new IOException("The segment's last block ends with " + last.id() + ", its header says " + summary.lastId());
         }
-        return messages.get(messages.size() - 1);
+        return last;
     }
 
     /**

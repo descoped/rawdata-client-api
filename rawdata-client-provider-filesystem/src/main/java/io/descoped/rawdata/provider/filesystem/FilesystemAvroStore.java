@@ -13,7 +13,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -62,7 +64,8 @@ final class FilesystemAvroStore implements AvroStore {
 
     /**
      * Opens a segment, pinned to its file: a segment's name is only ever linked once, never replaced, and each read
-     * checks the name still leads to the file that was opened (its file key, where the file system has one).
+     * checks the name still leads to the file that was opened: the same file key (an inode; null on Windows), size and
+     * modification time. A file system may give a new file a deleted file's inode, so the key alone is not enough.
      */
     @Override
     public Optional<Segment> open(String topic, long segment) throws IOException {
@@ -75,6 +78,7 @@ final class FilesystemAvroStore implements AvroStore {
         }
         Object key = opened.fileKey();
         long size = opened.size();
+        FileTime modified = opened.lastModifiedTime();
         return Optional.of(new Segment() {
             @Override
             public long size() {
@@ -84,7 +88,8 @@ final class FilesystemAvroStore implements AvroStore {
             @Override
             public byte[] read(long offset, int length) throws IOException {
                 try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
-                    if (key != null && !key.equals(Files.readAttributes(file, BasicFileAttributes.class).fileKey())) {
+                    BasicFileAttributes now = Files.readAttributes(file, BasicFileAttributes.class);
+                    if (!Objects.equals(key, now.fileKey()) || size != now.size() || !modified.equals(now.lastModifiedTime())) {
                         throw new IOException("Segment " + file + " is no longer the file that was opened");
                     }
                     ByteBuffer bytes = ByteBuffer.allocate((int) Math.max(0, Math.min(length, size - offset)));

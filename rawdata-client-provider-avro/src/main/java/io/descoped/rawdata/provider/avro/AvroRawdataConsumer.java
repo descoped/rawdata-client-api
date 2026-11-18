@@ -20,6 +20,7 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
 
     private final AvroRawdataClient client;
     private AvroSegmentReader reader; // guarded by the turn: the segment being read, null between segments
+    private UUID delivered; // guarded by the turn: the id of the last message put in the buffer
     private long next = -1; // guarded by the turn: the segment to read next; -1 until the start is found
     private UUID from; // guarded by the turn: the lower bound on ids, null once passed
     private boolean fromInclusive; // guarded by the turn
@@ -48,7 +49,7 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
                 }
             }
             for (int read = 0; read < BATCH; read++) {
-                RawdataMessage message = client.next(reader, topic(), next);
+                RawdataMessage message = nextOrResume();
                 if (message == null) {
                     reader = null; // the segment is read: nothing to release, the next one is opened when wanted
                     next++;
@@ -56,9 +57,27 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
                 }
                 if (from == null || passes(message.id())) {
                     buffer.addLast(message);
+                    delivered = message.id();
                     from = null; // ids only grow from here
                 }
             }
+        }
+    }
+
+    /**
+     * The next message of the segment. If reading fails (a store error), the reader is dropped and the next fill opens
+     * the segment again and skips what was delivered: a stream that failed halfway through a block cannot go on.
+     */
+    private RawdataMessage nextOrResume() {
+        try {
+            return client.next(reader, topic(), next);
+        } catch (RuntimeException e) {
+            reader = null;
+            if (delivered != null) {
+                from = delivered;
+                fromInclusive = false;
+            }
+            throw e;
         }
     }
 
@@ -70,6 +89,7 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
     @Override
     protected void reposition(long timestamp) {
         reader = null;
+        delivered = null;
         next = -1;
         from = RawdataIds.beginningOf(timestamp);
         fromInclusive = true;
