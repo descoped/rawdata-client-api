@@ -20,9 +20,10 @@
             <!-- No module-info: the Google Cloud libraries are not modules, and a module-info would have to require
                  the names Java derives from their jar file names, which change when Google names its modules. The jar
                  is an automatic module with a stable name instead, and its provider is registered in
-                 META-INF/services. The Google libraries split packages among themselves (gax-grpc and
-                 proto-google-common-protos both have com.google.longrunning), so in practice the provider runs on the
-                 class path. -->
+                 META-INF/services. The Google libraries split packages among themselves (google-cloud-core and
+                 proto-google-common-protos both have com.google.cloud), so they cannot be modules: an application
+                 puts this jar on the module path and the Google libraries on the class path, or everything on the
+                 class path (src/it/jpms/run.sh does both). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -56,6 +57,108 @@
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
             <version>${google-cloud-storage.version}</version>
+            <!-- The provider uses the JSON API over HTTP (StorageOptions.newBuilder()), never the gRPC transport, so
+                 gRPC (except grpc-api and grpc-context, which the HTTP client loads), its GCS stubs, Conscrypt and the
+                 OpenTelemetry metrics exporter are left out: 70 jars instead of 98. The tests against the fake GCS
+                 and the JPMS smoke test check that nothing missing is loaded. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-alts</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-auth</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-googleapis</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-grpclb</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-inprocess</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-netty-shaded</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-opentelemetry</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-protobuf</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-protobuf-lite</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-rls</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-services</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-stub</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-util</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-xds</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.api</groupId>
+                    <artifactId>gax-grpc</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.api.grpc</groupId>
+                    <artifactId>gapic-google-cloud-storage-v2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.api.grpc</groupId>
+                    <artifactId>grpc-google-cloud-storage-v2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.api.grpc</groupId>
+                    <artifactId>proto-google-cloud-monitoring-v3</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.cloud</groupId>
+                    <artifactId>google-cloud-core-grpc</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.cloud.opentelemetry</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.opentelemetry.contrib</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.conscrypt</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>dev.cel</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>io.descoped.rawdata</groupId>

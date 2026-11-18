@@ -35,8 +35,10 @@ this repository, and the work toward it is under way module by module.
 - **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs` (owner's
   decision, 2026-11-18): the Google Cloud libraries are not modules, and requiring the names Java derives from their
   jar names would break when Google names them, so it is an automatic module with a fixed `Automatic-Module-Name`. The
-  Google libraries also split packages among themselves (`gax-grpc` and `proto-google-common-protos` both have
-  `com.google.longrunning`), so `gcs`, and the copy tool that bundles it, run on the class path only. A module whose
+  Google libraries also split packages among themselves (`google-cloud-core` and `proto-google-common-protos` both
+  have `com.google.cloud`), so they cannot be modules: an application puts the rawdata modules, `gcs` included, on the
+  module path and the Google libraries on the class path (with `--add-modules ALL-MODULE-PATH`), or everything on the
+  class path. `gcs` excludes Google's gRPC transport, which it does not use. A module whose
   exported API exposes another module's types `requires transitive` it. The API module declares `uses` for
   `RawdataClientInitializer`. Providers are registered both with `provides` in `module-info.java` and in
   `META-INF/services`, so they work on the module path and the class path (gcs: `META-INF/services` only).
@@ -81,6 +83,10 @@ this repository, and the work toward it is under way module by module.
   `doesNotExist` precondition on GCS). A writer that loses the race reads the new last segment and tries again, so
   ids grow in segment order across processes. A published message is visible and durable when `publish` returns;
   there is no local buffer or upload thread.
+- **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the
+  API must find all five providers and round-trip through filesystem, PostgreSQL 18 and a fake GCS, both with the
+  rawdata modules on the module path (Google on the class path) and with everything on the class path; `jdeps --check`
+  must find nothing to change in the module declarations. Needs Docker.
 
 ## Maven Wrapper
 
@@ -95,4 +101,5 @@ this repository, and the work toward it is under way module by module.
 ./mvnw verify                    # compile with -Xlint:all -Werror, tests
 ./mvnw verify javadoc:javadoc    # plus Javadoc with doclint, warnings fail the build
 ./mvnw verify -P coverage        # JaCoCo report per module in <module>/target/site/jacoco
+src/it/jpms/run.sh               # JPMS smoke test (Docker)
 ```
