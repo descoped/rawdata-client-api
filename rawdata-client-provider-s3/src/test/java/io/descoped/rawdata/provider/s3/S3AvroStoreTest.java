@@ -248,7 +248,7 @@ class S3AvroStoreTest {
                 return new ExecutableHttpRequest() {
                     @Override
                     public HttpExecuteResponse call() {
-                        int status = calls.incrementAndGet() % 3 != 0 ? 503 : 200;
+                        int status = calls.incrementAndGet() % 3 == 0 ? 200 : 503;
                         return HttpExecuteResponse.builder()
                                 .response(SdkHttpResponse.builder().statusCode(status)
                                         .putHeader("Content-Length", "0").build())
