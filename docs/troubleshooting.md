@@ -3,8 +3,8 @@
 ## The build
 
 **"warnings found and -Werror specified", in CI but not locally.** You are building on a newer JDK than 17. Its
-`javac` gives fewer warnings: JDK 17's warns, for example, about annotation classes missing from the class path. Build on JDK 17
-(`./mvnw -v` should say 17); see [building and testing](building-and-testing.md#requirements).
+`javac` gives fewer warnings: JDK 17's warns, for example, about annotation classes missing from the class path.
+Build on JDK 17 (`./mvnw -v` should say 17); see [building and testing](building-and-testing.md#requirements).
 
 **"Dependency convergence error for …".** A module now has two versions of a library, usually after a dependency
 update. Declare the newest version once and exclude it from the other path; see
