@@ -48,6 +48,7 @@ final class S3AvroStore implements AvroStore {
     private static final int CONFLICT = 409;
     private static final int PRECONDITION_FAILED = 412;
     private static final String PUTTING = "Putting ";
+    private static final String GETTING = "Getting ";
     private static final int MAX_CONFLICTS = 10;
     private static final long FIRST_CONFLICT_WAIT_MILLIS = 50;
     private static final long MAX_CONFLICT_WAIT_MILLIS = 1_000;
@@ -147,9 +148,9 @@ final class S3AvroStore implements AvroStore {
                     if (e.statusCode() == PRECONDITION_FAILED || e.statusCode() == NOT_FOUND) {
                         throw new IOException("Segment " + key + " is no longer the object that was opened (ETag " + eTag + ")", e);
                     }
-                    throw failed("Getting " + range + " of " + key, e);
+                    throw failed(GETTING + range + " of " + key, e);
                 } catch (SdkException e) {
-                    throw failed("Getting " + range + " of " + key, e);
+                    throw failed(GETTING + range + " of " + key, e);
                 }
                 if (bytes.length != available) {
                     throw new IOException("S3 sent " + bytes.length + " bytes of " + key + " for " + range);
@@ -248,7 +249,7 @@ final class S3AvroStore implements AvroStore {
         } catch (NoSuchKeyException e) {
             return Optional.empty(); // not NoSuchBucket, which is also a 404: a wrong bucket fails instead of reading empty
         } catch (SdkException e) {
-            throw failed("Getting " + key, e);
+            throw failed(GETTING + key, e);
         }
     }
 

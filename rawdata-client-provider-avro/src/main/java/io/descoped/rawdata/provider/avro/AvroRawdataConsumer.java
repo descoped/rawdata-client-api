@@ -48,18 +48,25 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
                     return; // not uploaded yet
                 }
             }
-            for (int read = 0; read < BATCH; read++) {
-                RawdataMessage message = nextOrResume();
-                if (message == null) {
-                    reader = null; // the segment is read: nothing to release, the next one is opened when wanted
-                    next++;
-                    break;
-                }
-                if (from == null || passes(message.id())) {
-                    buffer.addLast(message);
-                    delivered = message.id();
-                    from = null; // ids only grow from here
-                }
+            readBatch(buffer);
+        }
+    }
+
+    /**
+     * Reads up to {@value #BATCH} messages of the open segment into the buffer, skipping those before the start.
+     */
+    private void readBatch(Deque<RawdataMessage> buffer) {
+        for (int read = 0; read < BATCH; read++) {
+            RawdataMessage message = nextOrResume();
+            if (message == null) {
+                reader = null; // the segment is read: nothing to release, the next one is opened when wanted
+                next++;
+                return;
+            }
+            if (from == null || passes(message.id())) {
+                buffer.addLast(message);
+                delivered = message.id();
+                from = null; // ids only grow from here
             }
         }
     }
