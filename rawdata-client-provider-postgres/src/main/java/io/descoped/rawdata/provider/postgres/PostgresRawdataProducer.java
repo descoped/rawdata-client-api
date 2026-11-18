@@ -4,28 +4,31 @@ import io.descoped.rawdata.api.RawdataClosedException;
 import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
-import io.descoped.rawdata.provider.postgres.tx.Transaction;
-import io.descoped.rawdata.provider.postgres.tx.TransactionFactory;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Date;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
-class PostgresRawdataProducer implements RawdataProducer {
+/**
+ * Publishes a call's messages in one transaction that holds the topic's advisory lock: it reads the topic's last id,
+ * gives new ids after it and checks given ids against it. Writers of a topic, in any process, so commit in id order,
+ * and a consumer that has read up to an id never misses a message committed later.
+ */
+final class PostgresRawdataProducer implements RawdataProducer {
 
-    private final TransactionFactory transactionFactory;
+    private final PostgresRawdataClient client;
     private final String topic;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
-    private final AtomicReference<UUID> previousIdRef = new AtomicReference<>(RawdataIds.beginningOfTime());
+    private final AtomicBoolean closed = new AtomicBoolean();
 
-    PostgresRawdataProducer(TransactionFactory transactionFactory, String topic) {
-        this.transactionFactory = transactionFactory;
+    PostgresRawdataProducer(PostgresRawdataClient client, String topic) {
+        this.client = client;
         this.topic = topic;
     }
 
@@ -36,74 +39,75 @@ class PostgresRawdataProducer implements RawdataProducer {
 
     @Override
     public void publish(RawdataMessage... messages) throws RawdataClosedException {
-        try (Transaction tx = transactionFactory.createTransaction(false)) {
-
-            try (PreparedStatement positionUpdate = tx.connection().prepareStatement(String.format("INSERT INTO \"%s_positions\" (ulid, ordering_group, sequence_number, position, ts) VALUES (?, ?, ?, ?, ?)", topic))) {
-
-                try (PreparedStatement contentUpdate = tx.connection().prepareStatement(String.format("INSERT INTO \"%s_content\" (ulid, name, data) VALUES (?, ?, ?)", topic))) {
-
-                    for (RawdataMessage message : messages) {
-
-                        UUID id = getOrGenerateNextUlid(message);
-                        UUID uuid = id;
-
-                        /*
-                         * position
-                         */
-                        positionUpdate.setObject(1, uuid);
-                        positionUpdate.setString(2, message.orderingGroup());
-                        positionUpdate.setLong(3, message.sequenceNumber());
-                        positionUpdate.setString(4, message.position());
-                        positionUpdate.setTimestamp(5, Timestamp.from(new Date(RawdataIds.timestamp(id)).toInstant()));
-                        positionUpdate.addBatch();
-
-                        /*
-                         * content
-                         */
-
-                        for (Map.Entry<String, byte[]> entry : message.data().entrySet()) {
-                            contentUpdate.setObject(1, uuid);
-                            contentUpdate.setString(2, entry.getKey());
-                            contentUpdate.setBytes(3, entry.getValue());
-                            contentUpdate.addBatch();
-                        }
-                    }
-
-                    positionUpdate.executeBatch();
-
-                    contentUpdate.executeBatch();
-                }
-            }
-
-        } catch (SQLException e) {
-            throw new PersistenceException(e);
+        Objects.requireNonNull(messages, "messages");
+        for (RawdataMessage message : messages) {
+            Objects.requireNonNull(message, "one of the messages is null");
         }
+        checkOpen();
+        if (messages.length == 0) {
+            return;
+        }
+        RawdataMessage[] batch = messages.clone();
+        client.jdbc().transaction(connection -> {
+            lockTopic(connection);
+            UUID last = PostgresMessages.lastId(connection, topic);
+            UUID previous = last == null ? RawdataIds.beginningOfTime() : last;
+            List<RawdataMessage> stored = new ArrayList<>(batch.length);
+            for (RawdataMessage message : batch) {
+                UUID id = message.id();
+                if (id == null) {
+                    id = RawdataIds.next(previous);
+                    stored.add(message.copy().id(id).build());
+                } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
+                    stored.add(message);
+                } else {
+                    throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
+                            + " is not greater than the last id in topic " + topic + ": " + previous);
+                }
+                previous = id;
+            }
+            PostgresMessages.insert(connection, topic, stored);
+            return null;
+        });
     }
 
-    private UUID getOrGenerateNextUlid(RawdataMessage message) {
-        UUID id = message.id();
-        while (id == null) {
-            UUID previousUlid = previousIdRef.get();
-            UUID attemptedId = RawdataIds.next(previousUlid);
-            if (previousIdRef.compareAndSet(previousUlid, attemptedId)) {
-                id = attemptedId;
-            }
+    private void lockTopic(Connection connection) throws SQLException {
+        try (PreparedStatement lock = connection.prepareStatement("SELECT pg_advisory_xact_lock(?, hashtext(?))")) {
+            lock.setInt(1, PostgresSchema.TOPIC_LOCK);
+            lock.setString(2, topic);
+            lock.execute();
         }
-        return id;
     }
 
     @Override
     public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
-        return CompletableFuture.runAsync(() -> publish(messages));
+        RawdataMessage[] batch = Objects.requireNonNull(messages, "messages").clone();
+        try {
+            return CompletableFuture.runAsync(() -> publish(batch), client.executor());
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(closedException());
+        }
     }
 
     @Override
     public boolean isClosed() {
-        return closed.get();
+        return closed.get() || client.isClosed();
     }
 
     @Override
     public void close() {
-        closed.set(true);
+        if (closed.compareAndSet(false, true)) {
+            client.removed(this);
+        }
+    }
+
+    private void checkOpen() {
+        if (isClosed()) {
+            throw closedException();
+        }
+    }
+
+    private RawdataClosedException closedException() {
+        return new RawdataClosedException("producer of topic " + topic + " is closed");
     }
 }
