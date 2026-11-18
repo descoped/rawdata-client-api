@@ -20,7 +20,7 @@ echo "== build"
   -pl rawdata-client-api,rawdata-client-provider-avro,rawdata-client-provider-postgres,rawdata-client-provider-gcs -am
 rm -rf "$WORK" && mkdir -p "$WORK/app"
 
-version="$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' pom.xml | head -1)"
+version="$(./mvnw --batch-mode --no-transfer-progress --quiet help:evaluate -Dexpression=project.version -DforceStdout)"
 jar_of() { echo "$ROOT/$1/target/$1-$version.jar"; }
 entries() { tr ':' '\n' < "$ROOT/$1/target/runtime.classpath"; echo; }
 # One version of each library, the newest, as Maven resolves for an application (modules can resolve different ones).
@@ -63,14 +63,20 @@ gcs="$(docker run -d -p 127.0.0.1::4443 fsouza/fake-gcs-server:1.56.1 -scheme ht
 containers+=("$gcs")
 postgres_port="$(docker port "$postgres" 5432/tcp | head -1 | sed 's/.*://')"
 gcs_endpoint="http://localhost:$(docker port "$gcs" 4443/tcp | head -1 | sed 's/.*://')"
-for _ in $(seq 1 60); do
-  docker exec "$postgres" pg_isready -U rdc -d rdc -h localhost > /dev/null 2>&1 && break
-  sleep 1
-done
-for _ in $(seq 1 60); do
-  curl -sf -X POST -H 'Content-Type: application/json' -d '{"name":"rawdata"}' "$gcs_endpoint/storage/v1/b?project=smoke" > /dev/null && break
-  sleep 1
-done
+# Waits up to 60 s for a store; if it never comes up, shows its log and fails here rather than later in the app.
+await() {
+  local name="$1" container="$2"; shift 2
+  for _ in $(seq 1 60); do
+    "$@" > /dev/null 2>&1 && return 0
+    sleep 1
+  done
+  echo "$name did not come up within 60 s:"
+  docker logs "$container" 2>&1 | tail -50
+  exit 1
+}
+await PostgreSQL "$postgres" docker exec "$postgres" pg_isready -U rdc -d rdc -h localhost
+await "the fake GCS" "$gcs" curl -sf -X POST -H 'Content-Type: application/json' -d '{"name":"rawdata"}' \
+  "$gcs_endpoint/storage/v1/b?project=smoke"
 STORES=(-Dsmoke.postgres.port="$postgres_port" -Dsmoke.gcs.endpoint="$gcs_endpoint")
 
 echo "== compile"

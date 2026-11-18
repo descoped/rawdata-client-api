@@ -35,6 +35,43 @@
                     </archive>
                 </configuration>
             </plugin>
+            <!-- Keeps the exclusions on google-cloud-storage from quietly lapsing: a Google release that adds or
+                 renames a gRPC, Conscrypt or OpenTelemetry artifact fails the build instead of growing the provider
+                 again. Add the new artifact to the exclusions. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>no-grpc</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>io.grpc</exclude>
+                                        <exclude>com.google.api:gax-grpc</exclude>
+                                        <exclude>com.google.api.grpc:gapic-google-cloud-storage-v2</exclude>
+                                        <exclude>com.google.api.grpc:grpc-google-cloud-storage-v2</exclude>
+                                        <exclude>com.google.api.grpc:proto-google-cloud-monitoring-v3</exclude>
+                                        <exclude>com.google.cloud:google-cloud-core-grpc</exclude>
+                                        <exclude>com.google.cloud.opentelemetry</exclude>
+                                        <exclude>io.opentelemetry.contrib</exclude>
+                                        <exclude>org.conscrypt</exclude>
+                                        <exclude>dev.cel</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>io.grpc:grpc-api</include>
+                                        <include>io.grpc:grpc-context</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- The tests run a fake GCS server in Docker through Testcontainers, whose dependencies are automatic
                  modules with split packages, so they run on the class path. -->
             <plugin>
