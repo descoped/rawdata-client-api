@@ -128,7 +128,7 @@ final class GcsClient {
         do {
             String query = "?prefix=" + encode(prefix) + "&delimiter=" + encode("/") + "&fields=" + encode("items(name),nextPageToken")
                     + (pageToken == null ? "" : "&pageToken=" + encode(pageToken));
-            URI uri = URI.create(endpoint + "/storage/v1/b/" + encode(bucket) + "/o" + query);
+            URI uri = URI.create(bucketUri(bucket) + "/o" + query);
             HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri).GET());
             expect(response, "Listing " + prefix);
             JsonNode page = JSON.readTree(response.body());
@@ -146,7 +146,7 @@ final class GcsClient {
      * listing of at most one object, which needs only the permission the store needs anyway.
      */
     void checkBucket(String bucket, String prefix) throws IOException {
-        URI uri = URI.create(endpoint + "/storage/v1/b/" + encode(bucket) + "/o?prefix=" + encode(prefix) + "&maxResults=1&fields="
+        URI uri = URI.create(bucketUri(bucket) + "/o?prefix=" + encode(prefix) + "&maxResults=1&fields="
                 + encode("nextPageToken"));
         expect(send(() -> HttpRequest.newBuilder(uri).GET()), "Listing the bucket " + bucket);
     }
@@ -162,8 +162,12 @@ final class GcsClient {
         }
     }
 
+    private String bucketUri(String bucket) {
+        return endpoint + "/storage/v1/b/" + encode(bucket);
+    }
+
     private String objectUri(String bucket, String object) {
-        return endpoint + "/storage/v1/b/" + encode(bucket) + "/o/" + encode(object);
+        return bucketUri(bucket) + "/o/" + encode(object);
     }
 
     private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request) throws IOException {

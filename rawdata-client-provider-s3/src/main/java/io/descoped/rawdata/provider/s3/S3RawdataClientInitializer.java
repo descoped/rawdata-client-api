@@ -105,7 +105,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
         if (endpoint != null) {
             builder.endpointOverride(URI.create(endpoint));
         }
-        SdkAutoCloseable closeable = credentials instanceof SdkAutoCloseable ? (SdkAutoCloseable) credentials : null;
+        SdkAutoCloseable closeable = credentials instanceof SdkAutoCloseable sdkCloseable ? sdkCloseable : null;
         S3Client s3;
         try {
             s3 = builder.build();
