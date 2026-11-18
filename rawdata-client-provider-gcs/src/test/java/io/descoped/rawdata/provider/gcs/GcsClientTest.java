@@ -76,9 +76,9 @@ class GcsClientTest {
      */
     @Test
     void aListingFollowsItsPages() throws Exception {
-        try (LocalHttp gcs = new LocalHttp(request -> request.query().contains("pageToken=p2")
-                ? LocalHttp.Response.json(200, "{\"items\":[{\"name\":\"f/c\"}]}")
-                : LocalHttp.Response.json(200, "{\"items\":[{\"name\":\"f/a\"},{\"name\":\"f/b\"}],\"nextPageToken\":\"p2\"}"))) {
+        String first = "{\"items\":[{\"name\":\"f/a\"},{\"name\":\"f/b\"}],\"nextPageToken\":\"p2\"}";
+        String last = "{\"items\":[{\"name\":\"f/c\"}]}";
+        try (LocalHttp gcs = new LocalHttp(request -> LocalHttp.Response.json(200, request.query().contains("pageToken=p2") ? last : first))) {
             assertEquals(java.util.List.of("f/a", "f/b", "f/c"), new GcsClient(gcs.root(), GcsCredentials.NONE).list("b", "f/"));
             assertEquals(2, gcs.requests.size());
         }
