@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.s3;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
 import io.descoped.rawdata.provider.avro.AvroStore;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -16,17 +17,14 @@ import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-import java.util.zip.CRC32C;
 
 /**
  * Topics in a bucket: {@code <prefix><topic>/segments/<number>.avro}, the number in 19 digits, and
@@ -37,9 +35,9 @@ import java.util.zip.CRC32C;
  * Every segment put carries its CRC32C ({@code x-amz-checksum-crc32c}), so S3 refuses bytes damaged on the way. The
  * SDK retries a failed put. If a put succeeded but its response was lost, the retry fails its condition (412); the
  * store then compares the object's size and CRC32C with its own, and only if they match reads the object. If it holds
- * the bytes it put (an Avro file carries a random sync marker, so no
- * other writer's file is the same) the segment counts as created. When S3 answers 409 (a conditional put raced
- * another on the same key), the store waits a little and tries again, to get the outcome of the race.
+ * the bytes it put (an Avro file carries a random sync marker, so no other writer's file is the same) the segment
+ * counts as created. When S3 answers 409 (a conditional put raced another on the same key), the store waits a little
+ * and tries again, to get the outcome of the race.
  * <p>
  * A HEAD response has no body, so a missing object and a missing bucket are both a 404 to {@link #exists}. The first
  * time it sees one, the store lists the prefix once, which names a missing bucket ({@code NoSuchBucket}), so a wrong
@@ -55,6 +53,7 @@ final class S3AvroStore implements AvroStore {
     private static final int PRECONDITION_FAILED = 412;
     private static final String PUTTING = "Putting ";
     private static final String GETTING = "Getting ";
+    private static final String LOOKING_UP = "Looking up ";
     private static final int MAX_CONFLICTS = 10;
     private static final long FIRST_CONFLICT_WAIT_MILLIS = 50;
     private static final long MAX_CONFLICT_WAIT_MILLIS = 1_000;
@@ -97,7 +96,7 @@ final class S3AvroStore implements AvroStore {
         String key = segment(topic, segment);
         for (int conflicts = 0; ; conflicts++) {
             try {
-                s3.putObject(put(key, "avro/binary").ifNoneMatch("*").checksumCRC32C(crc32c(content)).build(),
+                s3.putObject(put(key, "avro/binary").ifNoneMatch("*").checksumCRC32C(AvroChecksums.crc32c(content)).build(),
                         RequestBody.fromBytes(content)); // S3 refuses the put if the bytes it got differ
                 return true;
             } catch (AwsServiceException e) {
@@ -126,24 +125,15 @@ final class S3AvroStore implements AvroStore {
             if (e.statusCode() == NOT_FOUND) {
                 return false;
             }
-            throw failed("Looking up " + key, e);
+            throw failed(LOOKING_UP + key, e);
         } catch (SdkException e) {
-            throw failed("Looking up " + key, e);
+            throw failed(LOOKING_UP + key, e);
         }
         if (head.contentLength() != content.length
-                || head.checksumCRC32C() != null && !head.checksumCRC32C().equals(crc32c(content))) {
+                || head.checksumCRC32C() != null && !head.checksumCRC32C().equals(AvroChecksums.crc32c(content))) {
             return false;
         }
         return get(key).map(stored -> Arrays.equals(content, stored)).orElse(false);
-    }
-
-    /**
-     * The CRC32C of bytes as S3 writes it: base64 of the 4 bytes, big-endian.
-     */
-    static String crc32c(byte[] content) {
-        CRC32C crc = new CRC32C();
-        crc.update(content);
-        return Base64.getEncoder().encodeToString(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
     }
 
     @Override
@@ -224,9 +214,9 @@ final class S3AvroStore implements AvroStore {
                 checkBucket();
                 return Optional.empty();
             }
-            throw failed("Looking up " + key, e);
+            throw failed(LOOKING_UP + key, e);
         } catch (SdkException e) {
-            throw failed("Looking up " + key, e);
+            throw failed(LOOKING_UP + key, e);
         }
     }
 

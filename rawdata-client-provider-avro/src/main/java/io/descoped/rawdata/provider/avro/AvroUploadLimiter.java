@@ -4,10 +4,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
 /**
- * How many uploads of a client may run at once, across its topics: additive increase, multiplicative decrease (AIMD),
- * as TCP backs off. The limit starts at {@value #START} (or the cap, if lower), grows by one with each upload that
- * succeeds, up to {@code avro-file.upload.max-concurrency}, and halves when the store says it is throttled (GCS 429 or
- * 503, S3 503 SlowDown) or a request times out. A store reports a throttled response for each attempt of a request,
+ * How many uploads of a client may run at once, across its topics: additive increase, multiplicative decrease (AIMD).
+ * The limit starts at {@value #START} (or the cap, if lower), grows by one with each upload that succeeds, up to
+ * {@code avro-file.upload.max-concurrency}, and halves when the store says it is throttled (GCS 429 or 503, S3 503
+ * SlowDown) or a request times out, whichever request it was: a store under pressure is so for uploads too. A store reports a throttled response for each attempt of a request,
  * so the limit halves at most once a second: one burst of throttling is one decrease.
  * <p>
  * Within one topic uploads always run one at a time, in segment order; the limit is about many topics at once.

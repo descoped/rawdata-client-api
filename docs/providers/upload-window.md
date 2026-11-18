@@ -74,10 +74,14 @@ shared tests use it.
   when it is uploaded. The writer fails with `RawdataWriterConflictException`. Its windows not yet uploaded are kept
   as `*.invalid` files and never deleted. Every later publish of that client to the topic fails (see
   [one writer per topic](../contract.md#one-writer-per-topic)).
-- **Throttling.** A client runs at most a few uploads at once across its topics, and adapts (AIMD, as TCP does). It
-  starts at 4, adds one with each upload that succeeds, up to `avro-file.upload.max-concurrency`, and halves when the
-  store is throttled (GCS 429 or 503, S3 503 `SlowDown`) or a request times out, at most once a second. A topic's own
-  uploads still run one at a time, in order.
+- **Throttling.** A client runs at most a few uploads at once across its topics, and adapts (AIMD). It starts at 4,
+  adds one with each upload that succeeds, up to `avro-file.upload.max-concurrency`, and halves when the store is
+  throttled (GCS 429 or 503, S3 503 `SlowDown`) or a request times out, at most once a second. Any request counts,
+  also a consumer's read or a metadata write: a store under pressure is so for uploads too. A topic's own uploads
+  still run one at a time, in order.
+- **Memory.** Each running upload holds its window in memory, so uploads take up to
+  `avro-file.upload.max-concurrency` × `avro-file.max.bytes` of heap: 1 GiB at the defaults (16 × 64 MiB). Size the
+  heap for it, or lower either.
 - **Damaged uploads.** Every upload carries its CRC32C (`X-Goog-Hash` on GCS, `x-amz-checksum-crc32c` on S3), and the
   store refuses bytes that changed on the way; the upload is then retried.
 - **One process per buffer folder.** A writer holds a lock file in its topic's folder. A second client using the

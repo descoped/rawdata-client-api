@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.gcs;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
 import io.descoped.rawdata.provider.avro.AvroStore;
 
 import java.io.IOException;
@@ -54,7 +55,7 @@ final class GcsAvroStore implements AvroStore {
         // writer's segment apart without downloading it; only when they match are the bytes compared.
         Optional<GcsClient.ObjectInfo> stored = client.info(bucket, name);
         if (stored.isEmpty() || stored.get().size() != content.length
-                || stored.get().crc32c() != null && !stored.get().crc32c().equals(GcsClient.crc32c(content))) {
+                || stored.get().crc32c() != null && !stored.get().crc32c().equals(AvroChecksums.crc32c(content))) {
             return false;
         }
         return client.download(bucket, name).map(bytes -> Arrays.equals(content, bytes)).orElse(false);

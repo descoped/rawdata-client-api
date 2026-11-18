@@ -3,21 +3,21 @@ package io.descoped.rawdata.provider.gcs;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
+
 import java.io.IOException;
-import java.net.http.HttpTimeoutException;
-import java.util.zip.CRC32C;
-import java.util.Base64;
-import java.nio.ByteBuffer;
 import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.OptionalLong;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +53,7 @@ final class GcsClient {
     private final HttpClient http;
     private final String endpoint;
     private final GcsCredentials credentials;
+    private final AtomicReference<Runnable> throttled = new AtomicReference<>(() -> { });
 
     /**
      * Creates a client.
@@ -63,8 +64,6 @@ final class GcsClient {
     GcsClient(String endpoint, GcsCredentials credentials) {
         this(HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build(), endpoint, credentials);
     }
-
-    private volatile Runnable throttled = () -> { };
 
     GcsClient(HttpClient http, String endpoint, GcsCredentials credentials) {
         this.http = http;
@@ -81,7 +80,7 @@ final class GcsClient {
     boolean upload(String bucket, String object, String contentType, byte[] content, long generation) throws IOException {
         URI uri = URI.create(endpoint + "/upload/storage/v1/b/" + encode(bucket) + "/o?uploadType=media&name=" + encode(object)
                 + "&ifGenerationMatch=" + generation);
-        String hash = "crc32c=" + crc32c(content); // GCS refuses the upload (400) if the bytes it got differ
+        String hash = "crc32c=" + AvroChecksums.crc32c(content); // GCS refuses the upload (400) if the bytes it got differ
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri)
                 .header("Content-Type", contentType)
                 .header("X-Goog-Hash", hash)
@@ -119,19 +118,10 @@ final class GcsClient {
     }
 
     /**
-     * The CRC32C of bytes as GCS writes it: base64 of the 4 bytes, big-endian.
-     */
-    static String crc32c(byte[] content) {
-        CRC32C crc = new CRC32C();
-        crc.update(content);
-        return Base64.getEncoder().encodeToString(ByteBuffer.allocate(4).putInt((int) crc.getValue()).array());
-    }
-
-    /**
      * Registers what to do when GCS throttles (429, 503) or a request times out, on any attempt.
      */
     void onThrottled(Runnable listener) {
-        this.throttled = listener;
+        this.throttled.set(listener);
     }
 
     /**
@@ -275,23 +265,29 @@ final class GcsClient {
         for (int attempt = 1; ; attempt++) {
             try {
                 HttpResponse<byte[]> response = sendOnce(request);
-                if (response.statusCode() == TOO_MANY_REQUESTS || response.statusCode() == SERVICE_UNAVAILABLE) {
-                    throttled.run();
-                }
+                reportThrottling(response.statusCode());
                 if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
                     return response;
                 }
             } catch (GcsCredentials.RefusedException e) {
                 throw e;
-            } catch (IOException e) {
-                if (e instanceof HttpTimeoutException) {
-                    throttled.run();
+            } catch (HttpTimeoutException e) {
+                throttled.get().run();
+                if (attempt == MAX_ATTEMPTS) {
+                    throw e;
                 }
+            } catch (IOException e) {
                 if (attempt == MAX_ATTEMPTS) {
                     throw e;
                 }
             }
             backOff(attempt);
+        }
+    }
+
+    private void reportThrottling(int status) {
+        if (status == TOO_MANY_REQUESTS || status == SERVICE_UNAVAILABLE) {
+            throttled.get().run();
         }
     }
 

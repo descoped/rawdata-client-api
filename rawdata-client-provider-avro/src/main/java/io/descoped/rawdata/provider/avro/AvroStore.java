@@ -134,7 +134,8 @@ public interface AvroStore extends AutoCloseable {
 
     /**
      * Registers what the client does when the store is throttled: a response that asks it to slow down (GCS 429 or
-     * 503, S3 503 SlowDown) or a request that timed out, on any attempt, also one the store retries and then succeeds.
+     * 503, S3 503 SlowDown) or a request that timed out, on any attempt, also one the store retries and then succeeds,
+     * and of any request, not only uploads.
      * The client lowers how many uploads run at once ({@link AvroUploadLimiter}). A store that cannot tell does
      * nothing.
      *

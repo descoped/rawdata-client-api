@@ -34,9 +34,6 @@ class GcsClientTest {
     }
 
     /**
-     * 404 means absent, 412 a failed precondition; other errors are not retried and carry GCS's message.
-     */
-    /**
      * A throttled response (429, 503) is reported on every attempt, also when a retry then succeeds.
      *
      * @throws Exception if the test fails unexpectedly
@@ -72,6 +69,9 @@ class GcsClientTest {
         }
     }
 
+    /**
+     * 404 means absent, 412 a failed precondition; other errors are not retried and carry GCS's message.
+     */
     @Test
     void statusesMeanWhatTheySay() throws Exception {
         try (LocalHttp gcs = new LocalHttp(request -> switch (request.method()) {

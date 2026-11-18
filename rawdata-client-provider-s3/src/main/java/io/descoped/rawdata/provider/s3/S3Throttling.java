@@ -7,6 +7,7 @@ import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 
 import java.net.SocketTimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tells the Avro engine when S3 throttles, so it lowers how many uploads run at once. The SDK retries a throttled
@@ -18,17 +19,17 @@ final class S3Throttling implements ExecutionInterceptor {
     private static final int TOO_MANY_REQUESTS = 429;
     private static final int SERVICE_UNAVAILABLE = 503;
 
-    private volatile Runnable listener = () -> { };
+    private final AtomicReference<Runnable> listener = new AtomicReference<>(() -> { });
 
     void onThrottled(Runnable listener) {
-        this.listener = listener;
+        this.listener.set(listener);
     }
 
     @Override
     public void afterTransmission(Context.AfterTransmission context, ExecutionAttributes attributes) {
         int status = context.httpResponse().statusCode();
         if (status == SERVICE_UNAVAILABLE || status == TOO_MANY_REQUESTS) {
-            listener.run();
+            listener.get().run();
         }
     }
 
@@ -37,7 +38,7 @@ final class S3Throttling implements ExecutionInterceptor {
         Throwable failure = context.exception();
         if (failure instanceof ApiCallAttemptTimeoutException || failure instanceof ApiCallTimeoutException
                 || failure.getCause() instanceof SocketTimeoutException) {
-            listener.run();
+            listener.get().run();
         }
     }
 }

@@ -1,23 +1,42 @@
 package io.descoped.rawdata.provider.s3;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
 import io.descoped.rawdata.provider.avro.AvroStore;
 import io.descoped.rawdata.provider.s3.test.S3Mock;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.SdkRequest;
+import software.amazon.awssdk.core.SdkResponse;
+import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
+import software.amazon.awssdk.core.interceptor.Context;
+import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.ExecutableHttpRequest;
+import software.amazon.awssdk.http.HttpExecuteRequest;
+import software.amazon.awssdk.http.HttpExecuteResponse;
+import software.amazon.awssdk.http.SdkHttpClient;
+import software.amazon.awssdk.http.SdkHttpRequest;
+import software.amazon.awssdk.http.SdkHttpResponse;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.retries.api.BackoffStrategy;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ChecksumMode;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
 import java.io.IOException;
 import java.net.URI;
-
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -175,24 +194,24 @@ class S3AvroStoreTest {
         S3Client taken = new S3Client() {
             @Override
             public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
-                assertEquals(S3AvroStore.crc32c(mine), request.checksumCRC32C(), "the put carries its CRC32C");
+                assertEquals(AvroChecksums.crc32c(mine), request.checksumCRC32C(), "the put carries its CRC32C");
                 throw (S3Exception) S3Exception.builder().statusCode(412).build();
             }
 
             @Override
-            public software.amazon.awssdk.services.s3.model.HeadObjectResponse headObject(
-                    software.amazon.awssdk.services.s3.model.HeadObjectRequest request) {
-                assertEquals(software.amazon.awssdk.services.s3.model.ChecksumMode.ENABLED, request.checksumMode());
-                return software.amazon.awssdk.services.s3.model.HeadObjectResponse.builder()
-                        .contentLength((long) stored.get().length).checksumCRC32C(S3AvroStore.crc32c(stored.get())).build();
+            public HeadObjectResponse headObject(
+                    HeadObjectRequest request) {
+                assertEquals(ChecksumMode.ENABLED, request.checksumMode());
+                return HeadObjectResponse.builder()
+                        .contentLength((long) stored.get().length).checksumCRC32C(AvroChecksums.crc32c(stored.get())).build();
             }
 
             @Override
-            public software.amazon.awssdk.core.ResponseBytes<software.amazon.awssdk.services.s3.model.GetObjectResponse> getObjectAsBytes(
-                    software.amazon.awssdk.services.s3.model.GetObjectRequest request) {
+            public ResponseBytes<GetObjectResponse> getObjectAsBytes(
+                    GetObjectRequest request) {
                 gets.incrementAndGet();
-                return software.amazon.awssdk.core.ResponseBytes.fromByteArray(
-                        software.amazon.awssdk.services.s3.model.GetObjectResponse.builder().build(), stored.get());
+                return ResponseBytes.fromByteArray(
+                        GetObjectResponse.builder().build(), stored.get());
             }
 
             @Override
@@ -222,15 +241,15 @@ class S3AvroStoreTest {
     void throttledResponsesAreReported() {
         AtomicInteger calls = new AtomicInteger();
         AtomicInteger throttled = new AtomicInteger();
-        software.amazon.awssdk.http.SdkHttpClient http = new software.amazon.awssdk.http.SdkHttpClient() {
+        SdkHttpClient http = new SdkHttpClient() {
             @Override
-            public software.amazon.awssdk.http.ExecutableHttpRequest prepareRequest(software.amazon.awssdk.http.HttpExecuteRequest request) {
-                return new software.amazon.awssdk.http.ExecutableHttpRequest() {
+            public ExecutableHttpRequest prepareRequest(HttpExecuteRequest request) {
+                return new ExecutableHttpRequest() {
                     @Override
-                    public software.amazon.awssdk.http.HttpExecuteResponse call() {
+                    public HttpExecuteResponse call() {
                         int status = calls.incrementAndGet() < 3 ? 503 : 200;
-                        return software.amazon.awssdk.http.HttpExecuteResponse.builder()
-                                .response(software.amazon.awssdk.http.SdkHttpResponse.builder().statusCode(status)
+                        return HttpExecuteResponse.builder()
+                                .response(SdkHttpResponse.builder().statusCode(status)
                                         .putHeader("Content-Length", "0").build())
                                 .build();
                     }
@@ -253,12 +272,55 @@ class S3AvroStoreTest {
                 .credentialsProvider(AnonymousCredentialsProvider.create())
                 .endpointOverride(URI.create("http://127.0.0.1:1")).forcePathStyle(true)
                 .overrideConfiguration(override -> override.addExecutionInterceptor(throttling)
-                        .retryStrategy(retry -> retry.maxAttempts(5).backoffStrategy(software.amazon.awssdk.retries.api.BackoffStrategy.retryImmediately())
-                                .throttlingBackoffStrategy(software.amazon.awssdk.retries.api.BackoffStrategy.retryImmediately())))
+                        .retryStrategy(retry -> retry.maxAttempts(5).backoffStrategy(BackoffStrategy.retryImmediately())
+                                .throttlingBackoffStrategy(BackoffStrategy.retryImmediately())))
                 .build()) {
             s3.headObject(head -> head.bucket("b").key("k"));
         }
         assertEquals(3, calls.get());
         assertEquals(2, throttled.get());
+    }
+
+    /**
+     * A call that timed out counts as throttling.
+     */
+    @Test
+    void aTimeoutIsReportedAsThrottling() {
+        AtomicInteger throttled = new AtomicInteger();
+        S3Throttling throttling = new S3Throttling();
+        throttling.onThrottled(throttled::incrementAndGet);
+        throttling.onExecutionFailure(failed(ApiCallAttemptTimeoutException.create(1_000)), new ExecutionAttributes());
+        assertEquals(1, throttled.get());
+        throttling.onExecutionFailure(failed(new IllegalStateException("not a timeout")), new ExecutionAttributes());
+        assertEquals(1, throttled.get(), "other failures are not throttling");
+    }
+
+    private static Context.FailedExecution failed(Throwable failure) {
+        return new Context.FailedExecution() {
+            @Override
+            public Throwable exception() {
+                return failure;
+            }
+
+            @Override
+            public SdkRequest request() {
+                return HeadObjectRequest.builder().bucket("b").key("k").build();
+            }
+
+            @Override
+            public Optional<SdkHttpRequest> httpRequest() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<SdkHttpResponse> httpResponse() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<SdkResponse> response() {
+                return Optional.empty();
+            }
+        };
     }
 }
