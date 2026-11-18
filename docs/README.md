@@ -11,6 +11,7 @@ written by 2.x. See the [CHANGELOG](../CHANGELOG.md).
   - [`postgres`](providers/postgres.md): PostgreSQL 18.
   - [`filesystem`](providers/filesystem.md): Avro files in a local folder.
   - [`gcs`](providers/gcs.md): Avro files in a Google Cloud Storage bucket.
+  - [`s3`](providers/s3.md): Avro files in an Amazon S3 bucket.
   - [`memory` and `discard`](providers/memory-and-discard.md): for tests.
 - [The copy tool](copy-tool.md): copying topics, and moving a system from one store or cloud to another.
 

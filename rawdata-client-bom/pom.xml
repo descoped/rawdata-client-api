@@ -44,6 +44,11 @@
                 <artifactId>rawdata-client-provider-gcs</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.descoped.rawdata</groupId>
+                <artifactId>rawdata-client-provider-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

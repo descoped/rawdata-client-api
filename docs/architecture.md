@@ -12,8 +12,8 @@ topic across processes.
         rawdata-client-provider-postgres   rawdata-client-provider-avro
         (HikariCP, pgjdbc)                 (Avro engine, filesystem)
                                                    ▲
-                                     rawdata-client-provider-gcs
-                                     (java.net.http, Jackson)
+                          rawdata-client-provider-gcs   rawdata-client-provider-s3
+                          (java.net.http, Jackson)      (AWS SDK for Java 2)
 
    rawdata-copy-util: the API at compile time, every provider at run time
 ```
@@ -33,7 +33,7 @@ topic across processes.
   `postgres` and the Avro engine are built on them.
 - **`rawdata-client-tck`** holds `RawdataClientContractTest`, the contract as abstract JUnit 6 tests. Each provider's
   test module extends it with its configuration.
-- **The providers** depend on the API, and `gcs` also on the Avro engine. No provider depends on another one's
+- **The providers** depend on the API, and `gcs` and `s3` also on the Avro engine. No provider depends on another one's
   internals.
 
 ## Finding a provider
@@ -87,6 +87,7 @@ does not exist, and readers see the whole segment or nothing.
 - **filesystem:** a hard link from a temporary file.
 - **gcs:** an upload with the `ifGenerationMatch=0` precondition, through GCS's JSON API on the JDK's HTTP client
   (`GcsClient`), with tokens from `GcsCredentials`.
+- **s3:** a `PutObject` with `If-None-Match: *`, through the AWS SDK for Java 2.
 
 A publish:
 1. finds the last segment `n` and its last id;

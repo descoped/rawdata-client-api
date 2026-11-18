@@ -18,5 +18,5 @@ not open a public issue. Include what is affected, how to reproduce it, and the 
 - Metadata keys never reach a file or object name as given; they are hex-encoded.
 - Messages and metadata are copied in and out, so a caller cannot change stored data through an array it holds.
 
-Credentials (database passwords, GCS service account keys) come from the configuration you pass in; the client does
+Credentials (database passwords, GCS service account keys, AWS keys) come from the configuration you pass in; the client does
 not log them. Keep configuration files with credentials out of version control.

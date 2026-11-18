@@ -16,7 +16,7 @@ match the Maven version, usually after a Maven update. Set it to the SHA-256 of 
 
 ## The tests
 
-**Postgres, gcs or copy-util tests fail with "Could not find a valid Docker environment".** Testcontainers needs
+**Postgres, gcs, s3 or copy-util tests fail with "Could not find a valid Docker environment".** Testcontainers needs
 Docker. Start Docker Desktop (or another Docker host), and check with `docker info`.
 
 **Tests in IntelliJ fail with `InaccessibleObjectException` or `IllegalAccessError`.** IntelliJ runs them on the
@@ -40,6 +40,13 @@ driver's `java.util.logging` there too, see [getting started](getting-started.md
 `GOOGLE_APPLICATION_CREDENTIALS` to a key file, run `gcloud auth application-default login`, or run on Google Cloud.
 See the [`gcs` credentials](providers/gcs.md#credentials).
 
+**`s3` fails with "Unable to load credentials from any of the providers in the chain" or "Unable to load region".**
+The SDK's default chains found nothing: set `AWS_PROFILE` (and run `aws sso login` for an SSO profile), or the
+`AWS_*` environment variables, or `s3.region`. See the [`s3` credentials](providers/s3.md#credentials-and-region).
+
+**`s3` fails with a TLS error on a bucket name with dots.** Virtual-hosted HTTPS cannot serve such names; don't set
+`s3.path-style-access=false` for them. See [bucket names with dots](providers/s3.md#bucket-names-with-dots).
+
 **A metadata key is refused with `IllegalArgumentException`.** The file-based providers limit a key's length:
 - `filesystem`: 127 bytes in UTF-8;
-- `gcs`: about 500 bytes, because the object name, with the prefix and topic, must fit in 1024 bytes.
+- `gcs`, `s3`: about 500 bytes, because the object name, with the prefix and topic, must fit in 1024 bytes.

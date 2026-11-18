@@ -18,8 +18,7 @@ code. Java 17 or newer.
 - One version of each library in every module's compile and runtime dependencies, checked by the build: slf4j 2,
   Jackson and commons-codec are declared by the providers at the newest version and excluded from HikariCP, Avro
   and google-cloud-storage (which also no longer brings checker-qual).
-- Every module is a JPMS module (`gcs` an automatic one, see below). CI checks the providers on the module path and
-  the class path.
+- Every module is a JPMS module. CI checks the providers on the module path and the class path.
 - Documentation in `docs/`: for users (getting started, the contract, the providers, the copy tool) and for
   developers (architecture, building and testing, dependencies, writing a provider, releasing, troubleshooting).
   The README is the getting-started for the repository.
@@ -77,6 +76,15 @@ code. Java 17 or newer.
   messages stayed invisible until a window closed; a later upload with an older name was skipped; topics could
   escape the storage folder; file handles leaked; a closed consumer threw `NullPointerException`; a cursor at the
   start of a millisecond skipped it.
+
+### `s3` (new)
+
+- `rawdata-client-provider-s3` (module `io.descoped.rawdata.provider.s3`): the Avro engine on an Amazon S3 bucket,
+  with the same layout and ordering as `gcs`. A segment is created with `If-None-Match: *`.
+- The AWS SDK for Java 2 with its JDK-based HTTP client; the SDK's default credentials chain (environment, web
+  identity, profiles with SSO, container and instance credentials) and region chain. Path-style requests for bucket
+  names with dots; optional `AES256` or `aws:kms` server-side encryption; `s3.endpoint` for S3-compatible stores.
+- Tested against S3Mock, and by opt-in live tests against real S3.
 
 ### Copy tool
 
