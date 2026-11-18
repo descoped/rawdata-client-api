@@ -109,7 +109,7 @@ class AvroTopicWriterTest {
     }
 
     private AvroRawdataClient client(GatedStore store, long maxBytes, int maxPending) {
-        return new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, maxBytes, 64, maxPending), 10);
+        return new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, maxBytes, 64, maxPending, 30), 10);
     }
 
     private static RawdataMessage message(String position, int size) {
@@ -192,6 +192,41 @@ class AvroTopicWriterTest {
             client.flush("t");
             assertEquals(2, store.segments.size());
         }
+    }
+
+    /**
+     * Closing a producer waits at most {@code avro-file.close-timeout-seconds} for the uploads; the uploads go on, and
+     * the client can still publish. Closing the client waits as long, then stops; the window stays on disk and the
+     * next writer uploads it.
+     *
+     * @throws Exception if the test fails unexpectedly
+     */
+    @Test
+    void closingWaitsAtMostTheCloseTimeout() throws Exception {
+        GatedStore store = new GatedStore();
+        store.gated = true;
+        AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, 1 << 20, 64, 4, 1), 10);
+        RawdataProducer producer = client.producer("t");
+        producer.publish(message("a", 1));
+        long started = System.nanoTime();
+        RawdataException timedOut = assertThrows(RawdataException.class, producer::close);
+        assertTrue(timedOut.getMessage().contains("timed out"), timedOut.getMessage());
+        client.producer("t").publish(message("b", 1)); // the writer goes on
+
+        RawdataException closing = assertThrows(RawdataException.class, client::close);
+        assertTrue(closing.getMessage().contains("timed out"), closing.getMessage());
+        assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started) < 10, "bounded by the timeout");
+        store.release.countDown();
+        List<String> left = files();
+        assertTrue(left.contains("0000000000000000001.sealed.avro"), left.toString()); // never uploaded
+
+        GatedStore after = new GatedStore();
+        after.segments.putAll(store.segments);
+        try (AvroRawdataClient next = client(after, 1 << 20, 4)) {
+            next.producer("t").publish(message("c", 1));
+            next.flush("t");
+        }
+        assertEquals(List.of(), files(), "the next writer uploaded what was left");
     }
 
     /**

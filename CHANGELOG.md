@@ -79,6 +79,8 @@ code. Java 17 or newer.
   - a leftover that no longer fits is kept as `*.invalid`;
   - a lock file keeps a buffer folder to one process;
   - `avro-file.max.pending-uploads` (default 4) bounds the windows waiting for upload.
+  - `avro-file.close-timeout-seconds` (default 30) bounds how long `close()` waits for the uploads; what is not
+    uploaded by then stays on disk for the next writer.
 - New layout: `<topic>/segments/<19 digits>.avro` and `<topic>/metadata/k<hex of the key>`. The Avro record is
   2.x's `RawdataMessage`; only the id's `fixed(16)` type is renamed from `ulid` to `uuid`. On a file system, topic
   folders keep topics that differ only by case apart.
@@ -88,8 +90,8 @@ code. Java 17 or newer.
     `gcs.credential-provider` (`service-account`, the default, `compute-engine`, and now `application-default` and
     `none`);
   - they now have defaults (60 s, 64 MiB, 512 KiB, 1 s) and are read with dynamic-configuration's value rules;
-  - new: `avro-file.max.pending-uploads`, `gcs.prefix`, `gcs.endpoint`, and `s3.listing.min-interval-seconds` for
-    `s3`.
+  - new: `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds`, `gcs.prefix`, `gcs.endpoint`, and
+    `s3.listing.min-interval-seconds` for `s3`.
 - Metadata keys are at most 127 bytes (`filesystem`) or about 500 bytes (`gcs`, `s3`).
 - `gcs` no longer uses Google's client libraries: it talks to GCS's JSON API on the JDK's `java.net.http`, and does
   Google's OAuth 2.0 itself (service account keys, gcloud user credentials, the metadata server, and Application
