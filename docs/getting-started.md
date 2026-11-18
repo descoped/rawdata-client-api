@@ -42,7 +42,7 @@ Code depends on the API only; a provider is chosen by configuration and found by
 Every module's compile and runtime dependencies have one version of each library, the newest stable when the
 release was made; the build fails otherwise (the enforcer's `dependencyConvergence`). The libraries the providers
 share (slf4j-api, Jackson, commons-codec) are declared by the providers themselves and excluded from the libraries
-that bring them (HikariCP, Avro, google-cloud-storage). Maven picks the version nearest to your project, and the
+that bring them (HikariCP, Avro). Maven picks the version nearest to your project, and the
 first declared when two are as near, so they resolve to the providers' versions unless your project, or a library
 it lists first, brings another. `mvn dependency:tree` shows what you get; the enforcer's `dependencyConvergence`
 rule in your own build makes a conflict fail.
@@ -81,7 +81,7 @@ should continue where it stopped saves the id of the last message it handled, fo
 ## Logging
 
 The providers log through the JDK's `System.Logger`; the libraries they use log through slf4j 2 (HikariCP, Avro) and
-`java.util.logging` (the Google Cloud libraries). None of them chooses where logging goes. With slf4j and, for
+`java.util.logging` (the PostgreSQL driver). None of them chooses where logging goes. With slf4j and, for
 example, logback in your application:
 
 | To send | Add | |
@@ -103,13 +103,11 @@ module com.example.app {
 }
 ```
 
-The providers need no `requires`: put them on the module path and the API's `uses` finds them. The one exception is
-`gcs`: the Google Cloud libraries cannot all be modules (they split packages among themselves), so put them on the
-class path, keep the rawdata jars on the module path, and add `--add-modules ALL-MODULE-PATH`:
+The providers need no `requires`: put them and their dependencies on the module path, and the API's `uses` finds
+them:
 
 ```sh
-java --module-path app.jar:rawdata-jars... --class-path google-jars... --add-modules ALL-MODULE-PATH \
-     --module com.example.app/com.example.app.Main
+java --module-path app.jar:lib --module com.example.app/com.example.app.Main
 ```
 
 Everything on the class path works too. CI checks both layouts (`src/it/jpms/run.sh`).

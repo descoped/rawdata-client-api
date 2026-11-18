@@ -36,7 +36,7 @@ Version 3.0.0 is in progress on `master`; the last release is 2.0.0. 3.0 is a cl
 | `rawdata-copy-util` | `rawdata-copy`, a command-line tool that copies topics between stores and clouds |
 | `rawdata-client-bom` | a BOM that aligns the versions of the modules above |
 
-Maven group `io.descoped.rawdata`, Java 17 or newer, every module a JPMS module (`gcs` an automatic one for now).
+Maven group `io.descoped.rawdata`, Java 17 or newer, every module a JPMS module.
 
 ## Getting started with the code
 
@@ -44,7 +44,7 @@ Maven group `io.descoped.rawdata`, Java 17 or newer, every module a JPMS module 
 
 - **JDK 17 or newer.** The build targets Java 17 (`--release 17`), and CI builds on JDK 17. Build on 17 to see what
   CI sees: a newer `javac` gives fewer warnings, and warnings fail the build.
-- **Docker**, for the postgres and gcs tests: Testcontainers starts PostgreSQL 18 and a fake GCS server.
+- **Docker**, for the postgres, gcs and copy tool tests: Testcontainers starts PostgreSQL 18 and a fake GCS server.
 - Maven comes with the wrapper (`./mvnw`); nothing else to install.
 
 ### Build and test

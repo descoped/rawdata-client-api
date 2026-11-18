@@ -10,9 +10,6 @@ Build on JDK 17 (`./mvnw -v` should say 17); see [building and testing](building
 update. Declare the newest version once and exclude it from the other path; see
 [dependencies](dependencies.md#convergence).
 
-**"… banned via the exclude/include list" in `gcs`.** A Google update brings an artifact the provider never loads.
-Add it to the exclusions on `google-cloud-storage`; see [dependencies](dependencies.md#exclusions-and-bans-in-gcs).
-
 **The Maven wrapper fails its checksum.** `distributionSha256Sum` in `.mvn/wrapper/maven-wrapper.properties` doesn't
 match the Maven version, usually after a Maven update. Set it to the SHA-256 of the new
 `apache-maven-<version>-bin.zip`, after checking that zip against the `.sha512` Maven publishes next to it.
@@ -36,12 +33,12 @@ the class path fails to load and stops the service loader. Check that the provid
 dependency.
 
 **"SLF4J(W): No SLF4J providers were found".** Nothing in your application binds slf4j, so HikariCP's and Avro's log
-messages are dropped. Add a backend such as logback. To route the providers' `System.Logger` and the Google
-libraries' `java.util.logging` there too, see [getting started](getting-started.md#logging).
+messages are dropped. Add a backend such as logback. To route the providers' `System.Logger` and the PostgreSQL
+driver's `java.util.logging` there too, see [getting started](getting-started.md#logging).
 
-**`gcs` on the module path fails with `NoClassDefFoundError: com/fasterxml/jackson/core/JsonFactory`.** Google's
-libraries are on the class path and Jackson is on the module path, unresolved. Add `--add-modules ALL-MODULE-PATH`;
-see [getting started](getting-started.md#the-module-path).
+**`gcs` says "No Application Default Credentials".** None of the three sources was found: set
+`GOOGLE_APPLICATION_CREDENTIALS` to a key file, run `gcloud auth application-default login`, or run on Google Cloud.
+See the [`gcs` credentials](providers/gcs.md#credentials).
 
 **A metadata key is refused with `IllegalArgumentException`.** The file-based providers limit a key's length:
 - `filesystem`: 127 bytes in UTF-8;

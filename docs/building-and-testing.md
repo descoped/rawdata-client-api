@@ -26,8 +26,8 @@
 The build fails fast on mistakes that are easy to miss:
 - **compiler warnings**, through `-Werror`;
 - **Javadoc**: missing or wrong docs on public API;
-- **dependencies**: two versions of a library in a module (`dependencyConvergence`), a banned Google artifact in
-  `gcs`, or the wrong Java or Maven version (enforcer). See [dependencies](dependencies.md).
+- **dependencies**: two versions of a library in a module (`dependencyConvergence`), or the wrong Java or Maven
+  version (enforcer). See [dependencies](dependencies.md).
 
 ## The tests
 
@@ -37,7 +37,7 @@ The build fails fast on mistakes that are easy to miss:
 | `rawdata-client-tck` | the contract against `memory` | module path | |
 | `rawdata-client-provider-postgres` | the contract and the provider's own tests on PostgreSQL 18 (`postgres:18-alpine`) | class path | Docker |
 | `rawdata-client-provider-avro` | the contract and the `filesystem` tests | module path, test module `io.descoped.rawdata.provider.avro.test` | |
-| `rawdata-client-provider-gcs` | the contract and the provider's tests against `fsouza/fake-gcs-server` | class path | Docker |
+| `rawdata-client-provider-gcs` | the contract and the provider's tests against `fsouza/fake-gcs-server`; the client and credentials against a local server | class path | Docker |
 | `rawdata-copy-util` | the tool: arguments, copies, resume, filesystem → postgres | class path | Docker |
 
 Testcontainers' own jars split packages, so tests that use it run on the class path. Applications never get test
@@ -66,8 +66,7 @@ topic or the layout in the store, goes in the provider's own test class (`*Provi
 module (`src/it/jpms/app`) that requires only `io.descoped.rawdata.api`. It checks that:
 - the service loader finds all five providers;
 - a topic round-trips through `filesystem`, `postgres` and `gcs`, with order, `lastMessage` and metadata;
-- this works both with the rawdata modules on the module path (Google's libraries on the class path) and with
-  everything on the class path;
+- this works both with everything on the module path and with everything on the class path;
 - `jdeps --check` finds nothing to change in the module declarations.
 
 Run it after changing a `module-info`, a dependency or how providers are found.
@@ -97,9 +96,9 @@ CI publishes nothing.
 
 ## The IDE
 
-**IntelliJ IDEA** imports the Maven project as is. It runs the postgres and copy-util tests on the module path, even
-though Surefire uses the class path. The `intellij` profile in those POMs gives those runs the `--add-reads`,
-`--add-opens` and `--add-exports` they need. IntelliJ activates the profile itself (`idea.maven.embedder.version`),
-and Maven never does. After changing a POM, reload the Maven project.
+**IntelliJ IDEA** imports the Maven project as is. It runs the postgres, gcs and copy-util tests on the module path,
+even though Surefire uses the class path. The `intellij` profile in those POMs (and gcs's) gives those runs the
+`--add-reads`, `--add-opens` and `--add-exports` they need. IntelliJ activates the profile itself
+(`idea.maven.embedder.version`), and Maven never does. After changing a POM, reload the Maven project.
 
 Set the project SDK to JDK 17.

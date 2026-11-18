@@ -55,8 +55,8 @@ code. Java 17 or newer.
 ### `filesystem` and `gcs`
 
 - Split into `rawdata-client-provider-avro` (the engine and `filesystem`, module `io.descoped.rawdata.provider.avro`)
-  and `rawdata-client-provider-gcs` (automatic module `io.descoped.rawdata.provider.gcs`; the Google Cloud libraries
-  cannot be modules, so they go on the class path). Packages renamed from `io.descoped.rawdata.avro`.
+  and `rawdata-client-provider-gcs` (module `io.descoped.rawdata.provider.gcs`). Packages renamed from
+  `io.descoped.rawdata.avro`.
 - One Avro file per publish, numbered without gaps, created only if the number is free (a hard link, or an upload
   with the `doesNotExist` precondition): a message is visible and durable when `publish` returns, and ids follow
   commit order across processes. The local temp folder, the upload thread and the time and size windows are gone.
@@ -65,12 +65,14 @@ code. Java 17 or newer.
   `data`). On a file system, topic folders keep topics that differ only by case apart.
 - Configuration: `local-temp-folder`, `avro-file.*`, `listing.min-interval-seconds` and
   `gcs.listing.min-interval-seconds` are removed. `filesystem.poll-interval-ms`, `gcs.poll-interval-ms`,
-  `gcs.prefix`, `gcs.project-id` and `gcs.endpoint` are new. `gcs.credential-provider` is now `gcs.credentials`:
+  `gcs.prefix` and `gcs.endpoint` are new. `gcs.credential-provider` is now `gcs.credentials`:
   `application-default` (the default), `service-account` or `none`.
 - Metadata keys are at most 127 bytes (`filesystem`) or about 500 bytes (`gcs`).
-- `gcs` leaves out what Google's HTTP path never loads: the gRPC transport, Cloud Monitoring and the OpenTelemetry
-  SDK, and legacy jars (Apache HttpClient 4, `com.google.android:annotations`, `threeten-extra`). 56 dependencies
-  instead of 98.
+- `gcs` no longer uses Google's client libraries: it talks to GCS's JSON API on the JDK's `java.net.http`, and does
+  Google's OAuth 2.0 itself (service account keys, gcloud user credentials, the metadata server, and Application
+  Default Credentials in Google's order). Its only dependency besides the Avro engine is Jackson: about 56 Google jars
+  fewer, and the copy tool's zip is 7 MB instead of 61 MB. `gcs` is a named module and runs on the module path.
+  `external_account` (workload identity federation) is not supported yet.
 - Fixed: files that started in the same millisecond hid each other; an upload failure deadlocked the producer;
   messages stayed invisible until a window closed; a later upload with an older name was skipped; topics could
   escape the storage folder; file handles leaked; a closed consumer threw `NullPointerException`; a cursor at the

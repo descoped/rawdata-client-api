@@ -110,7 +110,7 @@
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- Where HikariCP and the Google Cloud client log; warnings and errors only (simplelogger.properties). -->
+        <!-- Where HikariCP and Avro log; warnings and errors only (simplelogger.properties). -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
@@ -118,7 +118,7 @@
             <scope>runtime</scope>
         </dependency>
         <!-- All logging in one place, slf4j-simple: System.Logger (the providers) through the platform logging
-             bridge, java.util.logging (the Google Cloud libraries) through jul-to-slf4j, installed in main. -->
+             bridge, java.util.logging (the PostgreSQL driver) through jul-to-slf4j, installed by the tool. -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-jdk-platform-logging</artifactId>

@@ -1,7 +1,5 @@
 package io.descoped.rawdata.provider.gcs.test;
 
-import com.google.cloud.storage.Blob;
-import com.google.cloud.storage.Storage;
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataConsumer;
 import io.descoped.rawdata.api.RawdataIds;
@@ -26,7 +24,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -139,23 +136,13 @@ class GcsProviderTest {
             client.producer("t").publish(message("c"));
             client.metadata("t").put("checkpoint", new byte[]{1});
         }
-        Storage storage = FakeGcs.storage();
-        try {
-            List<String> names = new ArrayList<>();
-            for (Blob blob : storage.list(FakeGcs.BUCKET, Storage.BlobListOption.prefix(prefix)).iterateAll()) {
-                names.add(blob.getName());
-                if (blob.getName().endsWith(".avro")) {
-                    assertEquals("avro/binary", blob.getContentType());
-                }
-            }
-            String checkpoint = "k" + HexFormat.of().formatHex("checkpoint".getBytes(StandardCharsets.UTF_8));
-            assertEquals(List.of(
-                    prefix + "t/metadata/" + checkpoint,
-                    prefix + "t/segments/0000000000000000000.avro",
-                    prefix + "t/segments/0000000000000000001.avro"), names.stream().sorted().toList());
-        } finally {
-            FakeGcs.close(storage);
-        }
+        Map<String, String> objects = FakeGcs.objects(prefix);
+        String checkpoint = "k" + HexFormat.of().formatHex("checkpoint".getBytes(StandardCharsets.UTF_8));
+        assertEquals(List.of(
+                prefix + "t/metadata/" + checkpoint,
+                prefix + "t/segments/0000000000000000000.avro",
+                prefix + "t/segments/0000000000000000001.avro"), List.copyOf(objects.keySet()));
+        assertEquals("avro/binary", objects.get(prefix + "t/segments/0000000000000000000.avro"));
     }
 
     /**
@@ -191,12 +178,7 @@ class GcsProviderTest {
         try (RawdataClient client = RawdataClient.create(noSlash)) {
             String topic = "t-" + UUID.randomUUID();
             client.producer(topic).publish(message("a"));
-            Storage storage = FakeGcs.storage();
-            try {
-                assertNotNull(storage.get(FakeGcs.BUCKET, "folder/" + topic + "/segments/0000000000000000000.avro"));
-            } finally {
-                FakeGcs.close(storage);
-            }
+            assertTrue(FakeGcs.objects("folder/").containsKey("folder/" + topic + "/segments/0000000000000000000.avro"));
         }
     }
 }

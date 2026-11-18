@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GcsAvroStoreTest {
 
     private static GcsAvroStore store() {
-        return new GcsAvroStore(FakeGcs.storage(), FakeGcs.BUCKET, "store-" + UUID.randomUUID() + "/");
+        return new GcsAvroStore(new GcsClient(FakeGcs.endpoint(), GcsCredentials.NONE), FakeGcs.BUCKET, "store-" + UUID.randomUUID() + "/");
     }
 
     /**
