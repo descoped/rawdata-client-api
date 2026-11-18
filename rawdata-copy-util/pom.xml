@@ -151,9 +151,9 @@
     </dependencies>
 
     <profiles>
-        <!-- The filesystem, gcs and s3 tests run the Avro engine, besides its own tests of the failure paths. This module
-             depends on every provider, so its aggregate report gives the engine (and every provider) the coverage of all
-             their tests, and SonarCloud merges it with each module's own. The aggregate takes direct dependencies only, so the
+        <!-- The filesystem, gcs and s3 tests run the Avro engine, besides its own tests of the failure paths. This
+             module depends on every provider, so its aggregate report gives the engine (and every provider) the
+             coverage of all their tests, and SonarCloud merges it with each module's own. The aggregate takes direct dependencies only, so the
              engine, which comes through the providers, is named here. -->
         <profile>
             <id>coverage</id>
