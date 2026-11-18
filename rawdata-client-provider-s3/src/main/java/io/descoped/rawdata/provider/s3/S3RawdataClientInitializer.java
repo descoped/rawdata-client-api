@@ -30,7 +30,8 @@ import java.util.Set;
  * Configuration:
  * <ul>
  *     <li>{@code s3.bucket-name}: the bucket (required).</li>
- *     <li>{@code s3.prefix}: a folder in the bucket for the topics, for example {@code rawdata/} (default none).</li>
+ *     <li>{@code s3.prefix}: a folder in the bucket for the topics, for example {@code rawdata/} (default none), at most
+ *     {@link AvroConfiguration#MAX_PREFIX_BYTES} bytes.</li>
  *     <li>{@code s3.region}: the bucket's region (default: the SDK's region chain: {@code AWS_REGION}, the profile,
  *     the instance metadata).</li>
  *     <li>{@code s3.credentials}: {@code default} (default: the SDK's credentials chain: environment, system
@@ -88,7 +89,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
     @Override
     public RawdataClient initialize(Map<String, String> configuration) {
         String bucket = AvroConfiguration.required(configuration, BUCKET);
-        String prefix = prefix(AvroConfiguration.optional(configuration, PREFIX, ""));
+        String prefix = AvroConfiguration.prefix(configuration, PREFIX);
         long pollInterval = AvroConfiguration.positive(configuration, POLL_INTERVAL, 1000);
         ServerSideEncryption encryption = encryption(configuration);
         String kmsKeyId = AvroConfiguration.optional(configuration, SSE_KMS_KEY_ID, null);
@@ -122,16 +123,6 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
             throw e;
         }
         return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable), pollInterval);
-    }
-
-    private static String prefix(String prefix) {
-        if (prefix.isEmpty()) {
-            return prefix;
-        }
-        if (prefix.startsWith("/")) {
-            throw new IllegalArgumentException("Configuration '" + PREFIX + "' must not start with '/': " + prefix);
-        }
-        return prefix.endsWith("/") ? prefix : prefix + "/";
     }
 
     private static boolean pathStyle(Map<String, String> configuration, String bucket) {

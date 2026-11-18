@@ -30,10 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class S3AvroStoreTest {
 
-    private static S3AvroStore store() {
-        return new S3AvroStore(S3Mock.client(), S3Mock.BUCKET, "store-" + UUID.randomUUID() + "/", null, null);
-    }
-
     /**
      * A wrong bucket is an error, not an empty topic; an unreachable endpoint is an IOException after the SDK's
      * retries.

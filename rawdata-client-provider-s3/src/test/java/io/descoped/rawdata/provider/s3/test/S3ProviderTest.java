@@ -71,6 +71,7 @@ class S3ProviderTest {
         refused("s3.sse", Map.of("s3.sse", "rot13"));
         refused("s3.sse-kms-key-id", Map.of("s3.sse", "AES256", "s3.sse-kms-key-id", "alias/x"));
         refused("s3.prefix", Map.of("s3.prefix", "/x/"));
+        refused("s3.prefix", Map.of("s3.prefix", "p".repeat(659)));
 
         Map<String, String> noSlash = S3Mock.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {

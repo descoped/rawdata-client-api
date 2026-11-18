@@ -74,6 +74,10 @@ class GcsProviderTest {
         IllegalArgumentException key = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(noKey));
         assertTrue(key.getMessage().contains("gcs.service-account.key-file"), key.getMessage());
 
+        Map<String, String> longPrefix = FakeGcs.configuration("p".repeat(659));
+        IllegalArgumentException tooLong = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(longPrefix));
+        assertTrue(tooLong.getMessage().contains("gcs.prefix"), tooLong.getMessage());
+
         Map<String, String> missingKey = FakeGcs.configuration("x/");
         missingKey.put("gcs.credentials", "service-account");
         missingKey.put("gcs.service-account.key-file", "/no/such/key.json");
@@ -81,7 +85,7 @@ class GcsProviderTest {
 
         Map<String, String> absolute = FakeGcs.configuration("/x/");
         IllegalArgumentException prefix = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(absolute));
-        assertTrue(prefix.getMessage().contains("gcs.prefix"), prefix.getMessage());
+        assertTrue(tooLong.getMessage().contains("gcs.prefix"), tooLong.getMessage());
 
         Map<String, String> noSlash = FakeGcs.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {

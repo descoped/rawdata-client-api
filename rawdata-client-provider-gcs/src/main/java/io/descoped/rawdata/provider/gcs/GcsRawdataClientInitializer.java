@@ -21,7 +21,8 @@ import java.util.Set;
  * Configuration:
  * <ul>
  *     <li>{@code gcs.bucket-name}: the bucket (required).</li>
- *     <li>{@code gcs.prefix}: a folder in the bucket for the topics, for example {@code rawdata/} (default none).</li>
+ *     <li>{@code gcs.prefix}: a folder in the bucket for the topics, for example {@code rawdata/} (default none), at most
+ *     {@link AvroConfiguration#MAX_PREFIX_BYTES} bytes.</li>
  *     <li>{@code gcs.credentials}: {@code application-default} (default: Application Default Credentials: the key
  *     file in {@code GOOGLE_APPLICATION_CREDENTIALS}, gcloud's application default credentials, or the metadata
  *     server of a Google Cloud runtime), {@code service-account} (a key file, {@code gcs.service-account.key-file})
@@ -63,22 +64,12 @@ public final class GcsRawdataClientInitializer implements RawdataClientInitializ
     @Override
     public RawdataClient initialize(Map<String, String> configuration) {
         String bucket = AvroConfiguration.required(configuration, BUCKET);
-        String prefix = prefix(AvroConfiguration.optional(configuration, PREFIX, ""));
+        String prefix = AvroConfiguration.prefix(configuration, PREFIX);
         long pollInterval = AvroConfiguration.positive(configuration, POLL_INTERVAL, 1000);
         String endpoint = AvroConfiguration.optional(configuration, ENDPOINT, GcsClient.DEFAULT_ENDPOINT);
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         GcsClient client = new GcsClient(http, endpoint, credentials(configuration, http));
         return new AvroRawdataClient(new GcsAvroStore(client, bucket, prefix), pollInterval);
-    }
-
-    private static String prefix(String prefix) {
-        if (prefix.isEmpty()) {
-            return prefix;
-        }
-        if (prefix.startsWith("/")) {
-            throw new IllegalArgumentException("Configuration '" + PREFIX + "' must not start with '/': " + prefix);
-        }
-        return prefix.endsWith("/") ? prefix : prefix + "/";
     }
 
     private static GcsCredentials credentials(Map<String, String> configuration, HttpClient http) {

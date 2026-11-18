@@ -58,3 +58,8 @@ A key with the NUL character is refused by every provider. See [metadata](contra
 wrote it: only one process may write a topic. Find the other writer (two instances of a service, or an old one still
 running after a restart) and stop one; a new client then starts from the topic's end. See
 [one writer per topic](contract.md#one-writer-per-topic).
+
+It can also follow a publish whose outcome was unknown: a commit whose acknowledgement was lost (`postgres`), or a
+segment upload that failed after every retry although the store kept it (`gcs`, `s3`). The client then does not know
+it wrote, and its next publish reports a conflict. Check the topic's last message (`lastMessage`), and create a new
+client to go on.
