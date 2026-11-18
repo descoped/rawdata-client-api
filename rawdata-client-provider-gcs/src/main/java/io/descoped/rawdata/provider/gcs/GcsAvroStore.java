@@ -11,6 +11,7 @@ import io.descoped.rawdata.provider.avro.AvroStore;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -22,12 +23,17 @@ import java.util.TreeSet;
  * The client retries a failed upload. If an upload succeeded but its response was lost, the retry fails its
  * precondition; the store then reads the object, and if it holds the bytes it uploaded (an Avro file carries a random
  * sync marker, so no other writer's file is the same) the segment counts as created.
+ * <p>
+ * A metadata entry is written with a precondition on the generation it replaces (or that there is none), so the client
+ * may retry the upload, for example when GCS limits writes to one object name to about one per second. When another
+ * writer changed the entry meanwhile, the write starts over, so the last write wins.
  */
 final class GcsAvroStore implements AvroStore {
 
     private static final int HTTP_NOT_FOUND = 404;
     private static final int HTTP_PRECONDITION_FAILED = 412;
     private static final int MAX_NAME_BYTES = 1024;
+    private static final System.Logger LOG = System.getLogger(GcsAvroStore.class.getName());
 
     private final Storage storage;
     private final String bucket;
@@ -49,12 +55,12 @@ final class GcsAvroStore implements AvroStore {
             if (e.getCode() != HTTP_PRECONDITION_FAILED) {
                 throw new IOException(e.getMessage(), e);
             }
-            return Arrays.equals(content, read(id)); // our own upload, if a retry found it
+            return read(id).map(stored -> Arrays.equals(content, stored)).orElse(false); // our own upload, if a retry found it
         }
     }
 
     @Override
-    public byte[] read(String topic, long segment) throws IOException {
+    public Optional<byte[]> read(String topic, long segment) throws IOException {
         return read(segment(topic, segment));
     }
 
@@ -86,16 +92,28 @@ final class GcsAvroStore implements AvroStore {
     }
 
     @Override
-    public byte[] readMetadata(String topic, String name) throws IOException {
+    public Optional<byte[]> readMetadata(String topic, String name) throws IOException {
         return read(metadata(topic, name));
     }
 
     @Override
     public void writeMetadata(String topic, String name, byte[] value) throws IOException {
-        try {
-            storage.create(BlobInfo.newBuilder(metadata(topic, name)).setContentType("application/octet-stream").build(), value);
-        } catch (StorageException e) {
-            throw new IOException(e.getMessage(), e);
+        BlobId id = metadata(topic, name);
+        BlobInfo info = BlobInfo.newBuilder(id).setContentType("application/octet-stream").build();
+        for (; ; ) {
+            try {
+                Blob current = storage.get(id, Storage.BlobGetOption.fields(Storage.BlobField.GENERATION));
+                Storage.BlobTargetOption replaces = current == null
+                        ? Storage.BlobTargetOption.doesNotExist()
+                        : Storage.BlobTargetOption.generationMatch(current.getGeneration());
+                storage.create(info, value, replaces);
+                return;
+            } catch (StorageException e) {
+                if (e.getCode() != HTTP_PRECONDITION_FAILED) {
+                    throw new IOException(e.getMessage(), e);
+                }
+                // another writer changed the entry meanwhile; write again over its value
+            }
         }
     }
 
@@ -116,15 +134,16 @@ final class GcsAvroStore implements AvroStore {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             // closing releases threads and connections; nothing written is lost if it fails
+            LOG.log(System.Logger.Level.DEBUG, "Closing the storage client failed", e);
         }
     }
 
-    private byte[] read(BlobId id) throws IOException {
+    private Optional<byte[]> read(BlobId id) throws IOException {
         try {
-            return storage.readAllBytes(id);
+            return Optional.of(storage.readAllBytes(id));
         } catch (StorageException e) {
             if (e.getCode() == HTTP_NOT_FOUND) {
-                return null;
+                return Optional.empty();
             }
             throw new IOException(e.getMessage(), e);
         }

@@ -1,0 +1,151 @@
+package io.descoped.rawdata.api.spi;
+
+import io.descoped.rawdata.api.RawdataClosedException;
+import io.descoped.rawdata.api.RawdataIds;
+import io.descoped.rawdata.api.RawdataMessage;
+import io.descoped.rawdata.api.RawdataProducer;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * A producer for providers that write a call's messages at the end of the topic in one step: the argument checks,
+ * asynchronous publish and closing, and {@link #withIds}, which gives ids after the topic's last id and checks given
+ * ones, as the contract requires. A provider writes a batch in {@link #write}.
+ */
+public abstract class OrderedRawdataProducer implements RawdataProducer {
+
+    private final String topic;
+    private final AtomicBoolean closed = new AtomicBoolean();
+
+    /**
+     * Creates the producer.
+     *
+     * @param topic the topic
+     */
+    protected OrderedRawdataProducer(String topic) {
+        this.topic = topic;
+    }
+
+    /**
+     * Writes a call's messages, all or none, after everything in the topic; typically: find the topic's last id,
+     * call {@link #withIds}, and write the result.
+     *
+     * @param batch the messages, at least one, none null; the array is the producer's own copy
+     */
+    protected abstract void write(RawdataMessage[] batch);
+
+    /**
+     * Whether the client that created this producer is closed.
+     *
+     * @return true if it is
+     */
+    protected abstract boolean isClientClosed();
+
+    /**
+     * The executor of asynchronous publishes: the client's, which fails its tasks when the client closes.
+     *
+     * @return the executor
+     */
+    protected abstract Executor executor();
+
+    /**
+     * Called once, when the producer closes; for example, to tell the client.
+     */
+    protected void closed() {
+        // nothing by default
+    }
+
+    @Override
+    public final String topic() {
+        return topic;
+    }
+
+    @Override
+    public final void publish(RawdataMessage... messages) throws RawdataClosedException {
+        Objects.requireNonNull(messages, "messages");
+        for (RawdataMessage message : messages) {
+            Objects.requireNonNull(message, "one of the messages is null");
+        }
+        checkOpen();
+        if (messages.length > 0) {
+            write(messages.clone());
+        }
+    }
+
+    /**
+     * Gives the messages without an id an id after the one before it, starting after the topic's last id, and
+     * checks that every given id is greater than the one before it.
+     *
+     * @param batch the messages
+     * @param last  the topic's last id, or {@link RawdataIds#beginningOfTime()} for an empty topic
+     * @return the messages as they are to be stored, every one with an id
+     * @throws IllegalArgumentException if a given id is not greater than the id before it
+     */
+    protected final List<RawdataMessage> withIds(RawdataMessage[] batch, UUID last) {
+        UUID previous = last;
+        List<RawdataMessage> stored = new ArrayList<>(batch.length);
+        for (RawdataMessage message : batch) {
+            UUID id = message.id();
+            if (id == null) {
+                id = RawdataIds.next(previous);
+                stored.add(message.copy().id(id).build());
+            } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
+                stored.add(message);
+            } else {
+                throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
+                        + " is not greater than the last id in topic " + topic + ": " + previous);
+            }
+            previous = id;
+        }
+        return stored;
+    }
+
+    @Override
+    public final CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
+        RawdataMessage[] batch = Objects.requireNonNull(messages, "messages").clone();
+        try {
+            return CompletableFuture.runAsync(() -> publish(batch), executor());
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(closedException());
+        }
+    }
+
+    @Override
+    public final boolean isClosed() {
+        return closed.get() || isClientClosed();
+    }
+
+    @Override
+    public final void close() {
+        if (closed.compareAndSet(false, true)) {
+            closed();
+        }
+    }
+
+    /**
+     * Throws if the producer or its client is closed; for a {@link #write} that waits, to check again.
+     *
+     * @throws RawdataClosedException if closed
+     */
+    protected final void checkOpen() {
+        if (isClosed()) {
+            throw closedException();
+        }
+    }
+
+    private RawdataClosedException closedException() {
+        return new RawdataClosedException("producer of topic " + topic + " is closed");
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "{topic=" + topic + ", closed=" + isClosed() + '}';
+    }
+}

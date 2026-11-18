@@ -52,6 +52,7 @@ public final class GcsRawdataClientInitializer implements RawdataClientInitializ
      * Creates the initializer; called by the service loader.
      */
     public GcsRawdataClientInitializer() {
+        // nothing to set up; the configuration comes with initialize
     }
 
     /**

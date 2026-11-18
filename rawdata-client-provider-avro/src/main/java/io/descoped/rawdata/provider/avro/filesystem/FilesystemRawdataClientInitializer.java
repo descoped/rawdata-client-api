@@ -32,6 +32,7 @@ public final class FilesystemRawdataClientInitializer implements RawdataClientIn
      * Creates the initializer; called by the service loader.
      */
     public FilesystemRawdataClientInitializer() {
+        // nothing to set up; the configuration comes with initialize
     }
 
     /**

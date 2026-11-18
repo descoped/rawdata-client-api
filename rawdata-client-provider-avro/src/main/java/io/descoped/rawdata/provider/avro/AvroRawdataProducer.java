@@ -1,18 +1,11 @@
 package io.descoped.rawdata.provider.avro;
 
-import io.descoped.rawdata.api.RawdataClosedException;
-import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
-import io.descoped.rawdata.api.RawdataProducer;
+import io.descoped.rawdata.api.spi.OrderedRawdataProducer;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -21,33 +14,18 @@ import java.util.concurrent.locks.ReentrantLock;
  * producer reads the new last segment and tries again, so a call is written whole after everything before it, or
  * not at all.
  */
-final class AvroRawdataProducer implements RawdataProducer {
+final class AvroRawdataProducer extends OrderedRawdataProducer {
 
     private final AvroRawdataClient client;
-    private final String topic;
-    private final AtomicBoolean closed = new AtomicBoolean();
 
     AvroRawdataProducer(AvroRawdataClient client, String topic) {
+        super(topic);
         this.client = client;
-        this.topic = topic;
     }
 
     @Override
-    public String topic() {
-        return topic;
-    }
-
-    @Override
-    public void publish(RawdataMessage... messages) throws RawdataClosedException {
-        Objects.requireNonNull(messages, "messages");
-        for (RawdataMessage message : messages) {
-            Objects.requireNonNull(message, "one of the messages is null");
-        }
-        checkOpen();
-        if (messages.length == 0) {
-            return;
-        }
-        RawdataMessage[] batch = messages.clone();
+    protected void write(RawdataMessage[] batch) {
+        String topic = topic();
         // Producers of this client take turns, so they do not race each other for the next segment.
         ReentrantLock lock = client.publishLock(topic);
         lock.lock();
@@ -71,59 +49,18 @@ final class AvroRawdataProducer implements RawdataProducer {
         }
     }
 
-    private List<RawdataMessage> withIds(RawdataMessage[] batch, UUID last) {
-        UUID previous = last;
-        List<RawdataMessage> stored = new ArrayList<>(batch.length);
-        for (RawdataMessage message : batch) {
-            UUID id = message.id();
-            if (id == null) {
-                id = RawdataIds.next(previous);
-                stored.add(message.copy().id(id).build());
-            } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
-                stored.add(message);
-            } else {
-                throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
-                        + " is not greater than the last id in topic " + topic + ": " + previous);
-            }
-            previous = id;
-        }
-        return stored;
+    @Override
+    protected boolean isClientClosed() {
+        return client.isClosed();
     }
 
     @Override
-    public CompletableFuture<Void> publishAsync(RawdataMessage... messages) {
-        RawdataMessage[] batch = Objects.requireNonNull(messages, "messages").clone();
-        try {
-            return CompletableFuture.runAsync(() -> publish(batch), client.executor());
-        } catch (RejectedExecutionException e) {
-            return CompletableFuture.failedFuture(closedException());
-        }
+    protected Executor executor() {
+        return client.executor();
     }
 
     @Override
-    public boolean isClosed() {
-        return closed.get() || client.isClosed();
-    }
-
-    @Override
-    public void close() {
-        if (closed.compareAndSet(false, true)) {
-            client.removed(this);
-        }
-    }
-
-    private void checkOpen() {
-        if (isClosed()) {
-            throw closedException();
-        }
-    }
-
-    private RawdataClosedException closedException() {
-        return new RawdataClosedException("producer of topic " + topic + " is closed");
-    }
-
-    @Override
-    public String toString() {
-        return "AvroRawdataProducer{topic=" + topic + ", closed=" + isClosed() + '}';
+    protected void closed() {
+        client.removed(this);
     }
 }

@@ -25,21 +25,30 @@ import java.util.UUID;
  */
 final class AvroSegments {
 
-    static final Schema ID = SchemaBuilder.fixed("uuid").namespace("io.descoped.rawdata").size(16);
+    private static final String NAMESPACE = "io.descoped.rawdata";
+    private static final String ID_FIELD = "id";
+    private static final String ORDERING_GROUP = "orderingGroup";
+    private static final String SEQUENCE_NUMBER = "sequenceNumber";
+    private static final String POSITION = "position";
+    private static final String CONTENT_FIELD = "content";
+    private static final String NAME = "name";
+    private static final String VALUE = "value";
 
-    static final Schema CONTENT = SchemaBuilder.record("Content").namespace("io.descoped.rawdata")
+    static final Schema ID = SchemaBuilder.fixed("uuid").namespace(NAMESPACE).size(16);
+
+    static final Schema CONTENT = SchemaBuilder.record("Content").namespace(NAMESPACE)
             .fields()
-            .name("name").type().stringType().noDefault()
-            .name("value").type().bytesType().noDefault()
+            .name(NAME).type().stringType().noDefault()
+            .name(VALUE).type().bytesType().noDefault()
             .endRecord();
 
-    static final Schema MESSAGE = SchemaBuilder.record("RawdataMessage").namespace("io.descoped.rawdata")
+    static final Schema MESSAGE = SchemaBuilder.record("RawdataMessage").namespace(NAMESPACE)
             .fields()
-            .name("id").type(ID).noDefault()
-            .name("orderingGroup").type().nullable().stringType().noDefault()
-            .name("sequenceNumber").type().longType().noDefault()
-            .name("position").type().stringType().noDefault()
-            .name("content").type().array().items(CONTENT).noDefault()
+            .name(ID_FIELD).type(ID).noDefault()
+            .name(ORDERING_GROUP).type().nullable().stringType().noDefault()
+            .name(SEQUENCE_NUMBER).type().longType().noDefault()
+            .name(POSITION).type().stringType().noDefault()
+            .name(CONTENT_FIELD).type().array().items(CONTENT).noDefault()
             .endRecord();
 
     private AvroSegments() {
@@ -61,47 +70,47 @@ final class AvroSegments {
     static List<RawdataMessage> decode(byte[] segment) throws IOException {
         List<RawdataMessage> messages = new ArrayList<>();
         try (DataFileStream<GenericRecord> reader = new DataFileStream<>(new ByteArrayInputStream(segment), new GenericDatumReader<>(MESSAGE))) {
-            GenericRecord record = null;
+            GenericRecord read = null;
             while (reader.hasNext()) {
-                record = reader.next(record);
-                messages.add(toMessage(record));
+                read = reader.next(read);
+                messages.add(toMessage(read));
             }
         }
         return messages;
     }
 
     private static GenericRecord toRecord(RawdataMessage message) {
-        GenericRecord record = new GenericData.Record(MESSAGE);
-        record.put("id", new GenericData.Fixed(ID, toBytes(message.id())));
-        record.put("orderingGroup", message.orderingGroup());
-        record.put("sequenceNumber", message.sequenceNumber());
-        record.put("position", message.position());
+        GenericRecord written = new GenericData.Record(MESSAGE);
+        written.put(ID_FIELD, new GenericData.Fixed(ID, toBytes(message.id())));
+        written.put(ORDERING_GROUP, message.orderingGroup());
+        written.put(SEQUENCE_NUMBER, message.sequenceNumber());
+        written.put(POSITION, message.position());
         List<GenericRecord> content = new ArrayList<>(message.keys().size());
         for (String key : message.keys()) {
             GenericRecord entry = new GenericData.Record(CONTENT);
-            entry.put("name", key);
-            entry.put("value", ByteBuffer.wrap(message.get(key)));
+            entry.put(NAME, key);
+            entry.put(VALUE, ByteBuffer.wrap(message.get(key)));
             content.add(entry);
         }
-        record.put("content", new GenericData.Array<>(MESSAGE.getField("content").schema(), content));
-        return record;
+        written.put(CONTENT_FIELD, new GenericData.Array<>(MESSAGE.getField(CONTENT_FIELD).schema(), content));
+        return written;
     }
 
-    private static RawdataMessage toMessage(GenericRecord record) {
+    private static RawdataMessage toMessage(GenericRecord stored) {
         RawdataMessage.Builder builder = RawdataMessage.builder()
-                .id(fromBytes(((GenericData.Fixed) record.get("id")).bytes()))
-                .sequenceNumber((Long) record.get("sequenceNumber"))
-                .position(record.get("position").toString());
-        Object orderingGroup = record.get("orderingGroup");
+                .id(fromBytes(((GenericData.Fixed) stored.get(ID_FIELD)).bytes()))
+                .sequenceNumber((Long) stored.get(SEQUENCE_NUMBER))
+                .position(stored.get(POSITION).toString());
+        Object orderingGroup = stored.get(ORDERING_GROUP);
         if (orderingGroup != null) {
             builder.orderingGroup(orderingGroup.toString());
         }
-        for (Object item : (List<?>) record.get("content")) {
+        for (Object item : (List<?>) stored.get(CONTENT_FIELD)) {
             GenericRecord entry = (GenericRecord) item;
-            ByteBuffer value = (ByteBuffer) entry.get("value");
+            ByteBuffer value = (ByteBuffer) entry.get(VALUE);
             byte[] bytes = new byte[value.remaining()];
             value.duplicate().get(bytes);
-            builder.put(entry.get("name").toString(), bytes);
+            builder.put(entry.get(NAME).toString(), bytes);
         }
         return builder.build();
     }

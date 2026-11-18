@@ -12,7 +12,7 @@ tool that copies topics between providers. One Maven reactor, group `io.descoped
 |---|---|---|
 | `rawdata-client-project` (root) | n/a | parent and aggregator |
 | `rawdata-client-bom` | n/a | BOM of the modules below |
-| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataIds` (UUIDv7), `RawdataCopy` |
+| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataIds` (UUIDv7), `RawdataCopy`; `io.descoped.rawdata.api.spi`: `PollingRawdataConsumer` and `OrderedRawdataProducer`, the base classes of the postgres and Avro providers |
 | `rawdata-client-tck` | `io.descoped.rawdata.tck` | `RawdataClientContractTest`: the provider contract as abstract JUnit 6 tests; its own tests run it for `memory` |
 | `rawdata-client-provider-postgres` | `io.descoped.rawdata.provider.postgres` | provider `postgres`: PostgreSQL 18 only, HikariCP, pgjdbc; shared tables `rawdata_message`, `rawdata_content`, `rawdata_metadata` keyed by topic |
 | `rawdata-client-provider-avro` | `io.descoped.rawdata.provider.avro` | the Avro engine (`AvroRawdataClient` on an `AvroStore`) and provider `filesystem` (Avro files in a local folder) |
@@ -36,7 +36,8 @@ this repository, and the work toward it is under way module by module.
   Cloud libraries are not modules, and requiring the names Java derives from their jar names would break when Google
   names them, so it is an automatic module with a fixed `Automatic-Module-Name`. A module whose exported API exposes another module's types `requires
   transitive` it. The API module declares `uses` for `RawdataClientInitializer`. Providers are registered both with
-  `provides` in `module-info.java` and in `META-INF/services`, so they work on the module path and the class path.
+  `provides` in `module-info.java` and in `META-INF/services`, so they work on the module path and the class path
+  (gcs: `META-INF/services` only, which the module system reads for an automatic module).
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
   metadata behave the same in every provider, and the shared contract tests check it. Topic names are validated and
   never spliced into SQL, file paths or object names.

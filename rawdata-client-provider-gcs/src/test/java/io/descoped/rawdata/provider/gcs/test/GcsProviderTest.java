@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -122,7 +123,6 @@ class GcsProviderTest {
         try (RawdataClient reader = client(prefix); RawdataClient writer = client(prefix);
              RawdataConsumer consumer = reader.consumer("t")) {
             CompletableFuture<? extends RawdataMessage> received = consumer.receiveAsync();
-            Thread.sleep(200);
             writer.producer("t").publish(message("a"));
             assertEquals("a", received.get(30, TimeUnit.SECONDS).position());
         }
@@ -164,8 +164,8 @@ class GcsProviderTest {
      */
     @Test
     void configurationIsChecked() {
-        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
-                () -> RawdataClient.create(Map.of(RawdataClient.PROVIDER_KEY, "gcs")));
+        Map<String, String> noBucket = Map.of(RawdataClient.PROVIDER_KEY, "gcs");
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(noBucket));
         assertTrue(missing.getMessage().contains("gcs.bucket-name"), missing.getMessage());
 
         Map<String, String> unknown = FakeGcs.configuration("x/");
@@ -193,7 +193,7 @@ class GcsProviderTest {
             client.producer(topic).publish(message("a"));
             Storage storage = FakeGcs.storage();
             try {
-                assertTrue(storage.get(FakeGcs.BUCKET, "folder/" + topic + "/segments/0000000000000000000.avro") != null);
+                assertNotNull(storage.get(FakeGcs.BUCKET, "folder/" + topic + "/segments/0000000000000000000.avro"));
             } finally {
                 FakeGcs.close(storage);
             }

@@ -168,7 +168,6 @@ class FilesystemProviderTest {
         try (RawdataClient reader = client(); RawdataClient writer = client();
              RawdataConsumer consumer = reader.consumer("t")) {
             CompletableFuture<? extends RawdataMessage> received = consumer.receiveAsync();
-            Thread.sleep(200);
             writer.producer("t").publish(message("a"));
             assertEquals("a", received.get(30, TimeUnit.SECONDS).position());
         }
@@ -280,6 +279,29 @@ class FilesystemProviderTest {
     }
 
     /**
+     * Topics that differ only by case, by a trailing dot, or that are Windows device names, keep their own folders,
+     * also on a case-insensitive file system such as macOS's default.
+     */
+    @Test
+    void topicsDifferingByCaseStayApart() throws Exception {
+        List<String> topics = List.of("Foo", "foo", "FOO", "a.", "a", "con", "Con.txt", "nul");
+        try (RawdataClient client = client()) {
+            for (String topic : topics) {
+                client.producer(topic).publish(message("in-" + topic));
+                client.metadata(topic).put("owner", topic.getBytes(StandardCharsets.UTF_8));
+            }
+            for (String topic : topics) {
+                assertEquals(List.of("in-" + topic), readAll(client, topic).stream().map(RawdataMessage::position).toList());
+                assertEquals(topic, new String(client.metadata(topic).get("owner"), StandardCharsets.UTF_8));
+            }
+        }
+        try (Stream<Path> folders = Files.list(folder)) {
+            assertEquals(Set.of("^f^o^o", "^foo", "foo", "a.^", "a", "~con", "~^con.txt", "~nul"),
+                    Set.copyOf(folders.map(path -> path.getFileName().toString()).toList()));
+        }
+    }
+
+    /**
      * A metadata key is at most 127 bytes in UTF-8, so that its file name fits in 255 characters.
      */
     @Test
@@ -288,7 +310,9 @@ class FilesystemProviderTest {
             RawdataMetadataClient metadata = client.metadata("t");
             metadata.put("k".repeat(127), new byte[]{1});
             assertArrayEquals(new byte[]{1}, metadata.get("k".repeat(127)));
-            assertThrows(IllegalArgumentException.class, () -> metadata.put("k".repeat(128), new byte[]{1}));
+            String tooLong = "k".repeat(128);
+            byte[] value = {1};
+            assertThrows(IllegalArgumentException.class, () -> metadata.put(tooLong, value));
         }
     }
 
@@ -297,8 +321,8 @@ class FilesystemProviderTest {
      */
     @Test
     void configurationIsChecked() {
-        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
-                () -> RawdataClient.create(Map.of(RawdataClient.PROVIDER_KEY, "filesystem")));
+        Map<String, String> noFolder = Map.of(RawdataClient.PROVIDER_KEY, "filesystem");
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(noFolder));
         assertTrue(missing.getMessage().contains("filesystem.storage-folder"), missing.getMessage());
         Map<String, String> badInterval = new HashMap<>(configuration());
         badInterval.put("filesystem.poll-interval-ms", "0");

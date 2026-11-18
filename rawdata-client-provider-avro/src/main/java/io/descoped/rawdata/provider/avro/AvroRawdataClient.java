@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -127,8 +128,7 @@ public final class AvroRawdataClient implements RawdataClient {
         if (tail.segment() < 0) {
             return null;
         }
-        List<RawdataMessage> messages = segment(name, tail.segment());
-        return messages.get(messages.size() - 1);
+        return lastOf(name, tail.segment());
     }
 
     @Override
@@ -209,8 +209,7 @@ public final class AvroRawdataClient implements RawdataClient {
         if (last == seen.segment()) {
             return seen;
         }
-        List<RawdataMessage> messages = segment(topic, last);
-        Tail tail = new Tail(last, messages.get(messages.size() - 1).id());
+        Tail tail = new Tail(last, lastOf(topic, last).id());
         tails.merge(topic, tail, (old, now) -> old.segment() >= now.segment() ? old : now);
         return tail;
     }
@@ -222,11 +221,23 @@ public final class AvroRawdataClient implements RawdataClient {
      */
     List<RawdataMessage> segment(String topic, long segment) {
         try {
-            byte[] content = store.read(topic, segment);
-            return content == null ? null : AvroSegments.decode(content);
+            Optional<byte[]> content = store.read(topic, segment);
+            return content.isPresent() ? AvroSegments.decode(content.get()) : null;
         } catch (IOException e) {
             throw failure("Reading segment " + segment + " of topic " + topic, e);
         }
+    }
+
+    /**
+     * Returns the last message of a segment that exists, as every segment up to the last one seen does.
+     */
+    private RawdataMessage lastOf(String topic, long segment) {
+        List<RawdataMessage> messages = segment(topic, segment);
+        if (messages == null || messages.isEmpty()) {
+            throw new RawdataException("Segment " + segment + " of topic " + topic
+                    + " is missing or empty; segments are never removed or written empty, so the store was changed by hand");
+        }
+        return messages.get(messages.size() - 1);
     }
 
     /**
@@ -241,8 +252,7 @@ public final class AvroRawdataClient implements RawdataClient {
         long high = tail(topic).segment() + 1; // the answer is in [low, high]
         while (low < high) {
             long middle = (low + high) >>> 1;
-            List<RawdataMessage> messages = segment(topic, middle);
-            if (RawdataIds.ORDER.compare(messages.get(messages.size() - 1).id(), id) >= 0) {
+            if (RawdataIds.ORDER.compare(lastOf(topic, middle).id(), id) >= 0) {
                 high = middle;
             } else {
                 low = middle + 1;

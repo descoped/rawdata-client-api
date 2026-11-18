@@ -18,6 +18,7 @@ import java.util.TreeSet;
 final class AvroRawdataMetadataClient implements RawdataMetadataClient {
 
     private static final HexFormat HEX = HexFormat.of();
+    private static final String OF_TOPIC = " of topic ";
 
     private final AvroRawdataClient client;
     private final String topic;
@@ -53,9 +54,9 @@ final class AvroRawdataMetadataClient implements RawdataMetadataClient {
         String name = name(key);
         client.checkOpen();
         try {
-            return client.store().readMetadata(topic, name);
+            return client.store().readMetadata(topic, name).orElse(null);
         } catch (IOException e) {
-            throw client.failure("Reading metadata " + key + " of topic " + topic, e);
+            throw client.failure("Reading metadata " + key + OF_TOPIC + topic, e);
         }
     }
 
@@ -67,7 +68,7 @@ final class AvroRawdataMetadataClient implements RawdataMetadataClient {
         try {
             client.store().writeMetadata(topic, name, value.clone());
         } catch (IOException e) {
-            throw client.failure("Writing metadata " + key + " of topic " + topic, e);
+            throw client.failure("Writing metadata " + key + OF_TOPIC + topic, e);
         }
         return this;
     }
@@ -79,7 +80,7 @@ final class AvroRawdataMetadataClient implements RawdataMetadataClient {
         try {
             client.store().deleteMetadata(topic, name);
         } catch (IOException e) {
-            throw client.failure("Removing metadata " + key + " of topic " + topic, e);
+            throw client.failure("Removing metadata " + key + OF_TOPIC + topic, e);
         }
         return this;
     }

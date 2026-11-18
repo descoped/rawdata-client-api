@@ -3,9 +3,11 @@ package io.descoped.rawdata.provider.gcs;
 import io.descoped.rawdata.provider.gcs.test.FakeGcs;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,9 +33,29 @@ class GcsAvroStoreTest {
             assertTrue(store.create("t", 0, mine));
             assertTrue(store.create("t", 0, mine.clone()), "the same bytes are this writer's upload");
             assertFalse(store.create("t", 0, new byte[]{9}), "other bytes are another writer's");
-            assertArrayEquals(mine, store.read("t", 0));
+            assertArrayEquals(mine, store.read("t", 0).orElseThrow());
             assertTrue(store.exists("t", 0));
             assertFalse(store.exists("t", 1));
+        } finally {
+            store.close();
+        }
+    }
+
+    /**
+     * Metadata is written with a precondition on the generation it replaces, so overwriting and writing again work.
+     */
+    @Test
+    void metadataIsReplacedAndRemoved() throws Exception {
+        GcsAvroStore store = store();
+        try {
+            store.writeMetadata("t", "k01", new byte[]{1});
+            store.writeMetadata("t", "k01", new byte[]{2});
+            store.writeMetadata("t", "k02", new byte[]{3});
+            assertArrayEquals(new byte[]{2}, store.readMetadata("t", "k01").orElseThrow());
+            assertEquals(Set.of("k01", "k02"), store.metadataNames("t"));
+            store.deleteMetadata("t", "k01");
+            store.deleteMetadata("t", "k01");
+            assertTrue(store.readMetadata("t", "k01").isEmpty());
         } finally {
             store.close();
         }
@@ -46,7 +68,9 @@ class GcsAvroStoreTest {
     void aTooLongMetadataNameIsRefused() {
         GcsAvroStore store = store();
         try {
-            assertThrows(IllegalArgumentException.class, () -> store.writeMetadata("t", "k" + "a".repeat(1100), new byte[1]));
+            String tooLong = "k" + "a".repeat(1100);
+            byte[] value = new byte[1];
+            assertThrows(IllegalArgumentException.class, () -> store.writeMetadata("t", tooLong, value));
         } finally {
             store.close();
         }
