@@ -2,6 +2,7 @@ package io.descoped.rawdata.provider.gcs.test;
 
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataMessage;
+import io.descoped.rawdata.api.RawdataProducer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -49,8 +50,7 @@ class GcsProviderTest {
         String checkpoint = "k" + HexFormat.of().formatHex("checkpoint".getBytes(StandardCharsets.UTF_8));
         assertEquals(List.of(
                 prefix + "t/metadata/" + checkpoint,
-                prefix + "t/segments/0000000000000000000.avro",
-                prefix + "t/segments/0000000000000000001.avro"), List.copyOf(objects.keySet()));
+                prefix + "t/segments/0000000000000000000.avro"), List.copyOf(objects.keySet()), "two publishes, one window, one object");
         assertEquals("avro/binary", objects.get(prefix + "t/segments/0000000000000000000.avro"));
     }
 
@@ -65,12 +65,16 @@ class GcsProviderTest {
         assertTrue(missing.getMessage().contains("gcs.bucket-name"), missing.getMessage());
 
         Map<String, String> unknown = FakeGcs.configuration("x/");
-        unknown.put("gcs.credentials", "magic");
+        unknown.put("gcs.credential-provider", "magic");
         IllegalArgumentException kind = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(unknown));
-        assertTrue(kind.getMessage().contains("gcs.credentials"), kind.getMessage());
+        assertTrue(kind.getMessage().contains("gcs.credential-provider"), kind.getMessage());
+
+        Map<String, String> computeEngine = FakeGcs.configuration("x/");
+        computeEngine.put("gcs.credential-provider", "Compute_Engine"); // as dynamic-configuration reads enums
+        RawdataClient.create(computeEngine).close(); // no token is asked for until a request
 
         Map<String, String> noKey = FakeGcs.configuration("x/");
-        noKey.put("gcs.credentials", "service-account");
+        noKey.put("gcs.credential-provider", "service-account");
         IllegalArgumentException key = assertThrows(IllegalArgumentException.class, () -> RawdataClient.create(noKey));
         assertTrue(key.getMessage().contains("gcs.service-account.key-file"), key.getMessage());
 
@@ -79,7 +83,7 @@ class GcsProviderTest {
         assertTrue(tooLong.getMessage().contains("gcs.prefix"), tooLong.getMessage());
 
         Map<String, String> missingKey = FakeGcs.configuration("x/");
-        missingKey.put("gcs.credentials", "service-account");
+        missingKey.put("gcs.credential-provider", "service-account");
         missingKey.put("gcs.service-account.key-file", "/no/such/key.json");
         assertThrows(UncheckedIOException.class, () -> RawdataClient.create(missingKey));
 
@@ -90,7 +94,9 @@ class GcsProviderTest {
         Map<String, String> noSlash = FakeGcs.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {
             String topic = "t-" + UUID.randomUUID();
-            client.producer(topic).publish(message("a"));
+            try (RawdataProducer producer = client.producer(topic)) {
+                producer.publish(message("a")); // closing uploads the window
+            }
             assertTrue(FakeGcs.objects("folder/").containsKey("folder/" + topic + "/segments/0000000000000000000.avro"));
         }
     }

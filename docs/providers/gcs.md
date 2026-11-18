@@ -12,13 +12,17 @@ needs no Google libraries: its only dependency besides the Avro engine is Jackso
 | `rawdata.client.provider` | | `gcs` |
 | `gcs.bucket-name` | | required |
 | `gcs.prefix` | none | a folder in the bucket for the topics, for example `rawdata/` |
-| `gcs.credentials` | `application-default` | `application-default`, `service-account` or `none` |
+| `gcs.credential-provider` | `service-account` | `service-account`, `compute-engine`, `application-default` or `none` (the 2.x key; case-insensitive, `-` as `_`) |
 | `gcs.service-account.key-file` | | the JSON key, for `service-account` |
 | `gcs.endpoint` | `https://storage.googleapis.com` | another endpoint, for example an emulator's `http://localhost:4443` |
-| `gcs.poll-interval-ms` | `1000` | how often a waiting consumer looks for new messages |
+| `gcs.listing.min-interval-seconds` | `1` | how often a waiting consumer looks for new messages, in seconds; `0` as often as it asks |
+| `local-temp-folder` | | required; where producers buffer, see [the upload window](upload-window.md) |
+| `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`, `avro-file.max.pending-uploads` | `60`, 64 MiB, 512 KiB, `4` | the window; see [the upload window](upload-window.md) |
 
 ### Credentials
 
+`service-account`, the default as in 2.x, reads the key in `gcs.service-account.key-file` (below).
+`compute-engine` asks the metadata server of a Google Cloud runtime (GCE, GKE, Cloud Run) for tokens.
 `application-default` finds Application Default Credentials in Google's order:
 
 1. the file named by `GOOGLE_APPLICATION_CREDENTIALS`: a service account key, or a gcloud user's credentials;
@@ -27,7 +31,7 @@ needs no Google libraries: its only dependency besides the Avro engine is Jackso
 3. the metadata server of a Google Cloud runtime (GCE, GKE, Cloud Run, Cloud Functions), if it answers
    (`GCE_METADATA_HOST` overrides its address).
 
-`service-account` reads the key in `gcs.service-account.key-file`: a JWT signed with the key (RS256) is exchanged
+With `service-account`, a JWT signed with the key (RS256) is exchanged
 for a token at Google's token endpoint. A gcloud user's refresh token is exchanged the same way, and the metadata
 server gives tokens for the runtime's service account. Tokens have the `devstorage.read_write` scope and are kept
 until five minutes before they expire.
@@ -43,12 +47,13 @@ gs://<bucket>/<prefix><topic>/segments/0000000000000000000.avro
 gs://<bucket>/<prefix><topic>/metadata/k<hex of the key>
 ```
 
-A segment is uploaded in one request with the precondition that no object has its name (`ifGenerationMatch=0`). If
-the name is taken, another process wrote the topic, and the publish throws `RawdataWriterConflictException` (see
-[one writer per topic](../contract.md#one-writer-per-topic)). If an upload succeeded but its response was lost, the
-client's retry fails the precondition; the store then reads the object back, and if it holds its own bytes the
-segment counts as created. Metadata entries are written with a precondition on the generation they replace, so the
-client can retry them. A metadata key is at most (1024 − the prefix, topic and `/metadata/k`) / 2 bytes, about 500; a prefix is therefore at most 659 bytes, so that keys of 127 bytes always fit.
+A segment is uploaded in one request with the precondition that no object has its name (`ifGenerationMatch=0`). If the
+name is taken, another process wrote the topic, and the publish throws `RawdataWriterConflictException` (see [one
+writer per topic](../contract.md#one-writer-per-topic)). If an upload succeeded but its response was lost, the
+client's retry fails the precondition; the store then reads the object back, and if it holds its own bytes the segment
+counts as created. Metadata entries are written with a precondition on the generation they replace, so the client can
+retry them. A metadata key is at most (1024 − the prefix, topic and `/metadata/k`) / 2 bytes, about 500; a prefix is
+therefore at most 659 bytes, so that keys of 127 bytes always fit.
 
 GCS answers a missing object and a missing bucket with the same 404. The first time a client sees one, it lists the
 bucket once, so a wrong bucket name fails instead of looking like an empty topic.
@@ -58,7 +63,7 @@ reads and deletes are idempotent, and every upload has a generation precondition
 way, unless Google refuses it (a 4xx such as `invalid_grant`). A 401 from GCS drops the kept token and tries once
 more with a new one.
 
-Messages are visible and durable when `publish` returns, one object per publish: publish in batches where you can.
+Producers buffer in [upload windows](upload-window.md): one object per window, visible once it is uploaded.
 
 ## Dependencies and the module path
 

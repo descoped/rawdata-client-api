@@ -1,7 +1,7 @@
 package io.descoped.rawdata.provider.filesystem.test;
 
 import io.descoped.rawdata.api.RawdataClient;
-import io.descoped.rawdata.tck.RawdataClientContractTest;
+import io.descoped.rawdata.tck.avro.AvroClientContractTest;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -10,8 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.UUID;
 
-class FilesystemContractTest extends RawdataClientContractTest {
+class FilesystemContractTest extends AvroClientContractTest {
 
     @TempDir
     static Path folder;
@@ -21,7 +22,10 @@ class FilesystemContractTest extends RawdataClientContractTest {
         return Map.of(
                 RawdataClient.PROVIDER_KEY, "filesystem",
                 "filesystem.storage-folder", folder.resolve("topics").toString(),
-                "filesystem.poll-interval-ms", "50");
+                "local-temp-folder", folder.resolve("buffer-" + UUID.randomUUID()).toString(), // each client a process of its own
+                "avro-file.max.seconds", "1",
+                "avro-file.sync.interval", "200",
+                "listing.min-interval-seconds", "0");
     }
 
     /**
@@ -44,7 +48,8 @@ class FilesystemContractTest extends RawdataClientContractTest {
             }
             return Map.of(
                     RawdataClient.PROVIDER_KEY, "filesystem",
-                    "filesystem.storage-folder", file.resolve("topics").toString());
+                    "filesystem.storage-folder", file.resolve("topics").toString(),
+                    "local-temp-folder", folder.resolve("buffer").toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

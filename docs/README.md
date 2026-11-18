@@ -12,6 +12,8 @@ written by 2.x. See the [CHANGELOG](../CHANGELOG.md).
   - [`filesystem`](providers/filesystem.md): Avro files in a local folder.
   - [`gcs`](providers/gcs.md): Avro files in a Google Cloud Storage bucket.
   - [`s3`](providers/s3.md): Avro files in an Amazon S3 bucket.
+  - [The upload window](providers/upload-window.md): how `filesystem`, `gcs` and `s3` buffer and upload, closing,
+    failures and crash recovery.
   - [`memory` and `discard`](providers/memory-and-discard.md): for tests.
 - [The copy tool](copy-tool.md): copying topics, and moving a system from one store or cloud to another.
 

@@ -134,6 +134,21 @@ abstract class GcsCredentials {
      * @return the credentials
      * @throws IOException if none are found, or a file cannot be read
      */
+    static GcsCredentials computeEngine(Map<String, String> environment, HttpClient http) {
+        String host = environment.getOrDefault("GCE_METADATA_HOST", METADATA_HOST);
+        return new MetadataServer("http://" + host, http, Clock.systemUTC());
+    }
+
+    /**
+     * Finds Application Default Credentials: the key file in {@code GOOGLE_APPLICATION_CREDENTIALS}, gcloud's file,
+     * then the metadata server if it answers.
+     *
+     * @param environment the environment variables
+     * @param home        the user's home folder
+     * @param http        the client for the token endpoints
+     * @return the credentials
+     * @throws IOException if none are found, or a file cannot be read
+     */
     static GcsCredentials applicationDefault(Map<String, String> environment, Path home, HttpClient http) throws IOException {
         String named = environment.get("GOOGLE_APPLICATION_CREDENTIALS");
         if (named != null && !named.isBlank()) {

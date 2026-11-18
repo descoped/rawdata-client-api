@@ -4,6 +4,7 @@ import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataClientInitializer;
 import io.descoped.rawdata.provider.avro.AvroConfiguration;
 import io.descoped.rawdata.provider.avro.AvroRawdataClient;
+import io.descoped.rawdata.provider.avro.AvroUploadWindow;
 import io.descoped.service.provider.api.ProviderName;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -43,8 +44,15 @@ import java.util.Set;
  *     dots, which virtual-hosted HTTPS cannot serve, else false).</li>
  *     <li>{@code s3.sse}: server-side encryption to ask for, {@code AES256} or {@code aws:kms} (default: the
  *     bucket's default encryption), and {@code s3.sse-kms-key-id} for {@code aws:kms}.</li>
- *     <li>{@code s3.poll-interval-ms}: how often a waiting consumer looks for new messages (default 1000).</li>
+ *     <li>{@code s3.listing.min-interval-seconds}: how often a waiting consumer looks for new messages, in seconds
+ *     (default 1; 0 looks as often as a receive asks).</li>
  * </ul>
+ * <p>
+ * Producers buffer on a local disk and upload one Avro file per window, configured with the 2.x keys of
+ * {@link AvroUploadWindow}: {@code local-temp-folder} (required), {@code avro-file.max.seconds},
+ * {@code avro-file.max.bytes}, {@code avro-file.sync.interval} and {@code avro-file.max.pending-uploads}. A message is
+ * visible to consumers once its window is uploaded.
+ * <p>
  * A metadata key is at most about 500 bytes in UTF-8, so that its object key fits in S3's 1024 bytes with the prefix
  * and topic; a longer key is refused with {@link IllegalArgumentException}.
  */
@@ -62,7 +70,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
     static final String PATH_STYLE = "s3.path-style-access";
     static final String SSE = "s3.sse";
     static final String SSE_KMS_KEY_ID = "s3.sse-kms-key-id";
-    static final String POLL_INTERVAL = "s3.poll-interval-ms";
+    static final String POLL_INTERVAL = "s3.listing.min-interval-seconds";
 
     /**
      * Attempts per request, as in {@code gcs}: the SDK retries throttling, 5xx and I/O errors with backoff.
@@ -79,18 +87,19 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
     /**
      * The required configuration keys.
      *
-     * @return the bucket key
+     * @return the bucket and local temp folder keys
      */
     @Override
     public Set<String> configurationKeys() {
-        return Set.of(BUCKET);
+        return Set.of(BUCKET, AvroUploadWindow.LOCAL_TEMP_FOLDER);
     }
 
     @Override
     public RawdataClient initialize(Map<String, String> configuration) {
         String bucket = AvroConfiguration.required(configuration, BUCKET);
         String prefix = AvroConfiguration.prefix(configuration, PREFIX);
-        long pollInterval = AvroConfiguration.positive(configuration, POLL_INTERVAL, 1000);
+        long pollInterval = AvroConfiguration.pollIntervalMillis(configuration, POLL_INTERVAL, 1);
+        AvroUploadWindow window = AvroUploadWindow.of(configuration);
         ServerSideEncryption encryption = encryption(configuration);
         String kmsKeyId = AvroConfiguration.optional(configuration, SSE_KMS_KEY_ID, null);
         if (kmsKeyId != null && encryption != ServerSideEncryption.AWS_KMS) {
@@ -122,7 +131,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
             }
             throw e;
         }
-        return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable), pollInterval);
+        return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable), window, pollInterval);
     }
 
     private static boolean pathStyle(Map<String, String> configuration, String bucket) {

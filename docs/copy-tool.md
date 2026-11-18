@@ -14,6 +14,8 @@ on Maven Central. To build it: `./mvnw -pl rawdata-copy-util -am package -DskipT
 # copy.properties: a source.* and a target.* provider configuration
 source.rawdata.client.provider=gcs
 source.gcs.bucket-name=my-bucket
+source.gcs.credential-provider=application-default
+source.local-temp-folder=/var/tmp/rawdata-copy
 target.rawdata.client.provider=postgres
 target.postgres.driver.host=db.example.com
 target.postgres.driver.user=rdc

@@ -1,6 +1,7 @@
 package io.descoped.rawdata.provider.avro;
 
 import io.descoped.rawdata.api.RawdataMessage;
+import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaBuilder;
 import org.apache.avro.file.DataFileStream;
@@ -13,50 +14,59 @@ import org.apache.avro.generic.GenericRecord;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * The Avro file of a segment: one record per message, in id order. The content is an array of name and value pairs,
- * so the order of a message's keys survives.
+ * The Avro file of a segment: one record per message, in id order, with the schema of 2.x. Only the id's fixed type
+ * is named {@code uuid} instead of {@code ulid}: the 16 bytes are a UUIDv7. A message's content is the map
+ * {@code data}; its entries are written in the order they were put and read back in that order.
+ * <p>
+ * A window file carries, in its Avro header, the segment it becomes and the id of the message before it, so a writer
+ * that restarts after a crash knows where a leftover window belongs.
  */
 final class AvroSegments {
 
-    private static final String NAMESPACE = "io.descoped.rawdata";
     private static final String ID_FIELD = "id";
     private static final String ORDERING_GROUP = "orderingGroup";
     private static final String SEQUENCE_NUMBER = "sequenceNumber";
     private static final String POSITION = "position";
-    private static final String CONTENT_FIELD = "content";
-    private static final String NAME = "name";
-    private static final String VALUE = "value";
+    private static final String DATA = "data";
 
-    static final Schema ID = SchemaBuilder.fixed("uuid").namespace(NAMESPACE).size(16);
+    /** Header key: the segment number the window becomes. */
+    static final String META_SEGMENT = "rawdata.segment";
+    /** Header key: the id of the last message before the window. */
+    static final String META_PREVIOUS_ID = "rawdata.previous-id";
 
-    static final Schema CONTENT = SchemaBuilder.record("Content").namespace(NAMESPACE)
+    static final Schema MESSAGE = SchemaBuilder.record("RawdataMessage")
             .fields()
-            .name(NAME).type().stringType().noDefault()
-            .name(VALUE).type().bytesType().noDefault()
-            .endRecord();
-
-    static final Schema MESSAGE = SchemaBuilder.record("RawdataMessage").namespace(NAMESPACE)
-            .fields()
-            .name(ID_FIELD).type(ID).noDefault()
+            .name(ID_FIELD).type().fixed("uuid").size(16).noDefault()
             .name(ORDERING_GROUP).type().nullable().stringType().noDefault()
-            .name(SEQUENCE_NUMBER).type().longType().noDefault()
+            .name(SEQUENCE_NUMBER).type().longType().longDefault(0)
             .name(POSITION).type().stringType().noDefault()
-            .name(CONTENT_FIELD).type().array().items(CONTENT).noDefault()
+            .name(DATA).type().map().values().bytesType().noDefault()
             .endRecord();
+
+    private static final Schema ID = MESSAGE.getField(ID_FIELD).schema();
 
     private AvroSegments() {
     }
 
-    static byte[] encode(Collection<RawdataMessage> messages) {
+    /**
+     * A segment's Avro file in memory.
+     */
+    static byte[] encode(Collection<RawdataMessage> messages, long segment, UUID previousId) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (DataFileWriter<GenericRecord> writer = new DataFileWriter<>(new GenericDatumWriter<>(MESSAGE))) {
+        try (DataFileWriter<GenericRecord> writer = writer(segment, previousId)) {
             writer.create(MESSAGE, out);
             for (RawdataMessage message : messages) {
                 writer.append(toRecord(message));
@@ -67,33 +77,110 @@ final class AvroSegments {
         return out.toByteArray();
     }
 
+    /**
+     * A writer of a segment's Avro file with its header set; the caller creates it on a stream or a file.
+     */
+    static DataFileWriter<GenericRecord> writer(long segment, UUID previousId) {
+        DataFileWriter<GenericRecord> writer = new DataFileWriter<>(new GenericDatumWriter<>(MESSAGE));
+        writer.setMeta(META_SEGMENT, Long.toString(segment));
+        writer.setMeta(META_PREVIOUS_ID, previousId.toString());
+        return writer;
+    }
+
     static List<RawdataMessage> decode(byte[] segment) throws IOException {
-        List<RawdataMessage> messages = new ArrayList<>();
-        try (DataFileStream<GenericRecord> reader = new DataFileStream<>(new ByteArrayInputStream(segment), new GenericDatumReader<>(MESSAGE))) {
+        try (DataFileStream<GenericRecord> reader = reader(new ByteArrayInputStream(segment))) {
+            List<RawdataMessage> messages = new ArrayList<>();
             GenericRecord read = null;
             while (reader.hasNext()) {
                 read = reader.next(read);
                 messages.add(toMessage(read));
             }
+            return messages;
         }
-        return messages;
     }
 
-    private static GenericRecord toRecord(RawdataMessage message) {
+    /**
+     * What a window file left on disk holds: where it belongs, and the messages of its complete blocks.
+     *
+     * @param segment    the segment it becomes
+     * @param previousId the id before it
+     * @param messages   the messages of its complete blocks
+     * @param complete   false if the file ends in a torn block, which is left out
+     */
+    record Leftover(long segment, UUID previousId, List<RawdataMessage> messages, boolean complete) {
+    }
+
+    /**
+     * Reads a window file left on disk, keeping every complete block. Avro reads a block whole and checks the sync
+     * marker after it before it returns the block's records, so a block cut short by a crash fails, and only the
+     * blocks before it are kept.
+     *
+     * @return the leftover, or null if not even its header is whole, so nothing was ever appended
+     */
+    static Leftover readLeftover(Path file) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            DataFileStream<GenericRecord> reader;
+            try {
+                reader = reader(in);
+            } catch (IOException | AvroRuntimeException e) {
+                return null;
+            }
+            try (reader) {
+                byte[] segment = reader.getMeta(META_SEGMENT);
+                byte[] previous = reader.getMeta(META_PREVIOUS_ID);
+                if (segment == null || previous == null) {
+                    return null;
+                }
+                List<RawdataMessage> messages = new ArrayList<>();
+                boolean complete = true;
+                try {
+                    GenericRecord read = null;
+                    while (reader.hasNext()) {
+                        read = reader.next(read);
+                        messages.add(toMessage(read));
+                    }
+                } catch (IOException | AvroRuntimeException e) {
+                    complete = false;
+                }
+                return new Leftover(Long.parseLong(new String(segment, StandardCharsets.UTF_8)),
+                        UUID.fromString(new String(previous, StandardCharsets.UTF_8)), messages, complete);
+            }
+        }
+    }
+
+    private static DataFileStream<GenericRecord> reader(InputStream in) throws IOException {
+        return new DataFileStream<>(in, new GenericDatumReader<>(MESSAGE) {
+            @Override
+            protected Object newMap(Object old, int size) {
+                return new LinkedHashMap<>(); // keep the order the entries were put in
+            }
+        });
+    }
+
+    static GenericRecord toRecord(RawdataMessage message) {
         GenericRecord written = new GenericData.Record(MESSAGE);
         written.put(ID_FIELD, new GenericData.Fixed(ID, toBytes(message.id())));
         written.put(ORDERING_GROUP, message.orderingGroup());
         written.put(SEQUENCE_NUMBER, message.sequenceNumber());
         written.put(POSITION, message.position());
-        List<GenericRecord> content = new ArrayList<>(message.keys().size());
+        Map<String, ByteBuffer> data = new LinkedHashMap<>();
         for (String key : message.keys()) {
-            GenericRecord entry = new GenericData.Record(CONTENT);
-            entry.put(NAME, key);
-            entry.put(VALUE, ByteBuffer.wrap(message.get(key)));
-            content.add(entry);
+            data.put(key, ByteBuffer.wrap(message.get(key)));
         }
-        written.put(CONTENT_FIELD, new GenericData.Array<>(MESSAGE.getField(CONTENT_FIELD).schema(), content));
+        written.put(DATA, data);
         return written;
+    }
+
+    /**
+     * About the bytes a message takes in a block, as 2.x estimated it: enough to know when a block is full.
+     */
+    static long estimatedSize(RawdataMessage message) {
+        long size = 16 + 6 + 2L + message.position().length()
+                + 2 + (message.orderingGroup() == null ? 0 : message.orderingGroup().length());
+        for (String key : message.keys()) {
+            size += 2 + key.length() + 4 + message.get(key).length;
+        }
+        return size;
     }
 
     private static RawdataMessage toMessage(GenericRecord stored) {
@@ -105,12 +192,11 @@ final class AvroSegments {
         if (orderingGroup != null) {
             builder.orderingGroup(orderingGroup.toString());
         }
-        for (Object item : (List<?>) stored.get(CONTENT_FIELD)) {
-            GenericRecord entry = (GenericRecord) item;
-            ByteBuffer value = (ByteBuffer) entry.get(VALUE);
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) stored.get(DATA)).entrySet()) {
+            ByteBuffer value = (ByteBuffer) entry.getValue();
             byte[] bytes = new byte[value.remaining()];
             value.duplicate().get(bytes);
-            builder.put(entry.get(NAME).toString(), bytes);
+            builder.put(entry.getKey().toString(), bytes);
         }
         return builder.build();
     }

@@ -2,6 +2,7 @@ package io.descoped.rawdata.provider.s3.test;
 
 import io.descoped.rawdata.api.RawdataClient;
 import io.descoped.rawdata.api.RawdataMessage;
+import io.descoped.rawdata.api.RawdataProducer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -49,8 +50,7 @@ class S3ProviderTest {
         String checkpoint = "k" + HexFormat.of().formatHex("checkpoint".getBytes(StandardCharsets.UTF_8));
         assertEquals(List.of(
                 prefix + "t/metadata/" + checkpoint,
-                prefix + "t/segments/0000000000000000000.avro",
-                prefix + "t/segments/0000000000000000001.avro"), List.copyOf(objects.keySet()));
+                prefix + "t/segments/0000000000000000000.avro"), List.copyOf(objects.keySet()), "two publishes, one window, one object");
         assertEquals("avro/binary", objects.get(prefix + "t/segments/0000000000000000000.avro"));
     }
 
@@ -76,7 +76,9 @@ class S3ProviderTest {
         Map<String, String> noSlash = S3Mock.configuration("folder");
         try (RawdataClient client = RawdataClient.create(noSlash)) {
             String topic = "t-" + UUID.randomUUID();
-            client.producer(topic).publish(message("a"));
+            try (RawdataProducer producer = client.producer(topic)) {
+                producer.publish(message("a")); // closing uploads the window
+            }
             assertTrue(S3Mock.objects("folder/").containsKey("folder/" + topic + "/segments/0000000000000000000.avro"));
         }
     }

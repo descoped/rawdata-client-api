@@ -93,19 +93,22 @@ does not exist, and readers see the whole segment or nothing.
   (`GcsClient`), with tokens from `GcsCredentials`.
 - **s3:** a `PutObject` with `If-None-Match: *`, through the AWS SDK for Java 2.
 
-A publish:
-1. takes the last segment `n` this client wrote (before its first publish to the topic, the topic's last segment);
-2. gives ids after its last id;
-3. creates segment `n + 1`.
+Producers buffer in an [upload window](providers/upload-window.md) (`AvroTopicWriter`, one per topic and client):
+1. A publish appends to the open window, an Avro file in `local-temp-folder`, with ids after the window's last id.
+2. When the window closes (on time, on size, or when a producer closes), it is forced to disk, sealed, and queued.
+3. A background upload creates it as segment `n + 1`, after the last segment `n` this client created. Before the
+   client's first publish to the topic, `n` is the topic's last segment.
 
-If segment `n + 1` exists, another process wrote the topic: the publish throws `RawdataWriterConflictException` and
-writes nothing. (A create that finds its own bytes, after a retry whose first response was lost, counts as
-created.) Segments are thus created one after another, and ids grow in segment order.
+If segment `n + 1` exists, another process wrote the topic, and the writer fails with
+`RawdataWriterConflictException`. (A create that finds its own bytes, after a retry whose first response was lost,
+counts as created.) Segments are thus created one after another, and ids grow in segment order. When the writer
+starts, it recovers the windows a crash left; see [recovery](providers/upload-window.md#recovery-after-a-crash).
 
 - **Finding the last segment** (`lastSegment`): from the last one seen, probe forward in doubling steps, then halve
   the step between the last that exists and the first that does not.
 - **Starting a consumer at an id** (`firstSegmentReaching`): a binary search over the segments' last ids.
-- **A message is visible and durable when `publish` returns.** There is no local buffer and no upload thread.
+- **A message is visible and durable once its window is uploaded.** Closing a producer uploads the open window and
+  waits; closing the client does it for every topic. That is graceful shutdown.
 
 ## Reading: pulled, not pushed
 

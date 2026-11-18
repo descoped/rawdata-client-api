@@ -53,15 +53,16 @@ segment only if it does not exist. For a store of files or objects, implement `A
 ## A store of files or objects: `AvroStore`
 
 `rawdata-client-provider-avro` has the whole client for stores that keep files or objects: `AvroRawdataClient`. It
-handles segments, ids, ordering, consumers and metadata. A provider only implements `AvroStore`
-(`io.descoped.rawdata.provider.avro`) and passes it to the client:
+handles the [upload window](providers/upload-window.md), segments, ids, ordering, recovery, consumers and metadata. A
+provider only implements `AvroStore` (`io.descoped.rawdata.provider.avro`) and passes it to the client:
 
 ```java
 @Override
 public RawdataClient initialize(Map<String, String> configuration) {
     String bucket = AvroConfiguration.required(configuration, "mystore.bucket");
-    long pollInterval = AvroConfiguration.positive(configuration, "mystore.poll-interval-ms", 1000);
-    return new AvroRawdataClient(new MyAvroStore(bucket), pollInterval);
+    long pollInterval = AvroConfiguration.pollIntervalMillis(configuration, "mystore.listing.min-interval-seconds", 1);
+    AvroUploadWindow window = AvroUploadWindow.of(configuration); // local-temp-folder and the avro-file.* keys
+    return new AvroRawdataClient(new MyAvroStore(bucket), window, pollInterval);
 }
 ```
 
@@ -118,9 +119,13 @@ class MyStoreContractTest extends RawdataClientContractTest {
 | `clientsShareTheStore()` | `true` | false only if each client has its own store (`memory`); the tests with a second client are then skipped |
 | `metadataKeyLimit(topic)` | none | the longest metadata key, in UTF-8 bytes; at least 127 |
 | `missingStoreConfiguration()` | null | a store that does not exist; the test checks it fails and never reads as empty |
+| `awaitPublished(client, topic)` | nothing | waits until what the client published to the topic is visible; a provider that buffers waits for its upload |
 
-A store on the Avro engine also extends `AvroStoreContractTest` (package `io.descoped.rawdata.tck.avro`) with
-`createStore()` and, if it has one, `createMissingStore()`.
+A provider on the Avro engine extends `AvroClientContractTest` (package `io.descoped.rawdata.tck.avro`) instead of
+`RawdataClientContractTest`. It implements `awaitPublished` and adds the upload window's tests: closing on time and
+on size, closing a producer, recovery after a crash, and the buffer folder's lock. Its `configuration()` gives each
+call a `local-temp-folder` of its own, as each process has its own disk. The store also passes
+`AvroStoreContractTest` with `createStore()` and, if it has one, `createMissingStore()`.
 
 Each test gets a new client and a topic of its own, so the store may keep data between tests. Tests of your own only
 add what the API cannot show: the SQL or the objects you write, your configuration and credentials. A behaviour an

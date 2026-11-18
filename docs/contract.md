@@ -59,8 +59,11 @@ A topic only grows at its end:
 - An id you give must be greater than every id in the topic and than the id before it in the same call; otherwise
   the publish throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the ids of
   the source.
-- A `publish` call is written whole or not at all, and when it returns its messages are visible to every consumer
-  and durable.
+- A `publish` call is written whole or not at all.
+- **When published messages are visible and durable depends on the provider.** In `postgres` and `memory`, as soon
+  as `publish` returns. In `filesystem`, `gcs` and `s3`, once their [upload window](providers/upload-window.md) is
+  uploaded: after `avro-file.max.seconds` or `avro-file.max.bytes`, or when the producer or client closes. Closing
+  a producer always makes what it published visible and durable, in every provider.
 
 So a consumer that has read up to an id never misses a message published later.
 

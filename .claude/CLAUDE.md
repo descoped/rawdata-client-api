@@ -51,6 +51,9 @@ this repository, and the work toward it is under way module by module.
   remembers where it last wrote a topic (before its first publish, where the topic ended), and a publish that finds
   more after that throws `RawdataWriterConflictException` and writes nothing. Nothing supports or tests several
   writing processes keeping a common order.
+- **Design and architecture are Ove's decisions** (2026-11-18). Learn how 2.x does it (old tags such as
+  `rawdata-client-provider-gcs/2.0.0`) and ask him before changing a design; fix 2.x's bugs without replacing its
+  design. Rawdata Client is a lightweight, cheap way to stream over object storage, not a pubsub or Kafka competitor.
 - **One contract for every provider, the TCK.** Everything an application can see through the API behaves the same
   in every provider, so providers can be swapped (owner's decision, 2026-11-18), and `RawdataClientContractTest`
   checks it; a provider is compliant only if it passes it unchanged. A behaviour test goes in the TCK, never in one
@@ -101,12 +104,26 @@ this repository, and the work toward it is under way module by module.
   credential sources are tested against a local server (`jdk.httpserver`) playing GCS, Google's token endpoint and the
   metadata server. The s3 live tests run the same TCK against real S3 (`-Drawdata.s3.live=true`, credentials from the
   SDK's default chain, never in CI).
-- **Avro invariants**: a topic is segments numbered 0, 1, 2… without gaps, one Avro file per publish, and a publish
-  creates the segment after the last only if it does not exist (a hard link on a file system, an upload with the
-  `ifGenerationMatch=0` precondition on GCS, a put with `If-None-Match: *` on S3). The segment after the last this
-  client wrote existing already means another writer: the publish fails with `RawdataWriterConflictException`. A
-  create that finds its own bytes (a retry after a lost response) counts as created, in every store. A published
-  message is visible and durable when `publish` returns; there is no local buffer or upload thread.
+- **Avro invariants** (Ove, 2026-11-18: the key nature of 2.x):
+  - **The upload window.** A producer buffers on a local disk (`local-temp-folder`) and uploads one large Avro file
+    per window. A file per publish is wrong: too expensive for buckets and consumers.
+  - **The 2.x keys:** `avro-file.max.seconds`, `avro-file.max.bytes`, `avro-file.sync.interval`,
+    `listing.min-interval-seconds`, `gcs.listing.min-interval-seconds`, `gcs.credential-provider`, plus
+    `avro-file.max.pending-uploads`. They are read with dynamic-configuration's value semantics, from a plain map.
+  - **When a window closes:** on time (a timer), on size, or when a producer of the topic closes. It is then forced
+    to disk, sealed (`*.sealed.avro`) and uploaded in the background as the next segment while publishes go on.
+  - **Visibility and durability:** a message is visible and durable once its window is uploaded.
+  - **Graceful shutdown** is `close()`, as in 2.x's `AutoCloseable` design. There is no shutdown hook.
+  - **Segments:** a topic is segments numbered 0, 1, 2… without gaps, each created only if its number is free (a hard
+    link on a file system, `ifGenerationMatch=0` on GCS, `If-None-Match: *` on S3). A number already taken means
+    another writer: `RawdataWriterConflictException`. A create that finds its own bytes counts as created.
+  - **Uploads:** a topic's uploads run one at a time, in order, and a failed upload fails the writer loudly, keeping
+    the windows on disk.
+  - **Recovery:** a restarted writer uploads leftover windows only right after the topic's end, a sealed one
+    unchanged and an open one cut back to its complete blocks. Anything else is kept as `*.invalid` and never
+    uploaded or deleted.
+  - **The schema** is 2.x's (`id`, `orderingGroup`, `sequenceNumber` default 0, `position`, `data` as a map), with the
+    id's fixed type named `uuid`.
 - **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the
   API must find all six providers and round-trip through filesystem, PostgreSQL 18, a fake GCS and S3Mock, both with
   everything on the module path and with everything on the class path; `jdeps --check`

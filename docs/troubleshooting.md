@@ -59,7 +59,22 @@ wrote it: only one process may write a topic. Find the other writer (two instanc
 running after a restart) and stop one; a new client then starts from the topic's end. See
 [one writer per topic](contract.md#one-writer-per-topic).
 
-It can also follow a publish whose outcome was unknown: a commit whose acknowledgement was lost (`postgres`), or a
-segment upload that failed after every retry although the store kept it (`gcs`, `s3`). The client then does not know
-it wrote, and its next publish reports a conflict. Check the topic's last message (`lastMessage`), and create a new
-client to go on.
+In `postgres` it can also follow a commit whose acknowledgement was lost: the client does not know it wrote, and its
+next publish reports a conflict. Check the topic's last message (`lastMessage`), and create a new client to go on.
+In `filesystem`, `gcs` and `s3` that case is handled for you: the window stays on disk, sealed, and the next writer
+recognises it in the store by its bytes.
+
+**A publish, flush or close throws "The writer of topic … failed".** An upload failed after the store's retries, for
+example during an outage. The windows not uploaded stay in `local-temp-folder`, sealed. Fix the cause, then create a
+client again: its first publish to the topic uploads them, in order. See
+[the upload window](providers/upload-window.md#failures).
+
+**"The buffer folder … is in use by another client".** Two clients, in one process or two, use the same
+`local-temp-folder` for a topic. Give each process its own folder; only one process writes a topic anyway.
+
+**`*.invalid` files in `local-temp-folder`.** A window that could not be uploaded where it belongs, because another
+process wrote the topic. It is kept for you to look at, never uploaded; delete it when you no longer need it. See
+[recovery](providers/upload-window.md#recovery-after-a-crash).
+
+**Messages are not visible right after `publish`.** In `filesystem`, `gcs` and `s3` they become visible once their
+window is uploaded: after `avro-file.max.seconds` or `avro-file.max.bytes`, or when the producer closes.

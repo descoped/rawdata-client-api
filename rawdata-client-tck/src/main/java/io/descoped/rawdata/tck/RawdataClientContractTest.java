@@ -74,7 +74,9 @@ public abstract class RawdataClientContractTest {
     }
 
     /**
-     * The configuration of the provider under test, including {@link RawdataClient#PROVIDER_KEY}.
+     * The configuration of the provider under test, including {@link RawdataClient#PROVIDER_KEY}. Each call stands
+     * for another process on the same store: a provider with local state, such as the upload window's buffer folder,
+     * gives each call its own.
      *
      * @return the configuration
      */
@@ -110,6 +112,19 @@ public abstract class RawdataClientContractTest {
      */
     protected Map<String, String> missingStoreConfiguration() {
         return null;
+    }
+
+    /**
+     * Waits until what a client has published to a topic is visible to consumers and durable. A provider that buffers
+     * (the Avro engine's upload window) closes the topic's open window and waits for its upload; a provider whose
+     * publish is visible when it returns needs nothing, which is the default. A failure of a buffered publish, such
+     * as {@link RawdataWriterConflictException}, is thrown here.
+     *
+     * @param client the client that published
+     * @param topic  the topic
+     */
+    protected void awaitPublished(RawdataClient client, String topic) {
+        // visible when publish returns
     }
 
     /**
@@ -177,8 +192,10 @@ public abstract class RawdataClientContractTest {
     public void lastMessageFollowsThePublishedMessages() {
         try (RawdataProducer producer = client.producer(topic)) {
             producer.publish(message("a", 5), message("b", 3));
+            awaitPublished(client, topic);
             assertEquals("b", client.lastMessage(topic).position());
             producer.publish(message("c", 7));
+            awaitPublished(client, topic);
             assertEquals("c", client.lastMessage(topic).position());
         }
     }
@@ -675,13 +692,19 @@ public abstract class RawdataClientContractTest {
         assumeTrue(clientsShareTheStore(), "the provider keeps a store per client");
         try (RawdataClient other = RawdataClient.create(configuration())) {
             client.producer(topic).publish(message("a"));
+            awaitPublished(client, topic);
             other.producer(topic).publish(message("b"));
+            awaitPublished(other, topic);
             RawdataProducer first = client.producer(topic);
             RawdataMessage c = message("c");
-            RawdataWriterConflictException conflict = assertThrows(RawdataWriterConflictException.class, () -> first.publish(c));
+            RawdataWriterConflictException conflict = assertThrows(RawdataWriterConflictException.class, () -> {
+                first.publish(c);
+                awaitPublished(client, topic); // a buffering provider finds the conflict at the latest when it uploads
+            });
             assertEquals(topic, conflict.topic());
             assertThrows(RawdataWriterConflictException.class, () -> client.producer(topic).publish(c), "the client keeps failing");
             other.producer(topic).publish(message("d"));
+            awaitPublished(other, topic);
             try (RawdataConsumer consumer = other.consumer(topic)) {
                 assertEquals(List.of("a", "b", "d"), readAll(consumer));
             }
@@ -841,6 +864,8 @@ public abstract class RawdataClientContractTest {
         String lower = topic + "-case";
         client.producer(upper).publish(message("upper"));
         client.producer(lower).publish(message("lower"));
+        awaitPublished(client, upper);
+        awaitPublished(client, lower);
         client.metadata(upper).put("k", new byte[]{1});
         client.metadata(lower).put("k", new byte[]{2});
         try (RawdataConsumer consumer = client.consumer(upper)) {
