@@ -7,6 +7,7 @@ module io.descoped.rawdata.api {
     requires transitive io.descoped.service.provider.api;
 
     exports io.descoped.rawdata.api;
+    exports io.descoped.rawdata.api.spi;
 
     // Resolves provider modules on the module path that no module requires.
     uses io.descoped.rawdata.api.RawdataClientInitializer;

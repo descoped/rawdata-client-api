@@ -65,7 +65,7 @@ class RawdataMessageTest {
     }
 
     @Test
-    void messageWithoutUlidAndGroupCanBeCompared() {
+    void messageWithoutIdAndGroupCanBeCompared() {
         RawdataMessage a = RawdataMessage.builder().position("p").build();
         assertEquals(a, a.copy().build());
         assertNull(a.id());

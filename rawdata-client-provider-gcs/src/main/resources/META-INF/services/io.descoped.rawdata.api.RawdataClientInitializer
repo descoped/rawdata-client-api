@@ -1,2 +1,1 @@
-io.descoped.rawdata.avro.cloudstorage.GCSRawdataClientInitializer
-io.descoped.rawdata.avro.filesystem.FilesystemAvroRawdataClientInitializer
+io.descoped.rawdata.provider.gcs.GcsRawdataClientInitializer

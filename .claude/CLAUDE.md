@@ -12,10 +12,11 @@ tool that copies topics between providers. One Maven reactor, group `io.descoped
 |---|---|---|
 | `rawdata-client-project` (root) | n/a | parent and aggregator |
 | `rawdata-client-bom` | n/a | BOM of the modules below |
-| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataIds` (UUIDv7), `RawdataCopy` |
+| `rawdata-client-api` | `io.descoped.rawdata.api` | `RawdataClient`, `RawdataClientInitializer` (the provider service, on `io.descoped.spi:service-provider-api`), the `memory` and `discard` providers, `RawdataIds` (UUIDv7), `RawdataCopy`; `io.descoped.rawdata.api.spi`: `PollingRawdataConsumer` and `OrderedRawdataProducer`, the base classes of the postgres and Avro providers |
 | `rawdata-client-tck` | `io.descoped.rawdata.tck` | `RawdataClientContractTest`: the provider contract as abstract JUnit 6 tests; its own tests run it for `memory` |
 | `rawdata-client-provider-postgres` | `io.descoped.rawdata.provider.postgres` | provider `postgres`: PostgreSQL 18 only, HikariCP, pgjdbc; shared tables `rawdata_message`, `rawdata_content`, `rawdata_metadata` keyed by topic |
-| `rawdata-client-provider-gcs` | `io.descoped.rawdata.avro` | providers `gcs` (Avro files in Google Cloud Storage) and `filesystem` (Avro files in a local folder) |
+| `rawdata-client-provider-avro` | `io.descoped.rawdata.provider.avro` | the Avro engine (`AvroRawdataClient` on an `AvroStore`) and provider `filesystem` (Avro files in a local folder) |
+| `rawdata-client-provider-gcs` | `io.descoped.rawdata.provider.gcs` (automatic) | provider `gcs`: the Avro engine on a Google Cloud Storage bucket |
 | `rawdata-copy-util` | n/a yet | copies topics from one provider to another (not written yet) |
 
 Until 2026-11 every module was a repository of its own; their histories were imported here with `git filter-repo`
@@ -31,9 +32,12 @@ this repository, and the work toward it is under way module by module.
 - **One reactor, one version.** Every module inherits the root POM and is released with it; modules depend on each
   other with `${project.version}`. Dependency versions are properties in the root POM, not `dependencyManagement`, so
   the BOM manages the rawdata modules only.
-- **JPMS.** Every module is a named module. A module whose exported API exposes another module's types `requires
+- **JPMS.** Every module is a named module, with a `module-info`, except `rawdata-client-provider-gcs`: the Google
+  Cloud libraries are not modules, and requiring the names Java derives from their jar names would break when Google
+  names them, so it is an automatic module with a fixed `Automatic-Module-Name`. A module whose exported API exposes another module's types `requires
   transitive` it. The API module declares `uses` for `RawdataClientInitializer`. Providers are registered both with
-  `provides` in `module-info.java` and in `META-INF/services`, so they work on the module path and the class path.
+  `provides` in `module-info.java` and in `META-INF/services`, so they work on the module path and the class path
+  (gcs: `META-INF/services` only, which the module system reads for an automatic module).
 - **One contract for every provider.** Closed clients, producers and consumers, missing positions, ordering and
   metadata behave the same in every provider, and the shared contract tests check it. Topic names are validated and
   never spliced into SQL, file paths or object names.
@@ -66,14 +70,14 @@ this repository, and the work toward it is under way module by module.
 - **Postgres invariants**: the topic is a column and always a bind parameter, never SQL text; a publish holds the
   topic's advisory lock (`pg_advisory_xact_lock`) while it reads the last id and writes, so ids grow in commit order
   across processes; the tables are created idempotently under an advisory lock.
-- The gcs tests are still the 2.x TestNG tests in the main packages, patched into the named module (hence the
-  relaxed test-compile lint in the root POM), named `*Tck`. They move to JUnit 6, a test module of their own and the
-  shared contract in #6.
-- The GCS integration tests need a real bucket and are disabled; the `filesystem` provider shares the engine and
-  runs offline.
-- Known open defects, each test disabled with its reason until the module's revision fixes it and enables it again:
-  `FilesystemAvroRawdataClientTck.thatMultipleGCSFilesCanBeProducedThroughSizeBasedWindowingAndReadBack` (files that
-  start in the same millisecond hide each other).
+- The `filesystem` tests (shared contract and the provider's own) run offline in a test module of their own,
+  `open module io.descoped.rawdata.provider.avro.test`. The `gcs` tests run the same against a fake GCS server
+  (`fsouza/fake-gcs-server`) through Testcontainers, on the class path.
+- **Avro invariants**: a topic is segments numbered 0, 1, 2… without gaps, one Avro file per publish, and a publish
+  creates the segment after the last only if it does not exist (a hard link on a file system, an upload with the
+  `doesNotExist` precondition on GCS). A writer that loses the race reads the new last segment and tries again, so
+  ids grow in segment order across processes. A published message is visible and durable when `publish` returns;
+  there is no local buffer or upload thread.
 
 ## Maven Wrapper
 

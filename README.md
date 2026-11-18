@@ -11,7 +11,8 @@ the size it chooses, and `RawdataCopy` copies a topic between providers in batch
 | `rawdata-client-api` | the API, the provider service, and the `memory` and `discard` providers |
 | `rawdata-client-tck` | the contract tests every provider passes, as JUnit 6 tests to extend |
 | `rawdata-client-provider-postgres` | provider `postgres`, on PostgreSQL 18 (tables `rawdata_message`, `rawdata_content`, `rawdata_metadata`, created when missing) |
-| `rawdata-client-provider-gcs` | providers `gcs` (Avro files in Google Cloud Storage) and `filesystem` (Avro files in a local folder) |
+| `rawdata-client-provider-avro` | provider `filesystem` (Avro files in a local folder), and the Avro engine the `gcs` provider shares |
+| `rawdata-client-provider-gcs` | provider `gcs` (Avro files in a Google Cloud Storage bucket) |
 | `rawdata-copy-util` | copies topics from one provider to another |
 | `rawdata-client-bom` | BOM to align the versions |
 
@@ -19,8 +20,8 @@ Maven group `io.descoped.rawdata`. Version 3.0.0 is in progress on `master` (Jav
 
 ## Working with the code
 
-Requires JDK 17 or newer, and Docker for the postgres tests (Testcontainers runs PostgreSQL 18); Maven comes with
-the wrapper.
+Requires JDK 17 or newer, and Docker for the postgres and gcs tests (Testcontainers runs PostgreSQL 18 and a fake
+GCS server); Maven comes with the wrapper.
 
 ```sh
 ./mvnw verify                    # build and test every module

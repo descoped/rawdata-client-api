@@ -22,6 +22,7 @@
         <module>rawdata-client-api</module>
         <module>rawdata-client-tck</module>
         <module>rawdata-client-provider-postgres</module>
+        <module>rawdata-client-provider-avro</module>
         <module>rawdata-client-provider-gcs</module>
         <module>rawdata-copy-util</module>
     </modules>
@@ -44,7 +45,6 @@
         <postgresql.version>42.7.14</postgresql.version>
         <avro.version>1.12.2</avro.version>
         <google-cloud-storage.version>2.79.0</google-cloud-storage.version>
-        <testng.version>7.12.0</testng.version>
         <junit.version>6.1.3</junit.version>
         <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
@@ -216,21 +216,6 @@
                             <arg>-Werror</arg>
                         </compilerArgs>
                     </configuration>
-                    <executions>
-                        <!-- The 2.x tests still sit in the main packages and are patched into the named module, so
-                             javac reports exports and missing-explicit-ctor on test classes (and automatic modules
-                             through the patched module). Relaxed for test compilation only; removed when the tests
-                             move to test modules of their own. -->
-                        <execution>
-                            <id>default-testCompile</id>
-                            <configuration>
-                                <compilerArgs combine.self="override">
-                                    <arg>-Xlint:all,-exports,-missing-explicit-ctor,-requires-automatic,-requires-transitive-automatic</arg>
-                                    <arg>-Werror</arg>
-                                </compilerArgs>
-                            </configuration>
-                        </execution>
-                    </executions>
                 </plugin>
 
                 <plugin>
@@ -245,18 +230,10 @@
                     <version>3.5.1</version>
                 </plugin>
 
-                <!-- The 2.x contract tests are named *Tck; before 3.0.0 they did not match Surefire's default includes,
-                     so they never ran. -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.6.1</version>
-                    <configuration>
-                        <includes>
-                            <include>**/*Test.java</include>
-                            <include>**/*Tck.java</include>
-                        </includes>
-                    </configuration>
                 </plugin>
 
                 <plugin>
