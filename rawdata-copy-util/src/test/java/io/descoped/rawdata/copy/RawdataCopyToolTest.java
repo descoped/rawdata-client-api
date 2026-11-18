@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.io.ByteArrayOutputStream;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(120)
@@ -273,5 +275,15 @@ class RawdataCopyToolTest {
     void helpShowsTheUsage() {
         assertEquals(RawdataCopyTool.OK, run("--help"));
         assertTrue(out().startsWith("Usage: rawdata-copy"), out());
+    }
+
+    @Test
+    void javaUtilLoggingGoesToSlf4jOnce() {
+        run("--help");
+        run("--help");
+        assertTrue(SLF4JBridgeHandler.isInstalled());
+        java.util.logging.Handler[] handlers = java.util.logging.Logger.getLogger("").getHandlers();
+        assertEquals(1, handlers.length, "one handler on the root logger, the bridge");
+        assertFalse(handlers[0] instanceof java.util.logging.ConsoleHandler);
     }
 }

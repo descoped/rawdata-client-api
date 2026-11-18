@@ -41,8 +41,11 @@ Code depends on the API only; a provider is chosen by configuration and found by
 
 Every module's compile and runtime dependencies have one version of each library, the newest stable when the
 release was made; the build fails otherwise (the enforcer's `dependencyConvergence`). The libraries the providers
-share (slf4j-api, Jackson, commons-codec) are declared by the providers themselves, so Maven resolves them to those
-versions in your project too, unless you declare them yourself.
+share (slf4j-api, Jackson, commons-codec) are declared by the providers themselves and excluded from the libraries
+that bring them (HikariCP, Avro, google-cloud-storage). Maven picks the version nearest to your project, and the
+first declared when two are as near, so they resolve to the providers' versions unless your project, or a library
+it lists first, brings another. `mvn dependency:tree` shows what you get; the enforcer's `dependencyConvergence`
+rule in your own build makes a conflict fail.
 
 ## A first producer and consumer
 

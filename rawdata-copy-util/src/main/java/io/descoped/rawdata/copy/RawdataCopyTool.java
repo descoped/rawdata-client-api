@@ -84,20 +84,17 @@ public final class RawdataCopyTool {
     }
 
     /**
-     * Runs the tool and exits with its status. java.util.logging, which the Google Cloud libraries use, is sent to
-     * slf4j first, so that all library logging comes out one way.
+     * Runs the tool and exits with its status.
      *
      * @param args the arguments
      */
     @SuppressWarnings("java:S106") // a command-line tool writes to the console
     public static void main(String[] args) {
-        SLF4JBridgeHandler.removeHandlersForRootLogger();
-        SLF4JBridgeHandler.install();
         System.exit(run(args, System.out, System.err));
     }
 
     /**
-     * Runs the tool.
+     * Runs the tool. The first run sends java.util.logging to slf4j.
      *
      * @param args the arguments
      * @param out  where the progress goes
@@ -105,6 +102,7 @@ public final class RawdataCopyTool {
      * @return {@link #OK}, {@link #FAILED} or {@link #USAGE}
      */
     public static int run(String[] args, PrintStream out, PrintStream err) {
+        routeJavaUtilLoggingToSlf4j();
         Options options;
         Map<String, String> configuration;
         try {
@@ -128,6 +126,17 @@ public final class RawdataCopyTool {
         } finally {
             close(to);
             close(from);
+        }
+    }
+
+    /**
+     * Sends java.util.logging, which the Google Cloud libraries use, to slf4j, so that all library logging comes out
+     * one way (System.Logger goes there through slf4j-jdk-platform-logging). Once per JVM.
+     */
+    static synchronized void routeJavaUtilLoggingToSlf4j() {
+        if (!SLF4JBridgeHandler.isInstalled()) {
+            SLF4JBridgeHandler.removeHandlersForRootLogger();
+            SLF4JBridgeHandler.install();
         }
     }
 

@@ -16,7 +16,8 @@ code. Java 17 or newer.
 - New `io.descoped.rawdata.api.spi`: `OrderedRawdataProducer` and `PollingRawdataConsumer`, base classes for
   providers.
 - One version of each library in every module's compile and runtime dependencies, checked by the build: slf4j 2,
-  Jackson and commons-codec are declared by the providers at the newest version.
+  Jackson and commons-codec are declared by the providers at the newest version and excluded from HikariCP, Avro
+  and google-cloud-storage (which also no longer brings checker-qual).
 - Every module is a JPMS module (`gcs` an automatic one, see below). CI checks the providers on the module path and
   the class path.
 
