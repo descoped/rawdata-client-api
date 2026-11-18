@@ -235,10 +235,11 @@ class S3AvroStoreTest {
     }
 
     /**
-     * The interceptor reports S3's throttled responses (503 SlowDown) on each attempt the SDK retries.
+     * The interceptor reports S3's throttled responses (503 SlowDown) to segment puts, on each attempt the SDK retries,
+     * and not those to other requests.
      */
     @Test
-    void throttledResponsesAreReported() {
+    void throttledSegmentPutsAreReported() {
         AtomicInteger calls = new AtomicInteger();
         AtomicInteger throttled = new AtomicInteger();
         SdkHttpClient http = new SdkHttpClient() {
@@ -247,7 +248,7 @@ class S3AvroStoreTest {
                 return new ExecutableHttpRequest() {
                     @Override
                     public HttpExecuteResponse call() {
-                        int status = calls.incrementAndGet() < 3 ? 503 : 200;
+                        int status = calls.incrementAndGet() % 3 != 0 ? 503 : 200;
                         return HttpExecuteResponse.builder()
                                 .response(SdkHttpResponse.builder().statusCode(status)
                                         .putHeader("Content-Length", "0").build())
@@ -276,26 +277,35 @@ class S3AvroStoreTest {
                                 .throttlingBackoffStrategy(BackoffStrategy.retryImmediately())))
                 .build()) {
             s3.headObject(head -> head.bucket("b").key("k"));
+            assertEquals(3, calls.get());
+            assertEquals(0, throttled.get(), "a read is not reported");
+            s3.putObject(put -> put.bucket("b").key("m"), RequestBody.fromBytes(new byte[]{1}));
+            assertEquals(0, throttled.get(), "nor a metadata put");
+            s3.putObject(put -> put.bucket("b").key("s").ifNoneMatch("*"), RequestBody.fromBytes(new byte[]{1}));
         }
-        assertEquals(3, calls.get());
-        assertEquals(2, throttled.get());
+        assertEquals(9, calls.get());
+        assertEquals(2, throttled.get(), "a segment put's two throttled attempts");
     }
 
     /**
-     * A call that timed out counts as throttling.
+     * A segment put that timed out counts as throttling; another request that timed out does not.
      */
     @Test
     void aTimeoutIsReportedAsThrottling() {
         AtomicInteger throttled = new AtomicInteger();
         S3Throttling throttling = new S3Throttling();
         throttling.onThrottled(throttled::incrementAndGet);
-        throttling.onExecutionFailure(failed(ApiCallAttemptTimeoutException.create(1_000)), new ExecutionAttributes());
+        PutObjectRequest segment = PutObjectRequest.builder().bucket("b").key("s").ifNoneMatch("*").build();
+        throttling.onExecutionFailure(failed(ApiCallAttemptTimeoutException.create(1_000), segment), new ExecutionAttributes());
         assertEquals(1, throttled.get());
-        throttling.onExecutionFailure(failed(new IllegalStateException("not a timeout")), new ExecutionAttributes());
+        throttling.onExecutionFailure(failed(new IllegalStateException("not a timeout"), segment), new ExecutionAttributes());
         assertEquals(1, throttled.get(), "other failures are not throttling");
+        throttling.onExecutionFailure(failed(ApiCallAttemptTimeoutException.create(1_000),
+                HeadObjectRequest.builder().bucket("b").key("k").build()), new ExecutionAttributes());
+        assertEquals(1, throttled.get(), "a read that timed out is not reported");
     }
 
-    private static Context.FailedExecution failed(Throwable failure) {
+    private static Context.FailedExecution failed(Throwable failure, SdkRequest request) {
         return new Context.FailedExecution() {
             @Override
             public Throwable exception() {
@@ -304,7 +314,7 @@ class S3AvroStoreTest {
 
             @Override
             public SdkRequest request() {
-                return HeadObjectRequest.builder().bucket("b").key("k").build();
+                return request;
             }
 
             @Override

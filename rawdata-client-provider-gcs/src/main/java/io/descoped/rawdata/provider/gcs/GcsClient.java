@@ -75,16 +75,18 @@ final class GcsClient {
      * Uploads an object in one request, if its generation is the given one.
      *
      * @param generation the object's current generation, or 0 for "only if there is no such object"
+     * @param segment    true for a segment: its throttled attempts are reported ({@link #onThrottled})
      * @return true if it was written; false if the precondition failed
      */
-    boolean upload(String bucket, String object, String contentType, byte[] content, long generation) throws IOException {
+    boolean upload(String bucket, String object, String contentType, byte[] content, long generation, boolean segment)
+            throws IOException {
         URI uri = URI.create(endpoint + "/upload/storage/v1/b/" + encode(bucket) + "/o?uploadType=media&name=" + encode(object)
                 + "&ifGenerationMatch=" + generation);
         String hash = "crc32c=" + AvroChecksums.crc32c(content); // GCS refuses the upload (400) if the bytes it got differ
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri)
                 .header("Content-Type", contentType)
                 .header("X-Goog-Hash", hash)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(content)));
+                .POST(HttpRequest.BodyPublishers.ofByteArray(content)), segment);
         if (response.statusCode() == PRECONDITION_FAILED) {
             return false;
         }
@@ -118,7 +120,8 @@ final class GcsClient {
     }
 
     /**
-     * Registers what to do when GCS throttles (429, 503) or a request times out, on any attempt.
+     * Registers what to do when GCS throttles a segment upload (429, 503) or it times out, on any attempt. Other
+     * requests are not reported: they say nothing about the bucket's upload capacity.
      */
     void onThrottled(Runnable listener) {
         this.throttled.set(listener);
@@ -253,41 +256,59 @@ final class GcsClient {
     }
 
     private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request) throws IOException {
-        HttpResponse<byte[]> response = sendWithRetries(request);
+        return send(request, false);
+    }
+
+    /**
+     * @param reported true if throttled attempts are reported
+     */
+    private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request, boolean reported) throws IOException {
+        HttpResponse<byte[]> response = sendWithRetries(request, reported);
         if (response.statusCode() == UNAUTHORIZED && credentials.authorization().isPresent()) {
             credentials.invalidate(); // revoked, or the clock is off: once more with a new token
-            response = sendWithRetries(request);
+            response = sendWithRetries(request, reported);
         }
         return response;
     }
 
-    private HttpResponse<byte[]> sendWithRetries(Supplier<HttpRequest.Builder> request) throws IOException {
+    private HttpResponse<byte[]> sendWithRetries(Supplier<HttpRequest.Builder> request, boolean reported) throws IOException {
+        Runnable throttledAttempt = reported ? () -> throttled.get().run() : () -> { };
         for (int attempt = 1; ; attempt++) {
-            try {
-                HttpResponse<byte[]> response = sendOnce(request);
-                reportThrottling(response.statusCode());
-                if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
-                    return response;
-                }
-            } catch (GcsCredentials.RefusedException e) {
-                throw e;
-            } catch (HttpTimeoutException e) {
-                throttled.get().run();
-                if (attempt == MAX_ATTEMPTS) {
-                    throw e;
-                }
-            } catch (IOException e) {
-                if (attempt == MAX_ATTEMPTS) {
-                    throw e;
-                }
+            HttpResponse<byte[]> response = attempt(request, throttledAttempt, attempt == MAX_ATTEMPTS);
+            if (response != null) {
+                return response;
             }
             backOff(attempt);
         }
     }
 
-    private void reportThrottling(int status) {
-        if (status == TOO_MANY_REQUESTS || status == SERVICE_UNAVAILABLE) {
-            throttled.get().run();
+    /**
+     * One attempt of a request.
+     *
+     * @return the response, or null to try again
+     */
+    private HttpResponse<byte[]> attempt(Supplier<HttpRequest.Builder> request, Runnable throttledAttempt, boolean last)
+            throws IOException {
+        try {
+            HttpResponse<byte[]> response = sendOnce(request);
+            int status = response.statusCode();
+            if (status == TOO_MANY_REQUESTS || status == SERVICE_UNAVAILABLE) {
+                throttledAttempt.run();
+            }
+            return !retryable(status) || last ? response : null;
+        } catch (GcsCredentials.RefusedException e) {
+            throw e;
+        } catch (HttpTimeoutException e) {
+            throttledAttempt.run();
+            if (last) {
+                throw e;
+            }
+            return null;
+        } catch (IOException e) {
+            if (last) {
+                throw e;
+            }
+            return null;
         }
     }
 

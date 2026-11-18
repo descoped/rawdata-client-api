@@ -133,9 +133,9 @@ public interface AvroStore extends AutoCloseable {
     void deleteMetadata(String topic, String name) throws IOException;
 
     /**
-     * Registers what the client does when the store is throttled: a response that asks it to slow down (GCS 429 or
-     * 503, S3 503 SlowDown) or a request that timed out, on any attempt, also one the store retries and then succeeds,
-     * and of any request, not only uploads.
+     * Registers what the client does when a segment upload ({@link #create}) is throttled: a response that asks it to
+     * slow down (GCS 429 or 503, S3 503 SlowDown) or an upload that timed out, on any attempt, also one the store
+     * retries and then succeeds. Other requests are not reported: they say nothing about the bucket's upload capacity.
      * The client lowers how many uploads run at once ({@link AvroUploadLimiter}). A store that cannot tell does
      * nothing.
      *

@@ -132,8 +132,9 @@ this repository, and the work toward it is under way module by module.
     consumers stream it. `AvroStore.open` pins a read to the object it found (generation, ETag, file key) and holds
     no resources.
   - **Uploads** carry a CRC32C (GCS `X-Goog-Hash`, S3 `x-amz-checksum-crc32c`), and run at most an AIMD limit at once
-    across a client's topics (`AvroUploadLimiter`: start 4, +1 per success, half on throttling at most once a second,
-    cap `avro-file.upload.max-concurrency`, 16); a store reports throttling through `AvroStore.onThrottled`.
+    across a client's topics (`AvroUploadLimiter`: start 4, +1 per round at the limit, half on a throttled upload at
+    most once a second, cap `avro-file.upload.max-concurrency`, 16; Ove, 2026-11-19). A store reports throttling of
+    segment uploads only, through `AvroStore.onThrottled`.
 - **JPMS smoke test** (`src/it/jpms/run.sh`, run by CI after the build): an application module that requires only the
   API must find all six providers and round-trip through filesystem, PostgreSQL 18, a fake GCS and S3Mock, both with
   everything on the module path and with everything on the class path; `jdeps --check`

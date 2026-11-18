@@ -48,7 +48,7 @@ final class GcsAvroStore implements AvroStore {
     @Override
     public boolean create(String topic, long segment, byte[] content) throws IOException {
         String name = segment(topic, segment);
-        if (client.upload(bucket, name, "avro/binary", content, 0)) {
+        if (client.upload(bucket, name, "avro/binary", content, 0, true)) {
             return true;
         }
         // Taken: by another writer, or by our own upload whose response was lost. The size and CRC32C tell another
@@ -142,7 +142,7 @@ final class GcsAvroStore implements AvroStore {
         String object = metadata(topic, name);
         for (; ; ) {
             OptionalLong current = client.generation(bucket, object);
-            if (client.upload(bucket, object, "application/octet-stream", value, current.orElse(0))) {
+            if (client.upload(bucket, object, "application/octet-stream", value, current.orElse(0), false)) {
                 return;
             }
             // another writer changed the entry meanwhile; write again over its value

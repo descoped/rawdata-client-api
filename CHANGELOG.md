@@ -84,8 +84,9 @@ code. Java 17 or newer.
   - reads are pinned to the object they opened (the GCS generation, the S3 ETag, the file on disk);
   - every upload carries its CRC32C, so GCS and S3 refuse bytes damaged on the way; a create that finds its segment
     taken compares the size and CRC32C before it downloads anything;
-  - uploads across topics adapt to throttling (AIMD: start at 4, one more per success, half on 429, 503 or a timeout)
-    up to `avro-file.upload.max-concurrency` (default 16); each running upload holds its window in memory;
+  - uploads across topics adapt to throttling (AIMD: start at 4, one more per round of uploads at the limit, half when
+    an upload gets a 429 or 503 or times out) up to `avro-file.upload.max-concurrency` (default 16); each running
+    upload holds its window in memory;
   - `avro-file.max.pending-uploads` (default 4) bounds the windows waiting for upload.
   - `avro-file.close-timeout-seconds` (default 30) bounds how long `close()` waits for the uploads; what is not
     uploaded by then stays on disk for the next writer.

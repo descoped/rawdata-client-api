@@ -34,15 +34,16 @@ class GcsClientTest {
     }
 
     /**
-     * A throttled response (429, 503) is reported on every attempt, also when a retry then succeeds.
+     * A throttled segment upload (429, 503) is reported on every attempt, also when a retry then succeeds; other
+     * requests, a metadata write among them, are not.
      *
      * @throws Exception if the test fails unexpectedly
      */
     @Test
-    void throttledResponsesAreReported() throws Exception {
+    void throttledSegmentUploadsAreReported() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         AtomicInteger throttled = new AtomicInteger();
-        try (LocalHttp gcs = new LocalHttp(request -> switch (calls.incrementAndGet()) {
+        try (LocalHttp gcs = new LocalHttp(request -> switch (calls.incrementAndGet() % 4) {
             case 1 -> LocalHttp.Response.json(429, "{}");
             case 2 -> LocalHttp.Response.json(503, "{}");
             case 3 -> LocalHttp.Response.json(500, "{}");
@@ -50,8 +51,11 @@ class GcsClientTest {
         })) {
             GcsClient client = new GcsClient(gcs.root(), GcsCredentials.NONE);
             client.onThrottled(throttled::incrementAndGet);
-            assertEquals(7, client.generation("b", "o").getAsLong());
+            assertTrue(client.upload("b", "s", "avro/binary", new byte[]{1}, 0, true));
             assertEquals(2, throttled.get(), "429 and 503, not 500");
+            assertEquals(7, client.generation("b", "o").getAsLong());
+            assertTrue(client.upload("b", "m", "application/octet-stream", new byte[]{1}, 0, false));
+            assertEquals(2, throttled.get(), "a read and a metadata write are not reported");
         }
     }
 
@@ -64,7 +68,7 @@ class GcsClientTest {
     void anUploadCarriesItsCrc32c() throws Exception {
         try (LocalHttp gcs = new LocalHttp(request -> LocalHttp.Response.json(200, "{}"))) {
             GcsClient client = new GcsClient(gcs.root(), GcsCredentials.NONE);
-            client.upload("b", "o", "avro/binary", "123456789".getBytes(java.nio.charset.StandardCharsets.US_ASCII), 0);
+            client.upload("b", "o", "avro/binary", "123456789".getBytes(java.nio.charset.StandardCharsets.US_ASCII), 0, true);
             assertEquals("crc32c=4waSgw==", gcs.requests.get(0).header("X-Goog-Hash"), "CRC32C of 123456789 is e3069283");
         }
     }
@@ -82,7 +86,7 @@ class GcsClientTest {
             GcsClient client = new GcsClient(gcs.root(), GcsCredentials.NONE);
             assertTrue(client.download("b", "o").isEmpty());
             assertTrue(client.generation("b", "o").isEmpty());
-            assertFalse(client.upload("b", "o", "avro/binary", new byte[]{1}, 0));
+            assertFalse(client.upload("b", "o", "avro/binary", new byte[]{1}, 0, false));
             IOException denied = assertThrows(IOException.class, () -> client.delete("b", "o"));
             assertTrue(denied.getMessage().contains("HTTP 403") && denied.getMessage().contains("robot has no access"), denied.getMessage());
             assertEquals(4, gcs.requests.size(), "nothing was retried");
@@ -96,7 +100,7 @@ class GcsClientTest {
     void namesAreEncodedAndThePreconditionIsSent() throws Exception {
         try (LocalHttp gcs = new LocalHttp(request -> LocalHttp.Response.json(200, "{}"))) {
             GcsClient client = new GcsClient(gcs.root() + "/", GcsCredentials.NONE);
-            client.upload("bucket", "p/t é/segments/1.avro", "avro/binary", new byte[]{1}, 0);
+            client.upload("bucket", "p/t é/segments/1.avro", "avro/binary", new byte[]{1}, 0, true);
             client.delete("bucket", "p/t/metadata/k6b");
             LocalHttp.Request upload = gcs.requests.get(0);
             assertEquals("/upload/storage/v1/b/bucket/o", upload.path());

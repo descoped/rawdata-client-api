@@ -63,15 +63,18 @@ class GcsIntegrityTest {
     }
 
     /**
-     * A request that times out is reported as throttling, on each attempt, and fails once the attempts are used up.
+     * A segment upload that times out is reported as throttling, on each attempt, and fails once the attempts are
+     * used up; another request that times out is not reported.
      */
     @Test
-    void aTimeoutIsReportedAsThrottling() {
+    void aTimedOutSegmentUploadIsReportedAsThrottling() {
         AtomicInteger throttled = new AtomicInteger();
         GcsClient client = new GcsClient(new TimingOut(), "http://localhost", GcsCredentials.NONE);
         client.onThrottled(throttled::incrementAndGet);
-        assertThrows(HttpTimeoutException.class, () -> client.generation("b", "o"));
+        assertThrows(HttpTimeoutException.class, () -> client.upload("b", "s", "avro/binary", new byte[]{1}, 0, true));
         assertEquals(6, throttled.get(), "every attempt");
+        assertThrows(HttpTimeoutException.class, () -> client.generation("b", "o"));
+        assertEquals(6, throttled.get(), "not a read");
     }
 
     /**

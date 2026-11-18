@@ -484,8 +484,9 @@ final class AvroTopicWriter {
      */
     private boolean upload(Sealed sealed) throws IOException {
         AvroUploadLimiter limiter = client.limiter();
+        boolean atLimit;
         try {
-            limiter.acquire();
+            atLimit = limiter.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Interrupted while waiting to upload segment " + sealed.segment());
@@ -495,7 +496,7 @@ final class AvroTopicWriter {
             created = store.create(topic, sealed.segment(), Files.readAllBytes(sealed.file()));
             return created;
         } finally {
-            limiter.release(created);
+            limiter.release(created, atLimit);
         }
     }
 
