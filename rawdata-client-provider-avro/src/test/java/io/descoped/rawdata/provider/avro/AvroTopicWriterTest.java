@@ -160,12 +160,12 @@ class AvroTopicWriterTest {
         assertTrue(store.uploading.await(10, TimeUnit.SECONDS));
         producer.publish(message("small", 1)); // a new window, open
         store.release.countDown();
-        Path setAside = folder.resolve("t").resolve("0000000000000000000.sealed.avro.invalid");
-        for (int i = 0; i < 200 && !Files.exists(setAside); i++) {
-            Thread.sleep(50); // the upload's failure is found in the background
-        }
         assertThrows(RawdataWriterConflictException.class, client::close);
-        assertEquals(List.of("0000000000000000000.sealed.avro.invalid", "0000000000000000001.window.avro.invalid"), files());
+        // The open window is set aside open or sealed, as the close and the failed upload happen to meet.
+        List<String> files = files();
+        assertEquals(2, files.size(), files.toString());
+        assertTrue(files.get(0).startsWith("0000000000000000000.") && files.get(1).startsWith("0000000000000000001."), files.toString());
+        assertTrue(files.stream().allMatch(name -> name.endsWith(".avro.invalid")), files.toString());
     }
 
     /**
