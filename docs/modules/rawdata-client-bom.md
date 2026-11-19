@@ -176,7 +176,7 @@ The BOM has no configuration keys. The only choice is its version.
 | Symptom | Cause and fix |
 |---|---|
 | `'dependencies.dependency.version' for io.descoped.rawdata:… is missing` | The BOM is not imported, or it is under `<dependencies>` instead of `<dependencyManagement>`, or `<type>pom</type>` or `<scope>import</scope>` is missing. |
-| Maven cannot resolve a `-SNAPSHOT` version of `rawdata-client-bom` | SNAPSHOTs are never published. Run `./mvnw install` in this repository first, or use a released version. |
+| Maven cannot resolve `rawdata-client-bom:<version>` | That version is not on Maven Central: it is not released yet, or it is a SNAPSHOT, and SNAPSHOTs are never published. Use a released version, or run `./mvnw install` in this repository first. |
 | Maven cannot resolve `rawdata-client-project` | The parent POM is needed to read the BOM. It is published with every release; with a SNAPSHOT, `./mvnw install` from the repository root installs it. |
 | Maven cannot resolve `rawdata-copy-util` | It is not on Central and not in the BOM. Download the zip from the GitHub release. |
 | A rawdata module shows a different version in `dependency:tree` | Something manages it before the BOM: an entry of your own in `dependencyManagement`, or another BOM imported earlier. Remove it, or list the rawdata BOM first. |
