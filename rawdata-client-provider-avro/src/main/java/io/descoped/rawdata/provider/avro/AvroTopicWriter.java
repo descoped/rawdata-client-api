@@ -337,9 +337,8 @@ final class AvroTopicWriter {
         FileOutputStream out = new FileOutputStream(file.toFile());
         DataFileWriter<GenericRecord> writer = AvroSegments.writer(segment, tail.lastId());
         try {
-            writer.setSyncInterval(AvroSegments.MAX_AVRO_SYNC_INTERVAL); // Avro never ends a block by itself; endBlock does
             writer.setFlushOnEveryBlock(true);
-            writer.create(AvroSegments.MESSAGE, out);
+            AvroSegments.create(writer, out, settings.syncInterval()); // Avro never ends a block by itself; endBlock does
             out.getChannel().force(true); // the header, so a crash right after leaves a readable window
         } catch (IOException | RuntimeException e) {
             out.close();
