@@ -247,4 +247,4 @@ continues the project from a fork; this repository has the full history of the o
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). The code was first written and published by Statistics Norway (SSB)
-under the same license; see [History](#history).
+under the same license.
