@@ -148,13 +148,14 @@ Avro engine.
 
 A topic's messages are in `<topic folder>/segments/`, as numbered Avro files: `0000000000000000000.avro`,
 `0000000000000000001.avro`, and so on. The number has 19 digits, so the names sort in segment order. Each segment is
-one upload window: the messages a producer buffered, in id order. Segments are numbered 0, 1, 2… without gaps, and
-the messages of segment *n + 1* all come after those of segment *n* in `RawdataIds.ORDER`.
+one upload window: the messages a producer buffered, in the order they were published. Segments are numbered 0, 1,
+2… without gaps. With ids the producer generates, the messages of segment *n + 1* all come after those of segment *n*
+in `RawdataIds.ORDER`; a given id lower than earlier ones stays where it was published.
 
 A segment is a plain Avro data file, uncompressed, in the record schema `RawdataMessage` that 2.x used (fields `id`,
-`orderingGroup`, `sequenceNumber`, `position` and `data`). Its header also holds a summary (first id, last id, count,
-offset of the last block) so that readers can find their way without reading the whole file. Any Avro tool can open a
-segment. The schema and the header keys are described in
+`orderingGroup`, `sequenceNumber`, `position` and `data`). Its header also holds a summary (lowest id, the topic's
+greatest id so far, count, offset of the last block) so that readers can find their way without reading the whole
+file. Any Avro tool can open a segment. The schema and the header keys are described in
 [Avro engine: the segment's Avro file](rawdata-client-provider-avro.md#the-segments-avro-file).
 
 A segment is written once and never changed, replaced or deleted by the provider.
@@ -298,8 +299,9 @@ engine](rawdata-client-provider-avro.md#how-it-works) page.
 - **A message is visible once its window is uploaded**, that is, once its segment's hard link exists. Consumers of the
   same client are woken at once. Consumers of other clients see it at their next poll, at most
   `listing.min-interval-seconds` later.
-- **Order is the segment order, then the order in the segment.** Ids are UUIDv7 and grow in `RawdataIds.ORDER`
-  across segments, so a consumer that reads segment after segment reads the topic in id order.
+- **Order is the segment order, then the order in the segment**, which is publish order. Ids the producer generates
+  grow in `RawdataIds.ORDER`, so such a topic is read in id order; a given lower id published later is read after
+  what was published before it.
 - **What survives a crash of the writing process.** The open window's complete blocks and every sealed window are on
   disk. When a writer of the topic starts again, it uploads what belongs right after the topic's end, cut back to its
   complete blocks, and sets aside what no longer belongs. A temporary `.*.tmp` file in a topic folder can also be

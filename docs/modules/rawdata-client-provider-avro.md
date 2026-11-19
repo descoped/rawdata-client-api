@@ -106,7 +106,8 @@ It has eight methods to implement (`create`, `open`, `exists`, four for metadata
 ### Segment
 
 A topic in a store is a sequence of **segments** numbered 0, 1, 2… **without gaps**. Each segment is one Avro file
-holding the messages of one upload window, in id order. A segment is written once and never changed or removed.
+holding the messages of one upload window, in the order they were published. A segment is written once and never
+changed or removed.
 
 Why numbered segments: the store only has to offer one atomic operation, "create segment `n` unless it exists". From
 that alone the engine gets a total order (segment by segment), a cheap way to find the end of a topic, and the
@@ -143,14 +144,15 @@ id, the position, the ordering group and each content entry's key and bytes), as
 
 ### Header summary
 
-Every segment's Avro header carries a summary of the segment: its first id, last id, message count, and the byte
-offset of its last block. Readers use it to avoid reading whole segments: a seek reads only headers, and
+Every segment's Avro header carries a summary of the segment: its lowest id, the topic's greatest id so far, its
+message count, and the byte offset of its last block. Readers use it to avoid reading whole segments: a seek reads only headers, and
 `lastMessage` reads only the last block. See [the segment's Avro file](#the-segments-avro-file).
 
 ### Tail and the topic writer
 
-The **tail** of a topic is its last segment and that segment's last id (segment -1 for an empty topic). The client
-caches the last tail it saw per topic and finds the current one by probing the store forward from it.
+The **tail** of a topic is its last segment and the topic's greatest id, from that segment's header (segment -1 for
+an empty topic). The client caches the last tail it saw per topic and finds the current one by probing the store
+forward from it.
 
 The **topic writer** (`AvroTopicWriter`) is the upload window of one topic in one client. It is started by the
 client's first publish to the topic: it takes the folder lock, recovers what a crash left, and starts from the

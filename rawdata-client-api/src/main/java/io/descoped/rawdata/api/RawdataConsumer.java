@@ -8,8 +8,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Reads the messages of one topic in id order, from a starting point. A consumer keeps its own position and is meant
- * for one thread at a time.
+ * Reads the messages of one topic from a starting point, in the order of the {@link RawdataClient} contract: ids
+ * published in increasing order are read in that order. A consumer keeps its own position and is meant for one thread
+ * at a time.
  * <p>
  * Reading is pulled by the caller: nothing is delivered until the caller asks, so a caller takes only as much as it
  * can handle. {@link #receive(int, TimeUnit)} takes one message; {@link #receiveUpTo(int, Duration)} takes a batch of

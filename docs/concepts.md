@@ -85,7 +85,7 @@ PostgreSQL 18's `uuidv7()` lays it out:
  62 bits  rand_b       random
 ```
 
-The order of a topic is `RawdataIds.ORDER`: the 128 bits compared as an unsigned number, the order PostgreSQL sorts
+Ids are ordered by `RawdataIds.ORDER`: the 128 bits compared as an unsigned number, the order PostgreSQL sorts
 `uuid` values in.
 
 - An id the producer assigns is greater than every id in the topic. `RawdataIds.next(previous)` makes it: an id for
@@ -174,8 +174,9 @@ feed it.
 
 ### Consumer
 
-**What.** A `RawdataConsumer`, from `client.consumer(...)`, reads one topic in id order from a starting point, and
-keeps its own position. It is for one thread at a time, and at most one `receiveAsync` may be outstanding.
+**What.** A `RawdataConsumer`, from `client.consumer(...)`, reads one topic from a starting point, and keeps its own
+position. Ids published in increasing order are read in that order (see [Ids and order](contract.md#ids-and-order)).
+It is for one thread at a time, and at most one `receiveAsync` may be outstanding.
 
 | Call | Does |
 |---|---|
@@ -240,7 +241,8 @@ Resuming after the last id you handled is the normal way to continue where you s
 
 ### Last message
 
-**What.** `client.lastMessage(topic)` returns the message with the greatest id, or null if the topic is empty.
+**What.** `client.lastMessage(topic)` returns the last message a reader of the whole topic gets, or null if the topic
+is empty: the greatest id in `memory` and `postgres`, the last written in `filesystem`, `gcs` and `s3`.
 
 **Why.** The end of a topic is where a writer starts and where a copy resumes: the copy tool reads the target's last
 message and continues after its id. It is cheap in every provider: one indexed query in `postgres`, and in the Avro
@@ -499,9 +501,9 @@ file](modules/rawdata-client-provider-filesystem.md#the-buffer-folder-and-its-lo
 ### Segments
 
 **What.** In the store, a topic is a sequence of segments numbered 0, 1, 2… without gaps. Each segment is one Avro
-file holding the messages of one upload window, in id order. A segment is created once, only if its number is free,
-and never changed or removed. Next to the segments, each metadata entry is one file or object named `k` plus the
-lowercase hex of the key's UTF-8 bytes.
+file holding the messages of one upload window, in the order they were published. A segment is created once, only
+if its number is free, and never changed or removed. Next to the segments, each metadata entry is one file or object
+named `k` plus the lowercase hex of the key's UTF-8 bytes.
 
 | Provider | Segment | Created with |
 |---|---|---|
@@ -689,14 +691,14 @@ else writes the target topic.
 | BOM | `rawdata-client-bom`, which pins the version of every rawdata library module | [BOM](modules/rawdata-client-bom.md) |
 | checkpoint | a metadata entry holding the id of the last message a consumer handled | [Metadata](#metadata) |
 | client | `RawdataClient`, a connection to one store | [Client](#client) |
-| consumer | `RawdataConsumer`, reads one topic in id order | [Consumer](#consumer) |
+| consumer | `RawdataConsumer`, reads one topic from a starting point | [Consumer](#consumer) |
 | CRC32C | the checksum every segment upload to GCS and S3 carries | [Checksums](#checksums) |
 | cursor | `RawdataCursor`, a provider's starting point for a consumer | [Cursor and seek](#cursor-and-seek) |
 | `discard` | the provider that accepts every publish and keeps nothing | [Provider and discovery](#provider-and-discovery) |
 | ETag / generation pinning | reads of a segment bound to the object found when it was opened | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
-| header summary | first id, last id, count and last block offset in a segment's Avro header | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
-| id | a message's UUIDv7, which orders the topic | [Id and order](#id-and-order) |
-| last message | `lastMessage(topic)`, the message with the greatest id | [Last message](#last-message) |
+| header summary | lowest id, the topic's greatest id so far, count and last block offset in a segment's Avro header | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
+| id | a message's UUIDv7, ordered by `RawdataIds.ORDER` | [Id and order](#id-and-order) |
+| last message | `lastMessage(topic)`, the last message a reader of the whole topic gets | [Last message](#last-message) |
 | `local-temp-folder` | the local folder where Avro producers buffer their windows | [The upload window](#the-upload-window) |
 | `memory` | the provider that keeps topics in the client's own memory, for tests | [Provider and discovery](#provider-and-discovery) |
 | message | `RawdataMessage`, an immutable record of id, position and named bytes | [Message](#message) |
@@ -714,7 +716,7 @@ else writes the target topic.
 | seek | `consumer.seek(timestamp)`, moves a consumer to a time | [Cursor and seek](#cursor-and-seek) |
 | segment | one uploaded window, a numbered Avro file in the store | [Segments](#segments) |
 | sequence number | a message's number in its ordering group, from 1 | [Ordering group and sequence number](#ordering-group-and-sequence-number) |
-| tail | a topic's last segment and its last id | [Segments](#segments) |
+| tail | a topic's last segment and the topic's greatest id | [Segments](#segments) |
 | TCK | the provider contract as abstract JUnit 6 tests | [The TCK](#the-tck) |
 | topic | a named, ordered stream of messages with its metadata | [Topic](#topic) |
 | upload window | the local file a topic's producers append to before it is uploaded | [The upload window](#the-upload-window) |

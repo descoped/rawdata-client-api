@@ -213,9 +213,9 @@ and `discard` keep nothing a second process could see, so they never throw it.
 
 ### Consumer
 
-A `RawdataConsumer` reads one topic in id order, from a starting point, and keeps its own position. It is pulled:
-nothing is delivered until you ask, so you take only as much as you can handle. There is no reactive-streams or
-`Flow` API.
+A `RawdataConsumer` reads one topic from a starting point, in the order of [Ids and
+order](../contract.md#ids-and-order), and keeps its own position. It is pulled: nothing is delivered until you ask, so
+you take only as much as you can handle. There is no reactive-streams or `Flow` API.
 
 | Call | Does |
 |---|---|
@@ -565,7 +565,7 @@ Source paths are relative to this page.
 | `RawdataConsumer consumer(String topic, String initialPosition, boolean inclusive, long approxTimestamp, Duration tolerance)` | at or after a position |
 | `RawdataCursor cursorOf(String topic, UUID id, boolean inclusive)` | a cursor at an id |
 | `RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance)` | a cursor at a position found in a time range |
-| `RawdataMessage lastMessage(String topic)` | the message with the greatest id, or null |
+| `RawdataMessage lastMessage(String topic)` | the last message a reader of the whole topic gets, or null |
 | `RawdataMetadataClient metadata(String topic)` | the topic's metadata |
 | `boolean isClosed()`, `void close()` | |
 
