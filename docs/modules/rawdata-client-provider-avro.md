@@ -144,8 +144,8 @@ id, the position, the ordering group and each content entry's key and bytes), as
 
 ### Header summary
 
-Every segment's Avro header carries a summary of the segment: its first id, last id, message count, and the byte
-offset of its last block. Readers use it to avoid reading whole segments: a seek reads only headers, and
+Every segment's Avro header carries a summary of the segment: its lowest id, the topic's greatest id so far, its
+message count, and the byte offset of its last block. Readers use it to avoid reading whole segments: a seek reads only headers, and
 `lastMessage` reads only the last block. See [the segment's Avro file](#the-segments-avro-file).
 
 ### Tail and the topic writer

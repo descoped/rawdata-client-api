@@ -153,9 +153,9 @@ one upload window: the messages a producer buffered, in the order they were publ
 in `RawdataIds.ORDER`; a given id lower than earlier ones stays where it was published.
 
 A segment is a plain Avro data file, uncompressed, in the record schema `RawdataMessage` that 2.x used (fields `id`,
-`orderingGroup`, `sequenceNumber`, `position` and `data`). Its header also holds a summary (first id, last id, count,
-offset of the last block) so that readers can find their way without reading the whole file. Any Avro tool can open a
-segment. The schema and the header keys are described in
+`orderingGroup`, `sequenceNumber`, `position` and `data`). Its header also holds a summary (lowest id, the topic's
+greatest id so far, count, offset of the last block) so that readers can find their way without reading the whole
+file. Any Avro tool can open a segment. The schema and the header keys are described in
 [Avro engine: the segment's Avro file](rawdata-client-provider-avro.md#the-segments-avro-file).
 
 A segment is written once and never changed, replaced or deleted by the provider.

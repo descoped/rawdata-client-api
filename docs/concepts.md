@@ -85,7 +85,7 @@ PostgreSQL 18's `uuidv7()` lays it out:
  62 bits  rand_b       random
 ```
 
-The order of a topic is `RawdataIds.ORDER`: the 128 bits compared as an unsigned number, the order PostgreSQL sorts
+Ids are ordered by `RawdataIds.ORDER`: the 128 bits compared as an unsigned number, the order PostgreSQL sorts
 `uuid` values in.
 
 - An id the producer assigns is greater than every id in the topic. `RawdataIds.next(previous)` makes it: an id for
@@ -696,8 +696,8 @@ else writes the target topic.
 | cursor | `RawdataCursor`, a provider's starting point for a consumer | [Cursor and seek](#cursor-and-seek) |
 | `discard` | the provider that accepts every publish and keeps nothing | [Provider and discovery](#provider-and-discovery) |
 | ETag / generation pinning | reads of a segment bound to the object found when it was opened | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
-| header summary | first id, last id, count and last block offset in a segment's Avro header | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
-| id | a message's UUIDv7, which orders the topic | [Id and order](#id-and-order) |
+| header summary | lowest id, the topic's greatest id so far, count and last block offset in a segment's Avro header | [The segment header and ranged reads](#the-segment-header-and-ranged-reads) |
+| id | a message's UUIDv7, ordered by `RawdataIds.ORDER` | [Id and order](#id-and-order) |
 | last message | `lastMessage(topic)`, the last message a reader of the whole topic gets | [Last message](#last-message) |
 | `local-temp-folder` | the local folder where Avro producers buffer their windows | [The upload window](#the-upload-window) |
 | `memory` | the provider that keeps topics in the client's own memory, for tests | [Provider and discovery](#provider-and-discovery) |
@@ -716,7 +716,7 @@ else writes the target topic.
 | seek | `consumer.seek(timestamp)`, moves a consumer to a time | [Cursor and seek](#cursor-and-seek) |
 | segment | one uploaded window, a numbered Avro file in the store | [Segments](#segments) |
 | sequence number | a message's number in its ordering group, from 1 | [Ordering group and sequence number](#ordering-group-and-sequence-number) |
-| tail | a topic's last segment and its last id | [Segments](#segments) |
+| tail | a topic's last segment and the topic's greatest id | [Segments](#segments) |
 | TCK | the provider contract as abstract JUnit 6 tests | [The TCK](#the-tck) |
 | topic | a named, ordered stream of messages with its metadata | [Topic](#topic) |
 | upload window | the local file a topic's producers append to before it is uploaded | [The upload window](#the-upload-window) |
