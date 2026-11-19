@@ -38,6 +38,7 @@ class AvroSegmentsMemoryTest {
     @Test
     void openingASegmentAllocatesAboutOneBlock() throws IOException, ReflectiveOperationException {
         long before = allocatedBytes();
+        assertTrue(before >= 0, "the JVM counts allocated bytes"); // -1 if it does not
         try (DataFileWriter<GenericRecord> writer = AvroSegments.writer(1, new UUID(0, 0))) {
             AvroSegments.create(writer, new ByteArrayOutputStream(), BLOCK_BYTES);
             long allocated = allocatedBytes() - before;
@@ -58,7 +59,7 @@ class AvroSegmentsMemoryTest {
         }
         try (DataFileStream<GenericRecord> in = new DataFileStream<>(new ByteArrayInputStream(out.toByteArray()),
                 new GenericDatumReader<>())) {
-            in.hasNext();
+            assertTrue(in.hasNext());
             assertEquals(100, in.getBlockCount(), "one block of 100 messages");
         }
     }
