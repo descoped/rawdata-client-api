@@ -41,12 +41,14 @@ both commits and the tag. The tag push runs CI on the tag.
 ### 2. Perform: sign and upload to Central
 
 ```sh
+java -version                     # 17, as CI and the Release workflow build
 ./mvnw release:perform
 ```
 
-It checks out the tag into `target/checkout` and runs `deploy -P central,sign`: every artifact is signed with your
-GPG key (gpg-agent asks for the passphrase) and the bundle is uploaded to the Central Portal. It is not published:
-`autoPublish=false`, and the upload waits until the Portal has validated it.
+Run it on JDK 17: a newer JDK writes another `Build-Jdk-Spec` into the jars, and the copy tool's jars would no longer be
+the bytes on Central. It checks out the tag into `target/checkout` and runs `deploy -P central,sign`: every artifact is
+signed with your GPG key (gpg-agent asks for the passphrase) and the bundle is uploaded to the Central Portal. It is not
+published: `autoPublish=false`, and the upload waits until the Portal has validated it.
 
 ### 3. Publish on Central
 
@@ -78,6 +80,7 @@ If it stops because the version is not on Central yet, run it again later. The r
 - **`release:prepare` fails before it pushes**: `./mvnw release:rollback`, fix, and prepare again.
 - **`release:perform` fails, or the Portal rejects the deployment**: drop the deployment in the Portal, fix, and run
   `release:perform` again from the same tag. Nothing is public until you press Publish.
-- **The `Release` workflow fails**: fix the cause and run it again. It reads the CHANGELOG from the tag, so if the
-  tag has no section for the version, create the release by hand: `gh release create v<version>` with the notes and
-  the zip built from the tag.
+- **The `Release` workflow fails**: fix the cause and run it again. A rerun updates a release that was created
+  already: it uploads the assets again and replaces the notes. It reads the CHANGELOG from the tag, so if the tag has
+  no section for the version, create the release by hand: `gh release create v<version>` with the notes and the zip
+  built from the tag.

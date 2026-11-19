@@ -31,7 +31,6 @@ jobs:
       contents: write
     env:
       VERSION: ${{ inputs.version }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check the version
         run: |
@@ -58,7 +57,6 @@ jobs:
         with:
           java-version: '17'
           distribution: temurin
-          cache: maven
 
       # The build is reproducible: the jars in the zip are the bytes that are on Maven Central.
       - name: Build the copy tool
@@ -75,11 +73,20 @@ jobs:
             exit 1
           fi
 
+      # Only this step has the token that can write releases. A rerun after a partial failure updates the release
+      # that exists: the assets are uploaded again and the notes replaced.
       - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           zip="rawdata-copy-util/target/rawdata-copy-$VERSION.zip"
           (cd "$(dirname "$zip")" && sha256sum "$(basename "$zip")" > "$(basename "$zip").sha256")
-          gh release create "$TAG" "$zip" "$zip.sha256" \
-            --verify-tag \
-            --title "$TAG" \
-            --notes-file "$RUNNER_TEMP/notes.md"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$zip" "$zip.sha256" --clobber
+            gh release edit "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --draft=false
+          else
+            gh release create "$TAG" "$zip" "$zip.sha256" \
+              --verify-tag \
+              --title "$TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi

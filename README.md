@@ -202,8 +202,6 @@ SonarCloud (project `descoped_rawdata-client-project`). See [building and testin
   notes and the copy tool, `rawdata-copy-<version>.zip` (the jar and `lib/`), which is not on Central and not in the
   BOM. See [releasing](docs/releasing.md).
 
-See [releasing](docs/releasing.md).
-
 ## Repository layout
 
 ```
