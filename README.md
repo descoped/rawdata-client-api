@@ -237,7 +237,7 @@ Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do no
 
 The rawdata client began in April 2019 in the Data Collection department of Statistics Norway (SSB), during SSB's
 2017–2021 modernisation programme. It was the storage of SSB's Data Collector: harvested data from external
-sources was streamed into rawdata topics exactly as it arrived, the raw data in the name, before any processing.
+sources was streamed into rawdata topics exactly as it arrived, before any processing: hence *raw* data.
 
 SSB published the work under the Apache License 2.0 on `github.com/statisticsnorway`, one repository per module:
 `rawdata-client-api`, `rawdata-client-provider-postgres`, `rawdata-client-provider-gcs` and `rawdata-copy-util`.
