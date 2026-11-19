@@ -82,14 +82,24 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
             read++;
             if (skip > 0) {
                 skip--; // delivered before the segment was opened again
-            } else if (from == null) {
-                buffer.addLast(message);
-            } else if (exact ? message.id().equals(from) : passes(message.id())) {
-                if (!exact || fromInclusive) {
-                    buffer.addLast(message);
-                }
-                from = null; // from here on, everything in segment order
+            } else {
+                accept(message, buffer);
             }
+        }
+    }
+
+    /**
+     * Puts a message in the buffer if the start is reached: at once without a start, at the cursor's message (and
+     * after it) for a cursor, at the first message at or past the bound for a seek.
+     */
+    private void accept(RawdataMessage message, Deque<RawdataMessage> buffer) {
+        if (from == null) {
+            buffer.addLast(message);
+        } else if (exact ? message.id().equals(from) : passes(message.id())) {
+            if (!exact || fromInclusive) {
+                buffer.addLast(message);
+            }
+            from = null; // from here on, everything in segment order
         }
     }
 

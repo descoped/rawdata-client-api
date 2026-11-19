@@ -253,9 +253,9 @@ Starting somewhere else:
 | Start | How the engine finds it | Cost |
 |---|---|---|
 | `consumer(topic)` | segment 0 | none |
-| `consumer(topic, id)`, a cursor from `cursorOf(topic, id, inclusive)` | as 2.x: binary search over the segments' `last-id`s, from their headers, to the first segment whose `first-id` is at or below the id; there it finds the message with the id and reads everything after it in segment order, also a lower id published later; if no segment holds the id, it starts as a seek | one header (an 8 KiB range) per step |
+| `consumer(topic, id)`, a cursor from `cursorOf(topic, id, inclusive)` | as 2.x: binary search over the segments' `last-id`s, from their headers, to the first segment whose `first-id` is at or below the id; there it finds the message with the id and reads everything after it in segment order, also a lower id published later; if no uploaded segment holds the id (its message is still in an open window, for example), it starts as a seek, at the first id at or past it | one header (an 8 KiB range) per step |
 | `seek(timestamp)` | as an id: the beginning of that millisecond, inclusive | as above |
-| `cursorOf(topic, position, inclusive, approxTimestamp, tolerance)` | from the segment reaching `approxTimestamp - tolerance`, reads messages until one has the position or an id past `approxTimestamp + tolerance` | streams the segments in the time range; throws `RawdataNoSuchPositionException` if not found |
+| `cursorOf(topic, position, inclusive, approxTimestamp, tolerance)` | from the segment reaching `approxTimestamp - tolerance`, reads messages until one has the position or an id past `approxTimestamp + tolerance`, as 2.x did; so a message whose id is in the range but that was published after a higher id is not found | streams the segments in the time range; throws `RawdataNoSuchPositionException` if not found |
 | `lastMessage(topic)` | the tail's segment: header, then its last block only | two small reads; `null` for an empty topic |
 
 **Finding the tail.** Segments have no gaps, so the client probes `exists` forward from the last segment it saw, in
