@@ -26,8 +26,8 @@ A pull request goes through these checks:
 | **SonarCloud** | analyses the reactor (project `descoped_rawdata-client-project`); it does not fail the CI build, but its quality gate, which needs 80% coverage of new code, shows as a check on the pull request |
 | **The review** | every pull request is reviewed; each finding is checked against the code and fixed, or answered with the reason it is not |
 
-A pull request that changes only Markdown files, `LICENSE`, `.claude/` or `.github/workflows/claude.yml` skips the CI
-build, and still gets the review. Pull requests from forks get no SonarCloud analysis, since a fork's build has no
+A pull request that changes only Markdown files, `LICENSE`, `.claude/`, `.github/workflows/claude.yml`,
+`.github/renovate.json` or `.gitignore` skips the CI build (`paths-ignore` in `ci.yml`), and still gets the review. Pull requests from forks get no SonarCloud analysis, since a fork's build has no
 access to the token.
 
 ## The build
