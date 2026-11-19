@@ -1,10 +1,10 @@
 # The contract
 
-Every provider keeps this contract, and the shared contract tests (`RawdataClientContractTest` in
-`rawdata-client-tck`) check it for each one: a provider is compliant when it passes them unchanged. Code written
-against one provider works against another, and a system can move from one provider to another with the
-[copy tool](copy-tool.md). A few limits follow the store and are on each provider's page: how long a metadata key may
-be, and what a store accepts at most.
+Every provider keeps this contract, and the shared contract tests (`RawdataClientContractTest` in `rawdata-client-tck`)
+check it for each one: a provider is compliant when it passes them unchanged. Code written against one provider works
+against another, and a system can move from one provider to another with the [copy tool](modules/rawdata-copy-util.md).
+A few limits follow the store and are on each provider's page: how long a metadata key may be, and what a store accepts
+at most.
 
 ## One writer per topic
 
@@ -20,10 +20,10 @@ writing), and finds more after that.
 
 When the failure shows depends on when the provider writes:
 - `postgres` writes in `publish`, so that `publish` throws and writes nothing.
-- `filesystem`, `gcs` and `s3` buffer in an [upload window](providers/upload-window.md). The conflict is found when a
-  window opens or uploads, so it is thrown by that `publish`, or by a later `publish`, `flush` or `close`. Messages
-  already accepted into windows that were not uploaded are never written to the topic; they are kept on disk as
-  `*.invalid` files.
+- `filesystem`, `gcs` and `s3` buffer in an [upload window](modules/rawdata-client-provider-avro.md#upload-window). The
+  conflict is found when a window opens or uploads, so it is thrown by that `publish`, or by a later `publish`, `flush`
+  or `close`. Messages already accepted into windows that were not uploaded are never written to the topic; they are
+  kept on disk as `*.invalid` files.
 
 ## Topics
 
@@ -66,10 +66,11 @@ A topic only grows at its end:
   the publish throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the ids of
   the source.
 - A `publish` call is written whole or not at all.
-- **When published messages are visible and durable depends on the provider.** In `postgres` and `memory`, as soon
-  as `publish` returns. In `filesystem`, `gcs` and `s3`, once their [upload window](providers/upload-window.md) is
-  uploaded: after `avro-file.max.seconds` or `avro-file.max.bytes`, or when the producer or client closes. Closing
-  a producer always makes what it published visible and durable, in every provider.
+- **When published messages are visible and durable depends on the provider.** In `postgres` and `memory`, as soon as
+  `publish` returns. In `filesystem`, `gcs` and `s3`, once their [upload
+  window](modules/rawdata-client-provider-avro.md#upload-window) is uploaded: after `avro-file.max.seconds` or
+  `avro-file.max.bytes`, or when the producer or client closes. Closing a producer always makes what it published
+  visible and durable, in every provider.
 
 So a consumer that has read up to an id never misses a message published later.
 
@@ -130,4 +131,5 @@ waiting `receive`, which then throws, and fails a pending `receiveAsync` or `pub
 ## Copying
 
 `RawdataCopy.copy(from, to, batchSize, idleTimeout)` copies from a consumer to a producer in batches, keeping ids and
-order, until the source has had nothing new for the idle timeout. The [copy tool](copy-tool.md) is built on it.
+order, until the source has had nothing new for the idle timeout. The [copy tool](modules/rawdata-copy-util.md) is built
+on it.

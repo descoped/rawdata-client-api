@@ -48,10 +48,11 @@ import java.util.Set;
  *     (default 1; 0 looks as often as a receive asks).</li>
  * </ul>
  * <p>
- * Producers buffer on a local disk and upload one Avro file per window, configured with the 2.x keys of
+ * Producers buffer on a local disk and upload one Avro file per window, configured with the keys of
  * {@link AvroUploadWindow}: {@code local-temp-folder} (required), {@code avro-file.max.seconds},
- * {@code avro-file.max.bytes}, {@code avro-file.sync.interval} and {@code avro-file.max.pending-uploads}. A message is
- * visible to consumers once its window is uploaded.
+ * {@code avro-file.max.bytes}, {@code avro-file.sync.interval}, {@code avro-file.max.pending-uploads},
+ * {@code avro-file.close-timeout-seconds} and {@code avro-file.upload.max-concurrency}. A message is visible to
+ * consumers once its window is uploaded.
  * <p>
  * A metadata key is at most about 500 bytes in UTF-8, so that its object key fits in S3's 1024 bytes with the prefix
  * and topic; a longer key is refused with {@link IllegalArgumentException}.

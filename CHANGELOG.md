@@ -18,12 +18,13 @@ code. Java 17 or newer.
 - New `io.descoped.rawdata.api.spi`: `OrderedRawdataProducer` and `PollingRawdataConsumer`, base classes for
   providers.
 - One version of each library in every module's compile and runtime dependencies, checked by the build: slf4j 2,
-  Jackson and commons-codec are declared by the providers at the newest version and excluded from HikariCP, Avro
-  and google-cloud-storage (which also no longer brings checker-qual).
+  Jackson and commons-codec are declared at the newest version where first needed; slf4j-api is excluded from
+  HikariCP, Avro and the AWS SDK, Jackson and commons-codec from Avro.
 - Every module is a JPMS module. CI checks the providers on the module path and the class path.
-- Documentation in `docs/`: for users (getting started, the contract, the providers, the copy tool) and for
-  developers (architecture, building and testing, dependencies, writing a provider, releasing, troubleshooting).
-  The README is the getting-started for the repository.
+- Documentation in `docs/`: for users, a tutorial, the concepts, one page per module, the contract, logging and the
+  module path, and troubleshooting; for developers, architecture, building and testing, dependencies, writing a
+  provider and releasing. The README covers what the client is, getting started, build, test and release;
+  `CONTRIBUTING.md` covers contributing.
 
 ### API
 

@@ -21,10 +21,11 @@ import java.util.Set;
  * {@code listing.min-interval-seconds}, how often a waiting consumer looks for new messages, in seconds (default 1;
  * 0 looks as often as a receive asks).
  * <p>
- * Producers buffer on a local disk and upload one Avro file per window, configured with the 2.x keys of
+ * Producers buffer on a local disk and upload one Avro file per window, configured with the keys of
  * {@link AvroUploadWindow}: {@code local-temp-folder} (required), {@code avro-file.max.seconds},
- * {@code avro-file.max.bytes}, {@code avro-file.sync.interval} and {@code avro-file.max.pending-uploads}. A message is
- * visible to consumers once its window is uploaded.
+ * {@code avro-file.max.bytes}, {@code avro-file.sync.interval}, {@code avro-file.max.pending-uploads},
+ * {@code avro-file.close-timeout-seconds} and {@code avro-file.upload.max-concurrency}. A message is visible to
+ * consumers once its window is uploaded.
  * <p>
  * A metadata key is at most 127 bytes in UTF-8, so that its file name fits in 255 characters; a longer key is refused
  * with {@link IllegalArgumentException}.

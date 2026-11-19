@@ -34,18 +34,20 @@ dependency.
 
 **"SLF4J(W): No SLF4J providers were found".** Nothing in your application binds slf4j, so HikariCP's and Avro's log
 messages are dropped. Add a backend such as logback. To route the providers' `System.Logger` and the PostgreSQL
-driver's `java.util.logging` there too, see [getting started](getting-started.md#logging).
+driver's `java.util.logging` there too, see [logging](logging-and-the-module-path.md#logging).
 
 **`gcs` says "No Application Default Credentials".** None of the three sources was found: set
 `GOOGLE_APPLICATION_CREDENTIALS` to a key file, run `gcloud auth application-default login`, or run on Google Cloud.
-See the [`gcs` credentials](providers/gcs.md#credentials).
+See the [`gcs` credentials](modules/rawdata-client-provider-gcs.md#credentials).
 
-**`s3` fails with "Unable to load credentials from any of the providers in the chain" or "Unable to load region".**
-The SDK's default chains found nothing: set `AWS_PROFILE` (and run `aws sso login` for an SSO profile), or the
-`AWS_*` environment variables, or `s3.region`. See the [`s3` credentials](providers/s3.md#credentials-and-region).
+**`s3` fails with "Unable to load credentials from any of the providers in the chain" or "Unable to load region".** The
+SDK's default chains found nothing: set `AWS_PROFILE` (and run `aws sso login` for an SSO profile), or the `AWS_*`
+environment variables, or `s3.region`. See the [`s3`
+credentials](modules/rawdata-client-provider-s3.md#credentials-and-region-come-from-the-sdk).
 
 **`s3` fails with a TLS error on a bucket name with dots.** Virtual-hosted HTTPS cannot serve such names; don't set
-`s3.path-style-access=false` for them. See [bucket names with dots](providers/s3.md#bucket-names-with-dots).
+`s3.path-style-access=false` for them. See [bucket names with
+dots](modules/rawdata-client-provider-s3.md#bucket-names-with-dots-path-style).
 
 **A metadata key is refused with `IllegalArgumentException`.** Each provider limits a key's length, as its store allows:
 - `filesystem`: 127 bytes in UTF-8;
@@ -67,14 +69,14 @@ recognises it in the store by its bytes.
 **A publish, flush or close throws "The writer of topic … failed".** An upload failed after the store's retries, for
 example during an outage. The windows not uploaded stay in `local-temp-folder`, sealed. Fix the cause, then create a
 client again: its first publish to the topic uploads them, in order. See
-[the upload window](providers/upload-window.md#failures).
+[Avro engine: failures](modules/rawdata-client-provider-avro.md#failures).
 
 **"The buffer folder … is in use by another client".** Two clients, in one process or two, use the same
 `local-temp-folder` for a topic. Give each process its own folder; only one process writes a topic anyway.
 
 **`*.invalid` files in `local-temp-folder`.** A window that could not be uploaded where it belongs, because another
 process wrote the topic. It is kept for you to look at, never uploaded; delete it when you no longer need it. See
-[recovery](providers/upload-window.md#recovery-after-a-crash).
+[recovery](modules/rawdata-client-provider-avro.md#recovery-after-a-crash).
 
 **Messages are not visible right after `publish`.** In `filesystem`, `gcs` and `s3` they become visible once their
 window is uploaded: after `avro-file.max.seconds` or `avro-file.max.bytes`, or when the producer closes.
