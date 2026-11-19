@@ -132,3 +132,5 @@ code. Java 17 or newer.
 
 The last release of the separate module repositories (`rawdata-client-api`, `rawdata-client-provider-postgres`,
 `rawdata-client-provider-gcs`); their history is in this repository, with tags such as `rawdata-client-api/2.0.0`.
+Released by Descoped in 2024 from its fork of Statistics Norway's repositories, with the packages moved to
+`io.descoped`.
