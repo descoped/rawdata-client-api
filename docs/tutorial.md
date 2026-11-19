@@ -49,7 +49,7 @@ Create `pom.xml`:
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <rawdata.version>3.0.0</rawdata.version>
+        <rawdata.version>3.0.1</rawdata.version>
     </properties>
 
     <dependencyManagement>

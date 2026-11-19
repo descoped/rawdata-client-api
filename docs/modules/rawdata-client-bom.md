@@ -27,7 +27,7 @@ This page also covers `rawdata-client-project`, the parent POM of every module, 
         <dependency>
             <groupId>io.descoped.rawdata</groupId>
             <artifactId>rawdata-client-bom</artifactId>
-            <version>3.0.0</version>
+            <version>3.0.1</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -61,7 +61,7 @@ Gradle reads a BOM's `dependencyManagement` as a platform:
 
 ```kotlin
 dependencies {
-    implementation(platform("io.descoped.rawdata:rawdata-client-bom:3.0.0"))
+    implementation(platform("io.descoped.rawdata:rawdata-client-bom:3.0.1"))
     implementation("io.descoped.rawdata:rawdata-client-api")
     runtimeOnly("io.descoped.rawdata:rawdata-client-provider-postgres")
     testImplementation("io.descoped.rawdata:rawdata-client-tck")

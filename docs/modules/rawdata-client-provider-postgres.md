@@ -45,7 +45,7 @@ durable the moment `publish` returns, or when you want to look at the data with 
            <dependency>
                <groupId>io.descoped.rawdata</groupId>
                <artifactId>rawdata-client-bom</artifactId>
-               <version>3.0.0</version>
+               <version>3.0.1</version>
                <type>pom</type>
                <scope>import</scope>
            </dependency>
