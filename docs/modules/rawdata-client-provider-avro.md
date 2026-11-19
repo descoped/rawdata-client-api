@@ -328,8 +328,8 @@ messages:
   with a slow trickle of messages makes one small segment a minute at the defaults.
 - **Heap.** Each running upload holds its window in memory, so uploads take up to
   `avro-file.upload.max-concurrency` × `avro-file.max.bytes` of heap: 1 GiB at the defaults (16 × 64 MiB). Size the
-  heap for it, or lower either. Each open window also holds about one block, `avro-file.sync.interval` (512 KiB at
-  the default), so many topics written at once add little.
+  heap for it, or lower either. Each topic being written also holds about 1.25 × `avro-file.sync.interval` for its
+  open window (640 KiB at the default), so a very large interval means a large buffer per topic.
 - **Disk.** Each topic needs room for its open window and up to `avro-file.max.pending-uploads` sealed windows:
   about 5 × 64 MiB per topic at the defaults.
 - **Crash loss** is at most a block, `avro-file.sync.interval`. A smaller block forces to disk more often.
