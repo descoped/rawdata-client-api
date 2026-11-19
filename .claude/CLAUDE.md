@@ -63,7 +63,10 @@ this repository.
   Avro engine also pass `AvroStoreContractTest`. Backend limits may differ (metadata key length) and are declared to
   the TCK and documented per provider; NUL is refused in positions, ordering groups, content names and metadata
   keys by the API. A store that does not exist fails with `RawdataException`, never reads as empty. Topic names are
-  validated and never spliced into SQL, file paths or object names.
+  validated and never spliced into SQL, file paths or object names. One exception, by the owner's decision of
+  2026-11-19 to follow 2.x: given ids are kept in any order, and where a lower id published later is read (id order
+  in memory and postgres, publish order in the Avro providers), what `lastMessage` returns and what a duplicate id does
+  depend on the provider. The TCK checks only what is common: every message of a completed topic is read once.
 - **Ids are UUIDv7** (`RawdataIds`), laid out as PostgreSQL 18's `uuidv7()` (48-bit milliseconds, version 7, 12-bit
   sub-millisecond fraction, variant, 62 random bits) and ordered by `RawdataIds.ORDER` (unsigned, as PostgreSQL
   orders `uuid`), never by `UUID.compareTo`, which is signed. No ULID library (owner's decision, 2026-11-17).
@@ -129,10 +132,10 @@ this repository.
     uploaded or deleted.
   - **The schema** is 2.x's (`id`, `orderingGroup`, `sequenceNumber` default 0, `position`, `data` as a map), with the
     id's fixed type named `uuid`.
-  - **Reads in ranges** (Ove, 2026-11-18): a segment is never read whole by a reader. Its header's summary (first and
-    last id, count, last-block offset; the header only, not object metadata) serves seek and `lastMessage`, and
-    consumers stream it. `AvroStore.open` pins a read to the object it found (generation, ETag, file key) and holds
-    no resources.
+  - **Reads in ranges** (Ove, 2026-11-18): a segment is never read whole by a reader. Its header's summary (the
+    segment's lowest id, the topic's greatest id so far, count, last-block offset; the header only, not object metadata)
+    serves seek and `lastMessage`, and consumers stream it. `AvroStore.open` pins a read to the object it found
+    (generation, ETag, file key) and holds no resources.
   - **Uploads** carry a CRC32C (GCS `X-Goog-Hash`, S3 `x-amz-checksum-crc32c`), and run at most an AIMD limit at once
     across a client's topics (`AvroUploadLimiter`: start 4, +1 per round at the limit, half on a throttled upload at
     most once a second, cap `avro-file.upload.max-concurrency`, 16; Ove, 2026-11-19). A store reports throttling of

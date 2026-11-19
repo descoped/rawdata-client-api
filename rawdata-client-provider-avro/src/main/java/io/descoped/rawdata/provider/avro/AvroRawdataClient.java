@@ -368,8 +368,9 @@ public final class AvroRawdataClient implements RawdataClient {
     }
 
     /**
-     * Returns the first segment whose last message has an id of at least the given one: where a reader of the ids
-     * from there on starts. The last segment plus one if every message is before the id.
+     * Returns the first segment whose header's greatest id (the topic's greatest up to and with the segment) is at
+     * least the given one: where a reader of the ids from there on starts. The last segment plus one if every message
+     * is before the id.
      */
     long firstSegmentReaching(String topic, UUID id) {
         if (RawdataIds.ORDER.compare(id, RawdataIds.beginningOfTime()) <= 0) {
@@ -386,6 +387,20 @@ public final class AvroRawdataClient implements RawdataClient {
             }
         }
         return low;
+    }
+
+    /**
+     * Returns the first segment from the given one on that may hold the message with the given id: its header's
+     * lowest id is at or below it. Headers only. -1 if no uploaded segment may hold it.
+     */
+    long segmentThatMayHold(String topic, UUID id, long from) {
+        long last = tail(topic).segment();
+        for (long segment = Math.max(from, firstSegmentReaching(topic, id)); segment <= last; segment++) {
+            if (RawdataIds.ORDER.compare(summaryOf(topic, segment).firstId(), id) <= 0) {
+                return segment;
+            }
+        }
+        return -1;
     }
 
     /**

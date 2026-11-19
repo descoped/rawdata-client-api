@@ -15,9 +15,12 @@ import java.util.UUID;
  * <ul>
  *     <li>A topic name follows {@link RawdataTopics}; a method given an invalid name throws
  *     {@link IllegalArgumentException}. A topic exists from its first use; an unknown topic is empty.</li>
- *     <li>The messages of a topic are consumed in the {@link RawdataIds#ORDER order} of their ids, UUIDv7s. A topic
- *     only grows at its end: an id the producer assigns is greater than every id already in the topic, whichever
- *     producer wrote it, and an id the caller gives must be too, or the publish is refused.</li>
+ *     <li>Ids are UUIDv7s, ordered by {@link RawdataIds#ORDER}. An id the producer assigns is greater than every id
+ *     already in the topic, whichever producer wrote it. An id the caller gives is kept as it is, in any order. A topic
+ *     whose ids were published in increasing order is consumed in that order; a lower id published later is read
+ *     where the provider puts it, in id order or after what was published before it. A consumer of a topic that is
+ *     still written may miss a message whose id lands behind its position; a consumer of a completed topic, read from
+ *     the beginning, gets every message once.</li>
  *     <li>After {@link #close()}, every method of the client and of the producers, consumers and metadata clients it
  *     created throws {@link RawdataClosedException}, except {@code isClosed()} and {@code close()}, which may be
  *     called any number of times.</li>
@@ -156,7 +159,8 @@ public interface RawdataClient extends AutoCloseable {
     RawdataCursor cursorOf(String topic, String position, boolean inclusive, long approxTimestamp, Duration tolerance) throws RawdataNoSuchPositionException;
 
     /**
-     * Reads the last message of a topic, the one with the greatest id.
+     * Reads the last message of a topic: the last one a consumer reading the whole topic gets. With ids published in
+     * increasing order, the one with the greatest id.
      *
      * @param topic the topic
      * @return the last message, or null if the topic is empty

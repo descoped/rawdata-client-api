@@ -242,14 +242,18 @@ stored.
 
 `publishAsync` runs the same `publish` on the client's thread pool (daemon threads named `rawdata-postgres-<n>`).
 
-### Why a consumer never misses a message
+### Why generated ids grow in commit order
 
-A consumer reads "the messages with an id greater than the last one I read". That is only safe if no message with a
-smaller id can be committed after a larger one. The topic lock makes it so:
+A consumer reads "the messages with an id greater than the last one I read". The topic lock makes the ids the
+producer generates grow in commit order, so a consumer never misses one of them:
 
-- The lock is held from before the last id is read until after the commit, so publishes to a topic happen one at a
-  time.
-- Each publish gives ids after the last committed id, so ids grow in commit order.
+- The lock is held from before the topic's greatest id is read until after the commit, so publishes to a topic
+  happen one at a time.
+- Each publish generates ids after the greatest committed id.
+
+A given id is stored as it is, as in 2.x, and may be lower than ids already committed; a consumer already past it
+does not read it. A given id that is already in the topic is refused by the primary key (`RawdataException`), and
+nothing of the call is written.
 
 This depends on the read in step 3 seeing every commit made before the lock was granted. Under READ COMMITTED each
 statement takes a fresh snapshot, so it does. Under REPEATABLE READ the snapshot would be taken by the lock statement,
@@ -410,7 +414,7 @@ to the original exception as suppressed, never in its place.
 | `RawdataException: PostgreSQL: …` from `RawdataClient.create` | the server cannot be reached, the database does not exist, or the login failed | check host, port, database, user and password; the cause has pgjdbc's message |
 | `RawdataException` from `create` mentioning `permission denied` | the tables are missing and the role may not create them | create the tables once with a role that may, then grant the role `SELECT, INSERT, UPDATE, DELETE` (see [privileges](#database-setup-and-privileges)) |
 | `RawdataWriterConflictException` from `publish` | another process wrote the topic since this client last did | see below |
-| `IllegalArgumentException` from `publish`: "is not greater than the last id" | a message's given id is not after the topic's last id or the id before it | give no id, or ids in order after `lastMessage(topic).id()` |
+| `RawdataException` from `publish` mentioning a duplicate key | a message's given id is already in the topic | give no id, or unique ids |
 | `IllegalArgumentException` from a metadata call: "at most 2000 bytes in UTF-8 in postgres" | the key is too long | use a shorter key |
 | `RawdataException` after about 30 seconds, mentioning a connection timeout | all `max-pool-size` connections were busy | raise `max-pool-size`, or use fewer concurrent consumers per client |
 | A consumer sees new messages late | it polls every `prefetch-poll-interval-when-empty` ms | lower the interval |

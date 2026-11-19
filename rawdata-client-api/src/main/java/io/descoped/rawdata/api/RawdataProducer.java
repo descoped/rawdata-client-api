@@ -28,13 +28,12 @@ public interface RawdataProducer extends AutoCloseable {
 
     /**
      * Publishes messages, in order. A message without an id is given one that is greater than every id already in
-     * the topic. A message with an id must have one greater than every id before it, in the topic and in the call;
-     * a topic only grows at its end, so a consumer never misses a message. The messages of one call are written
-     * together: either all of them or none.
+     * the topic. A message with an id keeps it, in any order: it may be lower than ids already in the topic, and a
+     * consumer already past it does not get it. The messages of one call are written together: either all of them or
+     * none.
      *
      * @param messages the messages
-     * @throws IllegalArgumentException if a given id is not greater than every id before it; nothing is written
-     * @throws RawdataClosedException   if the producer or its client is closed
+     * @throws RawdataClosedException if the producer or its client is closed
      */
     void publish(RawdataMessage... messages) throws RawdataClosedException;
 

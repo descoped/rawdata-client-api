@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.avro;
 
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
@@ -40,9 +41,10 @@ import java.util.UUID;
  * <ul>
  *     <li>{@code rawdata.segment} and {@code rawdata.previous-id}: the segment the window becomes and the id before it,
  *     for recovery after a crash;</li>
- *     <li>the summary: {@code rawdata.first-id}, {@code rawdata.last-id}, {@code rawdata.count} and
- *     {@code rawdata.last-block}, the offset of the last block. A seek reads only headers, and {@code lastMessage}
- *     only the last block.</li>
+ *     <li>the summary: {@code rawdata.first-id}, the lowest id in the segment; {@code rawdata.last-id}, the greatest
+ *     id in the topic up to and with this segment, so it grows from segment to segment even when ids are given out of
+ *     order; {@code rawdata.count}; and {@code rawdata.last-block}, the offset of the last block. A seek reads only
+ *     headers, and {@code lastMessage} only the last block.</li>
  * </ul>
  * A window's header is written when the window opens, before its messages are known, so the summary is written as
  * placeholders of fixed width and filled in place when the window is sealed. A file whose summary is still the
@@ -96,8 +98,8 @@ final class AvroSegments {
     /**
      * What a segment's header says about its messages.
      *
-     * @param firstId   the first message's id
-     * @param lastId    the last message's id
+     * @param firstId   the lowest id in the segment
+     * @param lastId    the greatest id in the topic up to and with the segment
      * @param count     how many messages, 1 or more
      * @param lastBlock the offset of the last block
      */
@@ -116,6 +118,20 @@ final class AvroSegments {
         writer.setSyncInterval(Math.max(MIN_AVRO_SYNC_INTERVAL, Math.min(blockBytes, MAX_AVRO_SYNC_INTERVAL)));
         writer.create(MESSAGE, out);
         writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL); // Avro never ends a block by itself
+    }
+
+    /**
+     * The lower of two ids.
+     */
+    static UUID lowest(UUID a, UUID b) {
+        return RawdataIds.ORDER.compare(a, b) <= 0 ? a : b;
+    }
+
+    /**
+     * The greater of two ids.
+     */
+    static UUID greatest(UUID a, UUID b) {
+        return RawdataIds.ORDER.compare(a, b) >= 0 ? a : b;
     }
 
     /**
@@ -141,8 +157,8 @@ final class AvroSegments {
                 }
                 writer.append(toRecord(message));
                 bytes += estimatedSize(message);
-                firstId = firstId == null ? message.id() : firstId;
-                lastId = message.id();
+                firstId = firstId == null ? message.id() : lowest(firstId, message.id());
+                lastId = greatest(lastId == null ? previousId : lastId, message.id());
             }
             if (bytes == 0) {
                 blockStart = previousBlockStart;

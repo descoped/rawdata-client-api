@@ -1,6 +1,7 @@
 package io.descoped.rawdata.provider.avro;
 
 import io.descoped.rawdata.api.RawdataConsumer;
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
 import org.apache.avro.file.DataFileStream;
@@ -232,14 +233,53 @@ class AvroRangedReadTest {
     }
 
     /**
+     * Ids given out of order, as in 2.x: a segment keeps publish order, its header keeps its lowest id and the topic's
+     * greatest so far, and a cursor at a message reads everything published after it, also a lower id in a later
+     * segment.
+     *
+     * @throws IOException if reading a header fails
+     */
+    @Test
+    void aCursorReadsWhatWasPublishedAfterItsMessageAlsoLowerIds() throws IOException {
+        CountingStore store = new CountingStore();
+        UUID early = RawdataIds.next(RawdataIds.beginningOf(1_000_000L));
+        UUID b;
+        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30, 16), 10)) {
+            RawdataProducer producer = client.producer(TOPIC);
+            producer.publish(message("a"), message("b"));
+            client.flush(TOPIC);
+            b = client.lastMessage(TOPIC).id();
+            producer.publish(RawdataMessage.builder().id(early).position("late").build(), message("c"));
+            client.flush(TOPIC);
+            assertEquals("c", client.lastMessage(TOPIC).position(), "the last message is the last one read");
+            try (DataFileStream<GenericRecord> second = AvroSegments.reader(new ByteArrayInputStream(store.segments.get(1L)))) {
+                AvroSegments.Summary summary = AvroSegments.summary(second);
+                assertEquals(early, summary.firstId(), "the lowest id of the segment");
+                assertTrue(RawdataIds.ORDER.compare(summary.lastId(), b) > 0, "the topic's greatest id");
+            }
+        }
+        try (AvroRawdataClient reader = client(store);
+             RawdataConsumer consumer = reader.consumer(TOPIC, reader.cursorOf(TOPIC, b, false))) {
+            assertEquals("late", receive(consumer).position());
+            assertEquals("c", receive(consumer).position());
+            assertNull(receive(consumer));
+        }
+        try (AvroRawdataClient reader = client(store);
+             RawdataConsumer consumer = reader.consumer(TOPIC, reader.cursorOf(TOPIC, early, false))) {
+            assertEquals("c", receive(consumer).position(), "a cursor at the late message goes on after it");
+            assertNull(receive(consumer));
+        }
+    }
+
+    /**
      * A message may hold any bytes, also the header's own keys: filling in the summary searches the header only.
      *
      * @throws IOException if encoding fails
      */
     @Test
     void aMessageHoldingTheHeaderKeysIsWrittenAndRecovered() throws IOException {
-        byte[] header = AvroSegments.encode(List.of(RawdataMessage.builder().id(io.descoped.rawdata.api.RawdataIds.next(io.descoped.rawdata.api.RawdataIds.beginningOfTime())).position("x").put("k", new byte[1]).build()),
-                0, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64); // its header holds every key
+        byte[] header = AvroSegments.encode(List.of(RawdataMessage.builder().id(RawdataIds.next(RawdataIds.beginningOfTime())).position("x").put("k", new byte[1]).build()),
+                0, RawdataIds.beginningOfTime(), 64); // its header holds every key
         CountingStore store = new CountingStore();
         RawdataMessage tricky = RawdataMessage.builder().position("tricky").put("payload", header).build();
         try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30, 16), 10)) {
@@ -247,9 +287,9 @@ class AvroRangedReadTest {
             client.flush(TOPIC);
             assertEquals("after", client.lastMessage(TOPIC).position());
         }
-        List<RawdataMessage> recovered = List.of(RawdataMessage.builder().id(io.descoped.rawdata.api.RawdataIds.next(io.descoped.rawdata.api.RawdataIds.beginningOfTime()))
+        List<RawdataMessage> recovered = List.of(RawdataMessage.builder().id(RawdataIds.next(RawdataIds.beginningOfTime()))
                 .position("tricky").put("payload", header).build());
-        byte[] encoded = AvroSegments.encode(recovered, 1, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64);
+        byte[] encoded = AvroSegments.encode(recovered, 1, RawdataIds.beginningOfTime(), 64);
         try (DataFileStream<GenericRecord> stream = AvroSegments.reader(new ByteArrayInputStream(encoded))) {
             assertEquals(1, AvroSegments.summary(stream).count());
         }

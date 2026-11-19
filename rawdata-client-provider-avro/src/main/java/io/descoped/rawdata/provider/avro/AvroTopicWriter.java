@@ -178,7 +178,7 @@ final class AvroTopicWriter {
      * Appends a call's messages to the open window, opening one if there is none. The call ends its block when the
      * block is full, so blocks hold whole calls.
      *
-     * @param withIds gives the messages their ids after the given last id, and checks given ones
+     * @param withIds gives the messages without an id an id after the given greatest id
      */
     void publish(Function<UUID, List<RawdataMessage>> withIds) {
         appendLock.lock();
@@ -191,12 +191,12 @@ final class AvroTopicWriter {
                 openWindow();
             }
             Window window = current;
-            List<RawdataMessage> stored = withIds.apply(window.lastId); // may refuse the batch before anything is written
+            List<RawdataMessage> stored = withIds.apply(window.lastId);
             append(window, stored);
-            if (window.firstId == null) {
-                window.firstId = stored.get(0).id();
+            for (RawdataMessage message : stored) {
+                window.firstId = window.firstId == null ? message.id() : AvroSegments.lowest(window.firstId, message.id());
+                window.lastId = AvroSegments.greatest(window.lastId, message.id());
             }
-            window.lastId = stored.get(stored.size() - 1).id();
             window.count += stored.size();
             if (window.blockBytes >= settings.syncInterval()) {
                 endBlock(window);
@@ -633,7 +633,10 @@ final class AvroTopicWriter {
         byte[] content = sealed && leftover.complete()
                 ? Files.readAllBytes(file)
                 : AvroSegments.encode(leftover.messages(), leftover.segment(), leftover.previousId(), settings.syncInterval());
-        UUID lastId = leftover.messages().get(leftover.messages().size() - 1).id();
+        UUID lastId = leftover.previousId();
+        for (RawdataMessage message : leftover.messages()) {
+            lastId = AvroSegments.greatest(lastId, message.id());
+        }
         if (leftover.segment() <= tail.segment()) {
             Optional<byte[]> stored = store.read(topic, leftover.segment());
             if (sealed && stored.isPresent() && Arrays.equals(stored.get(), content)) {

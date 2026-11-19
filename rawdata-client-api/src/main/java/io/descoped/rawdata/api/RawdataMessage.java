@@ -143,8 +143,8 @@ public sealed interface RawdataMessage permits RawdataDefaultMessage {
 
         /**
          * Sets the id. Without one, the producer assigns an id when it publishes the message; that id is greater
-         * than every id already in the topic. A given id must be greater than every id already in the topic, or the
-         * publish is refused. A copy of a message keeps its id, so a copied topic keeps its order.
+         * than every id already in the topic. A given id is kept as it is, in any order: it may be lower than ids
+         * already in the topic. Ids must be unique, which is the caller's to keep. A copy of a message keeps its id.
          *
          * @param id a UUIDv7, or null to let the producer assign one
          * @return this builder

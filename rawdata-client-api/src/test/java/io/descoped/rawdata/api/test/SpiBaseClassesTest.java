@@ -227,7 +227,7 @@ class SpiBaseClassesTest {
     }
 
     /**
-     * A producer that keeps what it writes in a list, after the last id of the list.
+     * A producer that keeps what it writes in a list, after the greatest id of the list.
      */
     private class ListProducer extends OrderedRawdataProducer {
 
@@ -242,7 +242,10 @@ class SpiBaseClassesTest {
 
         @Override
         protected synchronized void write(RawdataMessage[] batch) {
-            UUID last = store.isEmpty() ? RawdataIds.beginningOfTime() : store.get(store.size() - 1).id();
+            UUID last = RawdataIds.beginningOfTime();
+            for (RawdataMessage message : store) {
+                last = RawdataIds.ORDER.compare(message.id(), last) > 0 ? message.id() : last;
+            }
             store.addAll(withIds(batch, last));
         }
 
@@ -263,7 +266,7 @@ class SpiBaseClassesTest {
     }
 
     @Test
-    void idsAreGivenAfterTheLastAndGivenIdsAreChecked() {
+    void idsAreGivenAfterTheGreatestAndGivenIdsAreKept() {
         ListProducer producer = new ListProducer();
         producer.publish(RawdataMessage.builder().position("a").build(), RawdataMessage.builder().position("b").build());
         UUID given = RawdataIds.next(producer.store.get(1).id());
@@ -273,9 +276,11 @@ class SpiBaseClassesTest {
         for (int i = 1; i < producer.store.size(); i++) {
             assertTrue(RawdataIds.ORDER.compare(producer.store.get(i - 1).id(), producer.store.get(i).id()) < 0);
         }
-        RawdataMessage repeated = RawdataMessage.builder().id(given).position("d").build();
-        assertThrows(IllegalArgumentException.class, () -> producer.publish(repeated));
-        assertEquals(3, producer.store.size());
+        UUID lower = producer.store.get(0).id();
+        producer.publish(RawdataMessage.builder().id(lower).position("d").build(), RawdataMessage.builder().position("e").build());
+        assertEquals(5, producer.store.size());
+        assertEquals(lower, producer.store.get(3).id(), "a lower given id is kept as it is");
+        assertTrue(RawdataIds.ORDER.compare(producer.store.get(4).id(), given) > 0, "a generated id follows the greatest");
         assertEquals("t", producer.topic());
     }
 

@@ -123,15 +123,14 @@ Topics are copied one after the other, in the order given.
 
 ### Ids, order and the end of a topic
 
-Rawdata ids are UUIDv7, ordered by `RawdataIds.ORDER`, and a topic only grows at its end: a message published with
-an id must have an id greater than every id already in the topic (see [Ids and order](../contract.md#ids-and-order)).
-The tool publishes every message with its source id. The target topic therefore gets the same messages, with the same
-ids, in the same order as the source.
+Rawdata ids are UUIDv7, ordered by `RawdataIds.ORDER` (see [Ids and order](../contract.md#ids-and-order)). The tool
+publishes every message with its source id, in the order it reads them. The target topic therefore gets the same
+messages, with the same ids, in the source's read order.
 
 ### Resuming after the target's last id
 
-Because the target only grows at its end and the ids are kept, the target's last message says exactly how far an
-earlier copy came. Before it copies a topic, the tool reads the target topic's last message
+Because the ids are kept and the target is written in the source's read order, the target's last message says how
+far an earlier copy came. Before it copies a topic, the tool reads the target topic's last message
 (`RawdataClient.lastMessage`). If there is one, the copy starts at the first source message after that id. That is
 what makes a copy safe to run again: after a failure, after a crash, or to pick up what the source received since.
 
@@ -426,10 +425,10 @@ what the target has. Typical causes:
 - `IllegalArgumentException` from a metadata `put`: the key is longer than the target allows, for example a key over
   127 bytes copied from `postgres` to `filesystem` (see [Metadata](../contract.md#metadata)). The messages are
   copied; copy without `--metadata`, or shorten the keys in the source.
-- `IllegalArgumentException`, "is not greater than the last id": the target already holds messages the tool tried
-  to publish again. This can happen once after a crash of a run into a `filesystem`, `gcs` or `s3` target: the next
-  run reads the target's end before its first publish, and that publish first uploads the windows the crashed run
-  left behind. Run again; it then starts after them.
+- Messages copied twice into a `filesystem`, `gcs` or `s3` target: after a crash of a run, the next run reads the
+  target's end before its first publish, and that publish first uploads the windows the crashed run left behind, so
+  the messages in them are copied again. Ids are not checked for duplicates, as in 2.x. A `postgres` target refuses
+  the duplicate ids with `RawdataException`; run again, and it starts after them.
 
 **Exit 1, `interrupted; run again to continue`.** The thread was interrupted while it waited for the source.
 

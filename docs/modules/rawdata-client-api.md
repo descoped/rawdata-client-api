@@ -184,16 +184,13 @@ ids.sort(RawdataIds.ORDER);            // right
 ids.sort(Comparator.naturalOrder());   // wrong for ids: UUID.compareTo is signed
 ```
 
-A topic only grows at its end:
-
 - An id the producer assigns is greater than every id already in the topic, also when several messages are made in
   one millisecond and when the clock moves back (see [`RawdataIds.next`](#how-ids-are-assigned)).
-- An id you give must be greater than every id already in the topic, and than the id before it in the same call.
-  Otherwise `publish` throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the
-  ids of their source.
+- An id you give is kept as it is, in any order, as in 2.x: it may be lower than ids already in the topic. Ids must
+  be unique; `memory` replaces a message with the same id.
 
-That is why a consumer that has read up to some id never misses a message published later: nothing can be inserted
-before the end.
+A consumer of a topic that is still written may miss a message whose id lands behind its position. A completed
+topic, read from the beginning, gives every message once (see [Ids and order](../contract.md#ids-and-order)).
 
 ### Producer
 
@@ -441,7 +438,7 @@ module pages.
 
 | Exception | Thrown when |
 |---|---|
-| `IllegalArgumentException` | an invalid topic name; a given id that is not a UUIDv7 or not greater than the id before it; a NUL in a position, ordering group, content key or metadata key; a metadata key longer than the store takes; a cursor from another provider; `maxMessages` below 1 or a negative timeout; a missing `rawdata.client.provider` or a missing required provider key |
+| `IllegalArgumentException` | an invalid topic name; a given id that is not a UUIDv7; a NUL in a position, ordering group, content key or metadata key; a metadata key longer than the store takes; a cursor from another provider; `maxMessages` below 1 or a negative timeout; a missing `rawdata.client.provider` or a missing required provider key |
 | `NullPointerException` | a null topic, key, value, payload, message or configuration map |
 | `RawdataException` | the base of the failures below; also a store that does not exist or fails |
 | `RawdataClosedException` | any use of a client, producer, consumer or metadata client after it, or its client, was closed |
@@ -463,9 +460,6 @@ subclasses are for the store and the operation. A `RawdataException` is unchecke
 - **`IllegalArgumentException: Invalid topic name ...`.** The name has a character outside `A-Z a-z 0-9 _ . -`,
   starts with `_ . -`, or is longer than 100. Map your own names to valid ones, for example by replacing `/` with
   `.`.
-- **`IllegalArgumentException: Id ... is not greater than the last id in topic ...`.** You gave ids (or copied
-  messages) into a topic that already has later ids. Start the copy after the target's last id, or let the producer
-  assign ids by not setting them.
 - **`IllegalArgumentException: Not a UUIDv7`.** An id from `UUID.randomUUID()` (version 4) or another generator. Use
   `RawdataIds.generate()`, or leave the id unset.
 - **`IllegalArgumentException: position cannot be null`.** Every message needs `position(...)` before `build()`.

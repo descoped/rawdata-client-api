@@ -273,7 +273,7 @@ A subclass may add its own `@BeforeAll` or `@AfterAll`, for example to remove te
 | Area | What is checked |
 |---|---|
 | Reading and writing | an unknown topic is empty; `lastMessage` follows the publishes; every field (id, ordering group, sequence number, position, content in order) survives; a message without content and empty and 1 MiB payloads survive; content is copied in and out; `receive` waits for a later message and returns null on timeout |
-| Order | one producer's messages are read in publish order; producers that follow each other keep the order within one millisecond; a generated id follows a given one; a given id not greater than the topic's last (or than the id before it in the call) is refused with `IllegalArgumentException` and nothing of the call is written; four parallel producers lose nothing, ids strictly increase by `RawdataIds.ORDER`, and each producer's order is kept |
+| Order | one producer's messages are read in publish order; producers that follow each other keep the order within one millisecond; a generated id follows a given one and the greatest id; given ids in any order are kept, and a reader of the whole topic gets every message once; four parallel producers lose nothing, ids strictly increase by `RawdataIds.ORDER`, and each producer's order is kept |
 | Asynchronous calls | `publishAsync` and `receiveAsync` |
 | Consumers | two consumers read independently; `receiveUpTo` returns at most the number asked for and continues where it stopped |
 | Starting points | after or at a position, after or at an id; a position is found with a tolerance of zero; an unknown position throws `RawdataNoSuchPositionException`; `seek` moves to the first message at or after a time, among many publishes too |

@@ -14,11 +14,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Publishes a call's messages in one transaction that holds the topic's advisory lock: it reads the topic's last id,
- * gives new ids after it and checks given ids against it, so a consumer that has read up to an id never misses a
- * message committed later. Only one process writes a topic: if the last id is not the last this client wrote (after
- * its first publish to the topic), another process wrote, and the publish fails with
- * {@link RawdataWriterConflictException}, writing nothing.
+ * Publishes a call's messages in one transaction that holds the topic's advisory lock: it reads the topic's greatest
+ * id and gives new ids after it; given ids are stored as they are, in any order. Only one process writes a topic: if
+ * the greatest id is not the greatest this client wrote (after its first publish to the topic), another process
+ * wrote, and the publish fails with {@link RawdataWriterConflictException}, writing nothing.
  */
 final class PostgresRawdataProducer extends OrderedRawdataProducer {
 
@@ -45,7 +44,7 @@ final class PostgresRawdataProducer extends OrderedRawdataProducer {
                 }
                 List<RawdataMessage> messages = withIds(batch, last);
                 PostgresMessages.insert(connection, topic, messages);
-                return messages.get(messages.size() - 1).id();
+                return greatest(last, messages);
             });
             client.written(topic, wrote);
         } finally {

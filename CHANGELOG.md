@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0.1
+
+- Given ids are kept as they are, in any order, as in 2.x. 3.0.0 refused a given id that was not greater than the
+  topic's last with `IllegalArgumentException`; an application that makes its ids before it publishes, from several
+  threads, can publish them as they come again. Generated ids still follow the topic's greatest id. `publish` no
+  longer throws `IllegalArgumentException` for such an id: an application that relied on that refusal (to notice a
+  copy run twice, for example) no longer gets it.
+- A consumer of a topic that is still written gets no guarantee of arrival: it may miss a message whose id lands
+  behind its position. A completed topic, read from the beginning, gives every message once. `lastMessage` is the last
+  message such a reader gets.
+- Duplicate ids are not checked, as in 2.x: `memory` replaces the message, `postgres` refuses it with
+  `RawdataException` (its primary key), the Avro providers store both.
+- `filesystem`, `gcs` and `s3`: a segment keeps the order messages were published in. Its header's `rawdata.first-id`
+  is the segment's lowest id and `rawdata.last-id` the topic's greatest id up to and with it. A consumer started from
+  a cursor finds the message with the cursor's id and reads everything after it in segment order, as 2.x did.
+  `cursorOf(topic, position, …)` stops at the first id past its time range, as 2.x did, so it does not find a message
+  published after a higher id.
+
 ## 3.0.0
 
 A clean break from 2.x: the modules now live in one repository and are released together; ids, the reading API,

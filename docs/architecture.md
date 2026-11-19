@@ -60,7 +60,7 @@ An id is a UUIDv7 (`RawdataIds`), with the layout PostgreSQL 18's `uuidv7()` use
 `RawdataIds.ORDER` compares ids as unsigned 128-bit numbers, the order PostgreSQL sorts `uuid` in. `UUID.compareTo`
 is signed, and is never used for ids.
 
-A topic only grows at its end, and only one process writes it. A provider must keep the producers of its client in
+Only one process writes a topic. A provider must keep the producers of its client in
 order, and must notice when another process wrote: a client remembers where it last wrote a topic (before its first
 publish, where the topic ended), and a publish that finds more after that throws `RawdataWriterConflictException`
 and writes nothing. The providers do it in two ways.
@@ -116,8 +116,8 @@ see [recovery](modules/rawdata-client-provider-avro.md#recovery-after-a-crash).
 #### Reading large segments in ranges
 
 A segment can be as large as `avro-file.max.bytes` (64 MiB by default), so nothing reads one whole:
-- **The header's summary.** Each segment's Avro header holds its first id, last id, count and the offset of its last
-  block (`rawdata.first-id`, `rawdata.last-id`, `rawdata.count`, `rawdata.last-block`), as 2.x's file name did. A
+- **The header's summary.** Each segment's Avro header holds its lowest id, the topic's greatest id up to and with
+  it, its count and the offset of its last block (`rawdata.first-id`, `rawdata.last-id`, `rawdata.count`, `rawdata.last-block`), as 2.x's file name did. A
   window's header is written when it opens, so these are fixed-width placeholders, filled in place when it is sealed.
 - **Seek** reads one header per step of its binary search: a metadata request (the size and the pin) and one range
   of 8 KiB.
@@ -158,4 +158,5 @@ closed object throws `RawdataClosedException`, except `isClosed` and `close`.
 
 `RawdataCopyTool` reads `source.*` and `target.*` configurations and opens a client on each. For each topic, it
 starts a consumer after the target's last id and runs `RawdataCopy.copy`, which publishes in batches with the source's
-ids. Because a target topic only grows at its end and the ids are kept, a copy that stopped can be run again.
+ids. Because the ids are kept and the target is written in the source's read order, a copy that stopped can be run
+again.
