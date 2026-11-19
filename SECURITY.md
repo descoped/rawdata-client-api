@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release gets security fixes. 3.0.0 is in progress; until it is released, fixes go to `master`.
+Only the latest release gets security fixes.
 
 ## Reporting a vulnerability
 

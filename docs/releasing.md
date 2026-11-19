@@ -24,7 +24,7 @@ All modules share one version, and a tag is the bare version, for example `3.0.0
 ## The steps
 
 ```sh
-./mvnw release:prepare            # sets 3.0.0, tags 3.0.0, sets the next SNAPSHOT
+./mvnw release:prepare            # sets the release version, tags it, sets the next SNAPSHOT
 ./mvnw release:perform            # builds the tag with -P central,sign and uploads the bundle
 ```
 
