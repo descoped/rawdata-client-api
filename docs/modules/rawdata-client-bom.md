@@ -17,9 +17,6 @@ This page also covers `rawdata-client-project`, the parent POM of every module, 
 | version | the rawdata release, for example `3.0.0`; every module of a release has the same version |
 | JPMS module | none: a BOM holds no classes |
 
-3.0.0 is not released yet. Nothing is published as a SNAPSHOT, so until the release, build the repository with
-`./mvnw install` and use `3.0.0-SNAPSHOT` from your local repository.
-
 ## Quick start
 
 ### Maven
@@ -83,7 +80,7 @@ To check what you got: `mvn dependency:tree` or `gradle dependencies --configura
 Importing the BOM adds no dependency to your build. It only says "if you use one of these artifacts, use this
 version". You still list each module you need, without a `<version>`. This matters because the modules of a release
 are built and tested together and depend on each other with exactly the same version (`${project.version}`): an API
-from one release with a provider from another is a combination nobody tested, and with a clean break such as 3.0.0
+from one release with a provider from another is a combination nobody tested, and across a major version
 it may not even load.
 
 ### What the BOM manages
@@ -179,7 +176,7 @@ The BOM has no configuration keys. The only choice is its version.
 | Symptom | Cause and fix |
 |---|---|
 | `'dependencies.dependency.version' for io.descoped.rawdata:… is missing` | The BOM is not imported, or it is under `<dependencies>` instead of `<dependencyManagement>`, or `<type>pom</type>` or `<scope>import</scope>` is missing. |
-| Maven cannot resolve `rawdata-client-bom:3.0.0-SNAPSHOT` | SNAPSHOTs are never published. Run `./mvnw install` in this repository first, or use a released version. |
+| Maven cannot resolve a `-SNAPSHOT` version of `rawdata-client-bom` | SNAPSHOTs are never published. Run `./mvnw install` in this repository first, or use a released version. |
 | Maven cannot resolve `rawdata-client-project` | The parent POM is needed to read the BOM. It is published with every release; with a SNAPSHOT, `./mvnw install` from the repository root installs it. |
 | Maven cannot resolve `rawdata-copy-util` | It is not on Central and not in the BOM. Download the zip from the GitHub release. |
 | A rawdata module shows a different version in `dependency:tree` | Something manages it before the BOM: an entry of your own in `dependencyManagement`, or another BOM imported earlier. Remove it, or list the rawdata BOM first. |

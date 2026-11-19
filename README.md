@@ -77,9 +77,6 @@ enough:
 </dependencies>
 ```
 
-3.0.0 is not released yet, and nothing is published as a SNAPSHOT. Until the release, build this repository with
-`./mvnw install` and use `3.0.0-SNAPSHOT` from your local Maven repository.
-
 ### Publish and read
 
 The `memory` provider is in the API module, so this runs with no store:
@@ -161,7 +158,7 @@ cd rawdata-client-project
 ./mvnw verify                    # compile with -Xlint:all -Werror, tests
 ./mvnw verify javadoc:javadoc    # plus Javadoc with doclint, warnings fail the build
 ./mvnw verify -P coverage        # JaCoCo report per module in <module>/target/site/jacoco
-./mvnw install                   # put 3.0.0-SNAPSHOT in your local repository, to use it from another project
+./mvnw install                   # install every module in your local repository
 ```
 
 To work on one module and what it needs: `./mvnw verify -pl rawdata-client-provider-postgres -am`.
@@ -232,8 +229,7 @@ Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do no
 
 ## Changelog
 
-What changed in each release is in the [CHANGELOG](CHANGELOG.md). 3.0.0 is a clean break from 2.x: it does not
-read data written by 2.x.
+What changed in each release is in the [CHANGELOG](CHANGELOG.md).
 
 ## History
 

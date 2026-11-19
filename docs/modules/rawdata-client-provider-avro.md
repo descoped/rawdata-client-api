@@ -33,9 +33,7 @@ in a provider of your own.
 ```
 
 It brings Apache Avro, and declares slf4j-api, Jackson (core and databind) and commons-codec itself at the newest
-version, excluded from Avro, so that each resolves to one version (see [dependencies](../dependencies.md)). 3.0.0 is
-not released yet, and nothing is published as a SNAPSHOT: until the release, build the repository with
-`./mvnw install` and use `3.0.0-SNAPSHOT` from your local repository.
+version, excluded from Avro, so that each resolves to one version (see [dependencies](../dependencies.md)).
 
 ## Quick start
 

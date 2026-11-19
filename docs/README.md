@@ -3,8 +3,7 @@
 The rawdata client writes and reads ordered streams of raw data messages, with one API over PostgreSQL, a local
 folder, Google Cloud Storage and Amazon S3. These pages take you from your first topic to how every part works.
 
-3.0.0 is a clean break from 2.x: ids, storage layouts and configuration keys changed, and 3.0 does not read data
-written by 2.x. See the [CHANGELOG](../CHANGELOG.md).
+What changed in each release is in the [CHANGELOG](../CHANGELOG.md).
 
 ## Start here
 
