@@ -6,7 +6,7 @@
 
 A Java library for writing and reading ordered streams of raw data messages, with one API over several stores.
 
-A **topic** is a stream of messages ordered by id, a UUIDv7 laid out as PostgreSQL 18's `uuidv7()`. Each message has
+A **topic** is a stream of messages, each with an id, a UUIDv7 laid out as PostgreSQL 18's `uuidv7()`. Each message has
 your own position (for example a key in the source system), optional ordering fields, and named binary content. Every
 topic also has a small metadata store, for example for checkpoints. Applications code against `RawdataClient` and
 choose the store by configuration: PostgreSQL, Avro files in a folder, Google Cloud Storage or Amazon S3. Consumers

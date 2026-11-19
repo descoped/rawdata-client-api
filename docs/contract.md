@@ -81,8 +81,8 @@ behind its position. A consumer of a completed topic, read from the beginning, g
 
 ## Reading
 
-A consumer reads one topic in id order, from a starting point, and is pulled by the caller: nothing arrives until it
-asks, so it takes only as much as it can handle.
+A consumer reads one topic from a starting point, in the order given under [Ids and order](#ids-and-order), and is
+pulled by the caller: nothing arrives until it asks, so it takes only as much as it can handle.
 
 | Call | Does |
 |---|---|

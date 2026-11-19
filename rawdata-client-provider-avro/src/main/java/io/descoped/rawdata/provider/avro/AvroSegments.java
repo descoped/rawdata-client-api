@@ -33,8 +33,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * The Avro file of a segment: one record per message, in id order, with the schema of 2.x. Only the id's fixed type
- * is named {@code uuid} instead of {@code ulid}: the 16 bytes are a UUIDv7. A message's content is the map
+ * The Avro file of a segment: one record per message, in publish order, with the schema of 2.x. Only the id's fixed
+ * type is named {@code uuid} instead of {@code ulid}: the 16 bytes are a UUIDv7. A message's content is the map
  * {@code data}; its entries are written in the order they were put and read back in that order.
  * <p>
  * The file's header carries what a reader needs without reading the messages, as 2.x's file name did:

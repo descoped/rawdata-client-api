@@ -324,9 +324,9 @@ Read more: [concepts: visibility and durability](concepts.md#visibility-and-dura
 
 ## Step 5: read a topic
 
-A consumer reads one topic in id order, from a starting point, and is **pulled**: nothing arrives until you ask.
-`receiveUpTo(max, timeout)` waits up to the timeout for the first message, then takes what is there at once, up to
-`max`, and returns an empty list if nothing came.
+A consumer reads one topic from a starting point, in id order when the ids were published in increasing order, and is
+**pulled**: nothing arrives until you ask. `receiveUpTo(max, timeout)` waits up to the timeout for the first message,
+then takes what is there at once, up to `max`, and returns an empty list if nothing came.
 
 Create `src/main/java/com/example/tutorial/Read.java`:
 
@@ -526,8 +526,9 @@ Read more: [concepts: cursor and seek](concepts.md#cursor-and-seek),
 
 ## Step 8: read the last message
 
-`client.lastMessage(topic)` returns the message with the greatest id, or null for an empty topic. It is cheap in every
-provider, and it is where a writer or a copy continues.
+`client.lastMessage(topic)` returns the last message a reader of the whole topic gets, or null for an empty topic.
+With ids published in increasing order, that is the one with the greatest id. It is cheap in every provider, and it is
+where a writer or a copy continues.
 
 Create `src/main/java/com/example/tutorial/Last.java`:
 
