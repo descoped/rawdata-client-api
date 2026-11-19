@@ -95,8 +95,8 @@ add a library.
 - Update the docs in the same pull request as the code: the module's page in [`docs/modules/`](docs/modules), and
   [concepts](docs/concepts.md), [the contract](docs/contract.md) or [the tutorial](docs/tutorial.md) when what an
   application sees changes.
-- Add a line to the [CHANGELOG](CHANGELOG.md), in the section of the next release, for every change an application
-  or a contributor notices.
+- Add a line to the [CHANGELOG](CHANGELOG.md), in the next release's section at the top (start one if there is none),
+  for every change an application or a contributor notices.
 - Write as the existing docs do: plain, direct English, short sentences, Markdown wrapped at 120 characters, headings
   in sentence case. Every claim must be true of the code.
 
