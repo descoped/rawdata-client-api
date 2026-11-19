@@ -249,7 +249,8 @@ Apache 2.0:
   `rawdata-client-api/2.0.0`). 3.0.0 is the first version built here.
 
 Ove Ranheim created the client, and [Kim Christian Gaarder](https://github.com/kimcs) was its main co-author. Rupinder
-Kaur, Hadrien Kohl, Øyvind Strømmen and other SSB colleagues contributed; `git log` has every contribution.
+Kaur wrote the Kafka provider, since retired. Hadrien Kohl, Øyvind Strømmen and other SSB colleagues contributed;
+`git log` has every contribution.
 
 ## License
 
