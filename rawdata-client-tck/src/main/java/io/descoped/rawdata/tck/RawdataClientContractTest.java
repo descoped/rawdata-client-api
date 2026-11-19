@@ -379,26 +379,56 @@ public abstract class RawdataClientContractTest {
     }
 
     /**
-     * A given id that is not greater than every id before it is refused, and nothing of the call is written.
+     * A given id is kept as it is, in any order, as in 2.x: it may be lower than ids already in the topic, and lower
+     * than the one before it in the same call. A reader of the whole topic gets every message once; where a late id is
+     * read is up to the provider (in id order, or after what was published before it).
+     *
+     * @throws InterruptedException if interrupted while waiting
      */
     @Test
-    public void givenIdNotGreaterThanTheTopicsIsRefused() {
+    public void givenIdsInAnyOrderAreKept() throws InterruptedException {
         publish("a");
         RawdataMessage last = client.lastMessage(topic);
-        UUID lower = RawdataIds.beginningOf(last.timestamp());
-        RawdataMessage equal = RawdataMessage.builder().id(last.id()).position("equal").build();
-        RawdataMessage before = RawdataMessage.builder().id(lower).position("lower").build();
-        RawdataMessage fresh = RawdataMessage.builder().position("fresh").build();
+        UUID lower = RawdataIds.beginningOf(last.timestamp() - 1);
         UUID ahead = RawdataIds.next(last.id());
-        RawdataMessage first = RawdataMessage.builder().id(RawdataIds.next(ahead)).position("first").build();
-        RawdataMessage second = RawdataMessage.builder().id(ahead).position("second").build();
         try (RawdataProducer producer = client.producer(topic)) {
-            assertThrows(IllegalArgumentException.class, () -> producer.publish(equal));
-            assertThrows(IllegalArgumentException.class, () -> producer.publish(fresh, before));
-            assertThrows(IllegalArgumentException.class, () -> producer.publish(first, second), "ids must increase within a call too");
+            producer.publish(RawdataMessage.builder().id(lower).position("lower").build());
+            producer.publish(RawdataMessage.builder().id(RawdataIds.next(ahead)).position("first").build(),
+                    RawdataMessage.builder().id(ahead).position("second").build());
         }
-        assertEquals("a", client.lastMessage(topic).position());
-        assertEquals(last, client.lastMessage(topic));
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            List<String> read = readAll(consumer);
+            read.sort(null);
+            assertEquals(List.of("a", "first", "lower", "second"), read);
+        }
+    }
+
+    /**
+     * An id the producer gives follows the greatest id in the topic, also after a given id lower than it.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    @Test
+    public void generatedIdsFollowTheGreatestId() throws InterruptedException {
+        publish("a");
+        RawdataMessage last = client.lastMessage(topic);
+        UUID high = RawdataIds.next(RawdataIds.next(last.id()));
+        try (RawdataProducer producer = client.producer(topic)) {
+            producer.publish(RawdataMessage.builder().id(high).position("high").build());
+            producer.publish(RawdataMessage.builder().id(RawdataIds.beginningOf(last.timestamp() - 1)).position("late").build());
+            producer.publish(RawdataMessage.builder().position("fresh").build());
+        }
+        try (RawdataConsumer consumer = client.consumer(topic)) {
+            RawdataMessage message;
+            UUID fresh = null;
+            while ((message = consumer.receive(1, TimeUnit.SECONDS)) != null) {
+                if (message.position().equals("fresh")) {
+                    fresh = message.id();
+                }
+            }
+            assertNotNull(fresh);
+            assertTrue(RawdataIds.ORDER.compare(fresh, high) > 0, "a generated id follows the greatest given one");
+        }
     }
 
     /**
@@ -746,19 +776,16 @@ public abstract class RawdataClientContractTest {
     }
 
     /**
-     * A publish whose batch is refused (a given id not after the topic's last) writes nothing of the batch, and the
-     * writer goes on.
+     * A publish whose batch is refused (a null message) writes nothing of the batch, and the writer goes on.
      *
      * @throws InterruptedException if interrupted while waiting
      */
     @Test
     public void aRefusedBatchWritesNothing() throws InterruptedException {
         publish("a");
-        UUID last = client.lastMessage(topic).id();
         try (RawdataProducer producer = client.producer(topic)) {
             RawdataMessage fine = message("b", 3);
-            RawdataMessage stale = RawdataMessage.builder().id(last).position("stale").build();
-            assertThrows(IllegalArgumentException.class, () -> producer.publish(fine, stale));
+            assertThrows(NullPointerException.class, () -> producer.publish(fine, null));
             assertEquals("a", client.lastMessage(topic).position());
             producer.publish(message("c"));
         }

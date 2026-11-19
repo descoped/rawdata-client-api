@@ -1,6 +1,7 @@
 package io.descoped.rawdata.provider.postgres.test;
 
 import io.descoped.rawdata.api.RawdataClient;
+import io.descoped.rawdata.api.RawdataException;
 import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import io.descoped.rawdata.api.RawdataProducer;
@@ -179,8 +180,8 @@ class PostgresProviderTest {
             producer.publish(RawdataMessage.builder().position("a").build());
             UUID last = client.lastMessage(topic).id();
             RawdataMessage fine = RawdataMessage.builder().position("b").put("k", new byte[]{1}).build();
-            RawdataMessage stale = RawdataMessage.builder().id(last).position("stale").build();
-            assertThrows(IllegalArgumentException.class, () -> producer.publish(fine, stale));
+            RawdataMessage duplicate = RawdataMessage.builder().id(last).position("duplicate").build();
+            assertThrows(RawdataException.class, () -> producer.publish(fine, duplicate), "the primary key refuses a duplicate id");
             try (Connection connection = Postgres18.connect();
                  PreparedStatement select = connection.prepareStatement(
                          "SELECT (SELECT count(*) FROM rawdata_message WHERE topic = ?), (SELECT count(*) FROM rawdata_content WHERE topic = ?)")) {

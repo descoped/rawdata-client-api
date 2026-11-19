@@ -86,21 +86,21 @@ PostgreSQL 18's `uuidv7()` lays it out:
 ```
 
 The order of a topic is `RawdataIds.ORDER`: the 128 bits compared as an unsigned number, the order PostgreSQL sorts
-`uuid` values in. A topic only grows at its end:
+`uuid` values in.
 
 - An id the producer assigns is greater than every id in the topic. `RawdataIds.next(previous)` makes it: an id for
   now if that is greater than the previous one, otherwise the previous id plus one. So ids keep increasing also
   within one millisecond and when the clock moves back.
-- An id you give must be greater than every id in the topic, and than the id before it in the same call. Otherwise
-  the whole `publish` throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the
-  ids of their source.
+- An id you give is kept as it is, in any order, as in 2.x. An application that makes its ids before it publishes,
+  from several threads, publishes them as they come. Ids must be unique, which is the caller's to keep.
 
 `RawdataIds` also has `generate()`, `isValid(id)`, `timestamp(id)`, `beginningOf(millis)` (the smallest id of a
 millisecond) and `beginningOfTime()`.
 
 **Why.** An id that starts with the time sorts by time, so a topic in id order is a topic in time order, and a time
-is easy to turn into a starting point. A topic that only grows at its end means a consumer that has read up to some
-id never misses a message published later: nothing can be inserted before the end. The layout is PostgreSQL's so the
+is easy to turn into a starting point. A consumer of a topic that is still written gets no guarantee of arrival: a
+message whose id lands behind its position is not read by it. A completed topic, read from the beginning, gives every
+message once. The layout is PostgreSQL's so the
 `postgres` provider can order, index and compare ids in the database the way the API does.
 
 **Pitfall.** Never sort ids with `UUID.compareTo`, a `TreeMap<UUID, ?>` without a comparator, or
@@ -529,8 +529,8 @@ segment](modules/rawdata-client-provider-filesystem.md#writing-a-segment-a-tempo
 
 **What.** A segment is an uncompressed Avro container file of records in the 2.x `RawdataMessage` schema (`id`
 `fixed(16)` named `uuid`, `orderingGroup`, `sequenceNumber`, `position`, `data` a map of bytes). Its header carries a
-summary: `rawdata.first-id`, `rawdata.last-id`, `rawdata.count` and `rawdata.last-block` (the byte offset of the last
-block), filled in when the window is sealed, and `rawdata.segment` and `rawdata.previous-id` for recovery.
+summary: `rawdata.first-id` (the segment's lowest id), `rawdata.last-id` (the topic's greatest id up to and with the
+segment), `rawdata.count` and `rawdata.last-block` (the byte offset of the last block), filled in when the window is sealed, and `rawdata.segment` and `rawdata.previous-id` for recovery.
 
 Readers use the summary so they never read a whole segment to find something:
 

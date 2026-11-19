@@ -232,6 +232,45 @@ class AvroRangedReadTest {
     }
 
     /**
+     * Ids given out of order, as in 2.x: a segment keeps publish order, its header keeps its lowest id and the topic's
+     * greatest so far, and a cursor at a message reads everything published after it, also a lower id in a later
+     * segment.
+     *
+     * @throws IOException if reading a header fails
+     */
+    @Test
+    void aCursorReadsWhatWasPublishedAfterItsMessageAlsoLowerIds() throws IOException {
+        CountingStore store = new CountingStore();
+        UUID early = io.descoped.rawdata.api.RawdataIds.next(io.descoped.rawdata.api.RawdataIds.beginningOf(1_000_000L));
+        UUID b;
+        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30, 16), 10)) {
+            RawdataProducer producer = client.producer(TOPIC);
+            producer.publish(message("a"), message("b"));
+            client.flush(TOPIC);
+            b = client.lastMessage(TOPIC).id();
+            producer.publish(RawdataMessage.builder().id(early).position("late").build(), message("c"));
+            client.flush(TOPIC);
+            assertEquals("c", client.lastMessage(TOPIC).position(), "the last message is the last one read");
+            try (DataFileStream<GenericRecord> second = AvroSegments.reader(new ByteArrayInputStream(store.segments.get(1L)))) {
+                AvroSegments.Summary summary = AvroSegments.summary(second);
+                assertEquals(early, summary.firstId(), "the lowest id of the segment");
+                assertTrue(io.descoped.rawdata.api.RawdataIds.ORDER.compare(summary.lastId(), b) > 0, "the topic's greatest id");
+            }
+        }
+        try (AvroRawdataClient reader = client(store);
+             RawdataConsumer consumer = reader.consumer(TOPIC, reader.cursorOf(TOPIC, b, false))) {
+            assertEquals("late", receive(consumer).position());
+            assertEquals("c", receive(consumer).position());
+            assertNull(receive(consumer));
+        }
+        try (AvroRawdataClient reader = client(store);
+             RawdataConsumer consumer = reader.consumer(TOPIC, reader.cursorOf(TOPIC, early, false))) {
+            assertEquals("c", receive(consumer).position(), "a cursor at the late message goes on after it");
+            assertNull(receive(consumer));
+        }
+    }
+
+    /**
      * A message may hold any bytes, also the header's own keys: filling in the summary searches the header only.
      *
      * @throws IOException if encoding fails

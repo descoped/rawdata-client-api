@@ -29,27 +29,26 @@ final class MemoryRawdataTopic {
     }
 
     /**
-     * Writes messages under one lock, so a batch is atomic and generated ids follow the topic's last id. A given id
-     * must be greater than every id before it; otherwise nothing of the batch is written.
+     * Writes messages under one lock, so a batch is atomic and generated ids follow the topic's greatest id. A given id
+     * is kept as it is, in any order; one that is already in the topic replaces that message, as in 2.x.
      */
     void publish(RawdataMessage[] batch) {
         lock.lock();
         try {
-            UUID previous = messages.isEmpty() ? RawdataIds.beginningOfTime() : messages.lastKey();
+            UUID greatest = messages.isEmpty() ? RawdataIds.beginningOfTime() : messages.lastKey();
             RawdataMessage[] stored = new RawdataMessage[batch.length];
             for (int i = 0; i < batch.length; i++) {
                 RawdataMessage message = batch[i];
                 UUID id = message.id();
                 if (id == null) {
-                    id = RawdataIds.next(previous);
+                    id = RawdataIds.next(greatest);
                     stored[i] = message.copy().id(id).build();
-                } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
-                    stored[i] = message;
                 } else {
-                    throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
-                            + " is not greater than the last id in topic " + name + ": " + previous);
+                    stored[i] = message;
                 }
-                previous = id;
+                if (RawdataIds.ORDER.compare(id, greatest) > 0) {
+                    greatest = id;
+                }
             }
             for (RawdataMessage message : stored) {
                 messages.put(message.id(), message);

@@ -9,10 +9,14 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 
 /**
- * Reads a topic segment by segment and polls for the next; an upload through the same client wakes it at once. A
- * segment is streamed in ranges, so only one range of it is in memory, and at most {@value #BATCH} messages are
- * buffered at a time. A start position (a cursor or a seek) is a lower bound on the ids: the consumer finds the first
- * segment that reaches it, reading only segment headers, and skips the messages before it.
+ * Reads a topic segment by segment, each in the order its messages were published, and polls for the next; an upload
+ * through the same client wakes it at once. A segment is streamed in ranges, so only one range of it is in memory, and
+ * at most {@value #BATCH} messages are buffered at a time.
+ * <p>
+ * Ids may be given in any order, so segments may overlap in ids. A start from a cursor works as 2.x did: the consumer
+ * finds the message with the cursor's id, reading segment headers to skip the segments that cannot hold it, and reads
+ * everything after it in segment order, also a lower id published later. If no uploaded message has the id, and on a
+ * seek, it starts at the first message whose id is at or past the bound, from the first segment that reaches it.
  */
 final class AvroRawdataConsumer extends PollingRawdataConsumer {
 
@@ -20,10 +24,12 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
 
     private final AvroRawdataClient client;
     private AvroSegmentReader reader; // guarded by the turn: the segment being read, null between segments
-    private UUID delivered; // guarded by the turn: the id of the last message put in the buffer
     private long next = -1; // guarded by the turn: the segment to read next; -1 until the start is found
-    private UUID from; // guarded by the turn: the lower bound on ids, null once passed
+    private long read; // guarded by the turn: how many messages of the open segment were read
+    private long skip; // guarded by the turn: how many to skip when the segment is opened again after a failure
+    private UUID from; // guarded by the turn: where to start, null once started
     private boolean fromInclusive; // guarded by the turn
+    private boolean exact; // guarded by the turn: start at the message with the id `from`, found in segment `next`
 
     AvroRawdataConsumer(AvroRawdataClient client, String topic, AvroCursor start, long pollIntervalMillis) {
         super(topic, pollIntervalMillis);
@@ -33,13 +39,18 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
         } else {
             from = start.id;
             fromInclusive = start.inclusive;
+            exact = true;
         }
     }
 
     @Override
     protected void fill(Deque<RawdataMessage> buffer) {
         if (next < 0) {
-            next = client.firstSegmentReaching(topic(), from);
+            next = exact ? client.segmentThatMayHold(topic(), from, 0) : -1;
+            if (next < 0) {
+                exact = false;
+                next = client.firstSegmentReaching(topic(), from);
+            }
         }
         while (buffer.isEmpty()) {
             if (reader == null) {
@@ -56,35 +67,58 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
      * Reads up to {@value #BATCH} messages of the open segment into the buffer, skipping those before the start.
      */
     private void readBatch(Deque<RawdataMessage> buffer) {
-        for (int read = 0; read < BATCH; read++) {
+        for (int i = 0; i < BATCH; i++) {
             RawdataMessage message = nextOrResume();
             if (message == null) {
                 reader = null; // the segment is read: nothing to release, the next one is opened when wanted
-                next++;
+                read = 0;
+                if (exact && from != null) {
+                    lookFurther();
+                } else {
+                    next++;
+                }
                 return;
             }
-            if (from == null || passes(message.id())) {
+            read++;
+            if (skip > 0) {
+                skip--; // delivered before the segment was opened again
+            } else if (from == null) {
                 buffer.addLast(message);
-                delivered = message.id();
-                from = null; // ids only grow from here
+            } else if (exact ? message.id().equals(from) : passes(message.id())) {
+                if (!exact || fromInclusive) {
+                    buffer.addLast(message);
+                }
+                from = null; // from here on, everything in segment order
             }
         }
     }
 
     /**
      * The next message of the segment. If reading fails (a store error), the reader is dropped and the next fill opens
-     * the segment again and skips what was delivered: a stream that failed halfway through a block cannot go on.
+     * the segment again and skips what was read: a stream that failed halfway through a block cannot go on.
      */
     private RawdataMessage nextOrResume() {
         try {
             return client.next(reader, topic(), next);
         } catch (RuntimeException e) {
             reader = null;
-            if (delivered != null) {
-                from = delivered;
-                fromInclusive = false;
-            }
+            skip = read;
+            read = 0;
             throw e;
+        }
+    }
+
+    /**
+     * The cursor's message was not in this segment: on to the next one that may hold it, by its header. If none does,
+     * the consumer starts as a seek does, at the first message at or past the id.
+     */
+    private void lookFurther() {
+        long further = client.segmentThatMayHold(topic(), from, next + 1);
+        if (further >= 0) {
+            next = further;
+        } else {
+            exact = false;
+            next = client.firstSegmentReaching(topic(), from);
         }
     }
 
@@ -96,10 +130,12 @@ final class AvroRawdataConsumer extends PollingRawdataConsumer {
     @Override
     protected void reposition(long timestamp) {
         reader = null;
-        delivered = null;
         next = -1;
+        read = 0;
+        skip = 0;
         from = RawdataIds.beginningOf(timestamp);
         fromInclusive = true;
+        exact = false;
     }
 
     @Override

@@ -15,9 +15,9 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * A producer for providers that write a call's messages at the end of the topic in one step: the argument checks,
- * asynchronous publish and closing, and {@link #withIds}, which gives ids after the topic's last id and checks given
- * ones, as the contract requires. A provider writes a batch in {@link #write}.
+ * A producer for providers that write a call's messages in one step: the argument checks, asynchronous publish and
+ * closing, and {@link #withIds}, which gives ids after the topic's greatest id and keeps given ones, as the contract
+ * requires. A provider writes a batch in {@link #write}.
  */
 public abstract class OrderedRawdataProducer implements RawdataProducer {
 
@@ -34,8 +34,8 @@ public abstract class OrderedRawdataProducer implements RawdataProducer {
     }
 
     /**
-     * Writes a call's messages, all or none, after everything in the topic; typically: find the topic's last id,
-     * call {@link #withIds}, and write the result.
+     * Writes a call's messages, all or none; typically: find the topic's greatest id, call {@link #withIds}, and write
+     * the result.
      *
      * @param batch the messages, at least one, none null; the array is the producer's own copy
      */
@@ -80,31 +80,53 @@ public abstract class OrderedRawdataProducer implements RawdataProducer {
     }
 
     /**
-     * Gives the messages without an id an id after the one before it, starting after the topic's last id, and
-     * checks that every given id is greater than the one before it.
+     * Gives the messages without an id an id after the greatest id so far, starting after the topic's greatest id. A
+     * given id is kept as it is, in any order: it may be lower than ids already in the topic.
      *
      * @param batch the messages
-     * @param last  the topic's last id, or {@link RawdataIds#beginningOfTime()} for an empty topic
-     * @return the messages as they are to be stored, every one with an id
-     * @throws IllegalArgumentException if a given id is not greater than the id before it
+     * @param last  the topic's greatest id, or {@link RawdataIds#beginningOfTime()} for an empty topic
+     * @return the messages as they are to be stored, in the order given, every one with an id
      */
     protected final List<RawdataMessage> withIds(RawdataMessage[] batch, UUID last) {
-        UUID previous = last;
+        UUID greatest = last;
         List<RawdataMessage> stored = new ArrayList<>(batch.length);
         for (RawdataMessage message : batch) {
             UUID id = message.id();
             if (id == null) {
-                id = RawdataIds.next(previous);
+                id = RawdataIds.next(greatest);
                 stored.add(message.copy().id(id).build());
-            } else if (RawdataIds.ORDER.compare(id, previous) > 0) {
-                stored.add(message);
             } else {
-                throw new IllegalArgumentException("Id " + id + " of message at position " + message.position()
-                        + " is not greater than the last id in topic " + topic + ": " + previous);
+                stored.add(message);
             }
-            previous = id;
+            greatest = greatest(greatest, id);
         }
         return stored;
+    }
+
+    /**
+     * The greater of two ids, in {@link RawdataIds#ORDER}.
+     *
+     * @param a an id
+     * @param b another id
+     * @return the greater one
+     */
+    protected static UUID greatest(UUID a, UUID b) {
+        return RawdataIds.ORDER.compare(a, b) >= 0 ? a : b;
+    }
+
+    /**
+     * The greatest id of stored messages and an id before them.
+     *
+     * @param last     the greatest id before the messages
+     * @param messages the messages, every one with an id
+     * @return the greatest id
+     */
+    protected static UUID greatest(UUID last, List<RawdataMessage> messages) {
+        UUID greatest = last;
+        for (RawdataMessage message : messages) {
+            greatest = greatest(greatest, message.id());
+        }
+        return greatest;
     }
 
     @Override

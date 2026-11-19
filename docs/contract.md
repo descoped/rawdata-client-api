@@ -58,13 +58,16 @@ millisecond, and random bits (`RawdataIds`). `message.timestamp()` is the millis
 unsigned 128-bit numbers, `RawdataIds.ORDER`, the order PostgreSQL sorts `uuid` in; never compare ids with
 `UUID.compareTo`, which is signed.
 
-A topic only grows at its end:
+Ids, as in 2.x:
 
 - An id the producer gives is greater than every id in the topic, also within one millisecond and when the clock
   goes back.
-- An id you give must be greater than every id in the topic and than the id before it in the same call; otherwise
-  the publish throws `IllegalArgumentException` and writes nothing. Giving ids is for copies, which keep the ids of
-  the source.
+- An id you give is kept as it is, in any order: it may be lower than ids already in the topic, and lower than the
+  one before it in the same call. Ids must be unique; keeping them so is the caller's job (`memory` replaces a
+  message with the same id, `postgres` refuses it, the Avro providers store both).
+- A topic whose ids were published in increasing order is read in that order. A lower id published later is read
+  where the provider puts it: in id order in `memory` and `postgres`, after what was published before it in
+  `filesystem`, `gcs` and `s3`.
 - A `publish` call is written whole or not at all.
 - **When published messages are visible and durable depends on the provider.** In `postgres` and `memory`, as soon as
   `publish` returns. In `filesystem`, `gcs` and `s3`, once their [upload
@@ -72,7 +75,9 @@ A topic only grows at its end:
   `avro-file.max.bytes`, or when the producer or client closes. Closing a producer always makes what it published
   visible and durable, in every provider.
 
-So a consumer that has read up to an id never misses a message published later.
+A consumer of a topic that is still written gets no guarantee of arrival: it may miss a message whose id lands
+behind its position. A consumer of a completed topic, read from the beginning, gets every message once.
+`lastMessage` is the last message such a reader gets.
 
 ## Reading
 

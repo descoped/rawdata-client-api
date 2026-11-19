@@ -30,8 +30,8 @@ Maven group `io.descoped.rawdata`, Java 17 or newer, every module a JPMS module.
 
 - **One API, several stores.** Code depends on `rawdata-client-api` only; the provider is a runtime dependency,
   chosen by the `rawdata.client.provider` key and found by the service loader.
-- **Ordered topics.** Every message gets a UUIDv7 id when it is published, and a topic is read in id order
-  (`RawdataIds.ORDER`, unsigned, as PostgreSQL orders `uuid`). A topic only grows at its end.
+- **Ordered topics.** Every message gets a UUIDv7 id when it is published, unless the application gives one, and a
+  topic is read in id order (`RawdataIds.ORDER`, unsigned, as PostgreSQL orders `uuid`).
 - **Read from anywhere.** Start a consumer at the beginning, after an id, at a position near a time, or at the last
   message; ask for the last message of a topic directly.
 - **Pull consumers.** `receive` takes one message, `receiveUpTo` a batch. There is no reactive streams API.

@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.avro;
 
+import io.descoped.rawdata.api.RawdataIds;
 import io.descoped.rawdata.api.RawdataMessage;
 import org.apache.avro.file.DataFileStream;
 import org.apache.avro.generic.GenericRecord;
@@ -63,8 +64,9 @@ final class AvroSegmentReader {
         long lastBlock = summary.lastBlock();
         List<RawdataMessage> messages = AvroSegments.decodeBlock(segment.read(lastBlock, Math.toIntExact(segment.size() - lastBlock)));
         RawdataMessage last = messages.get(messages.size() - 1);
-        if (!last.id().equals(summary.lastId())) {
-            throw new IOException("The segment's last block ends with " + last.id() + ", its header says " + summary.lastId());
+        if (RawdataIds.ORDER.compare(last.id(), summary.lastId()) > 0) {
+            throw new IOException("The segment's last block ends with " + last.id() + ", above the greatest id its header says: "
+                    + summary.lastId());
         }
         return last;
     }

@@ -253,7 +253,7 @@ Starting somewhere else:
 | Start | How the engine finds it | Cost |
 |---|---|---|
 | `consumer(topic)` | segment 0 | none |
-| `consumer(topic, id)`, a cursor from `cursorOf(topic, id, inclusive)` | binary search over the segments' last ids, from their headers, then skips messages before the id | one header (an 8 KiB range) per step |
+| `consumer(topic, id)`, a cursor from `cursorOf(topic, id, inclusive)` | as 2.x: binary search over the segments' `last-id`s, from their headers, to the first segment whose `first-id` is at or below the id; there it finds the message with the id and reads everything after it in segment order, also a lower id published later; if no segment holds the id, it starts as a seek | one header (an 8 KiB range) per step |
 | `seek(timestamp)` | as an id: the beginning of that millisecond, inclusive | as above |
 | `cursorOf(topic, position, inclusive, approxTimestamp, tolerance)` | from the segment reaching `approxTimestamp - tolerance`, reads messages until one has the position or an id past `approxTimestamp + tolerance` | streams the segments in the time range; throws `RawdataNoSuchPositionException` if not found |
 | `lastMessage(topic)` | the tail's segment: header, then its last block only | two small reads; `null` for an empty topic |
@@ -417,8 +417,10 @@ the 2.x schema:
 The file's header also holds:
 - `rawdata.segment` and `rawdata.previous-id`: the segment the window becomes, and the id of the message before it.
   Recovery uses them.
-- The summary: `rawdata.first-id`, `rawdata.last-id`, `rawdata.count` and `rawdata.last-block` (the offset of the last
-  block), as 2.x kept them in the file name. A seek reads only headers, and `lastMessage` only the last block.
+- The summary: `rawdata.first-id`, the lowest id in the segment; `rawdata.last-id`, the greatest id in the topic up to
+  and with the segment (it grows from segment to segment, also when ids are given out of order); `rawdata.count`; and
+  `rawdata.last-block` (the offset of the last block), as 2.x kept them in the file name. A seek reads only headers,
+  and `lastMessage` only the last block.
 
 A window's header is written when it opens, before its messages are known, so the summary starts as fixed-width
 placeholders (a zero UUID, 19-digit zeros) and is filled in place when the window is sealed. A file whose count is
