@@ -53,8 +53,9 @@ segment only if it does not exist. For a store of files or objects, implement `A
 ## A store of files or objects: `AvroStore`
 
 `rawdata-client-provider-avro` has the whole client for stores that keep files or objects: `AvroRawdataClient`. It
-handles the [upload window](providers/upload-window.md), segments, ids, ordering, recovery, consumers and metadata. A
-provider only implements `AvroStore` (`io.descoped.rawdata.provider.avro`) and passes it to the client:
+handles the [upload window](modules/rawdata-client-provider-avro.md#upload-window), segments, ids, ordering, recovery,
+consumers and metadata. A provider only implements `AvroStore` (`io.descoped.rawdata.provider.avro`) and passes it to
+the client:
 
 ```java
 @Override
@@ -86,8 +87,8 @@ What to watch:
 - **Errors.** Throw `IOException` for store failures; the client wraps them. A missing bucket or folder is a failure,
   never an empty topic.
 
-The [`filesystem`](providers/filesystem.md), [`gcs`](providers/gcs.md) and [`s3`](providers/s3.md) stores are short
-examples.
+The [`filesystem`](modules/rawdata-client-provider-filesystem.md), [`gcs`](modules/rawdata-client-provider-gcs.md) and
+[`s3`](modules/rawdata-client-provider-s3.md) stores are short examples.
 
 ## The contract tests
 

@@ -94,11 +94,11 @@ CI publishes nothing.
 
 - **PostgreSQL 18:** `docker compose up -d` in `rawdata-client-provider-postgres` (port 5432, user and database
   `rdc`, password `rdc`).
-- **A real GCS bucket:** the [`gcs` configuration](providers/gcs.md#configuration) with
+- **A real GCS bucket:** the [`gcs` configuration](modules/rawdata-client-provider-gcs.md#configuration) with
   `gcs.credential-provider=application-default` after `gcloud auth application-default login`. The copy tool is the
   easiest way to try it.
-- **Real S3:** the [live tests](providers/s3.md#tests), or the [`s3` configuration](providers/s3.md#configuration)
-  with an AWS profile.
+- **Real S3:** the [live tests](modules/rawdata-client-provider-s3.md#testing), or the [`s3`
+  configuration](modules/rawdata-client-provider-s3.md#configuration) with an AWS profile.
 
 ## The IDE
 
