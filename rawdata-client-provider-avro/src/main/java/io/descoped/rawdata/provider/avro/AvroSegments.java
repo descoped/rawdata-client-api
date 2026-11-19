@@ -16,6 +16,7 @@ import org.apache.avro.io.DecoderFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +76,8 @@ final class AvroSegments {
     private static final int SYNC_BYTES = 16;
     /** Avro never ends a block by itself; the writer ends blocks between publish calls. */
     static final int MAX_AVRO_SYNC_INTERVAL = 1 << 30;
+    /** Avro's smallest sync interval. */
+    private static final int MIN_AVRO_SYNC_INTERVAL = 32;
 
     static final Schema MESSAGE = SchemaBuilder.record("RawdataMessage")
             .fields()
@@ -102,6 +105,20 @@ final class AvroSegments {
     }
 
     /**
+     * Opens a segment's Avro file on {@code out}, in blocks that only the caller ends ({@link DataFileWriter#sync()}).
+     * Avro sizes its block buffer from the sync interval when the file is created, so the file is created with the
+     * expected block size and the interval is raised after: a buffer of the block size that grows if it must, never
+     * one of 1 GiB.
+     *
+     * @param blockBytes about how large a block grows before the caller ends it
+     */
+    static void create(DataFileWriter<GenericRecord> writer, OutputStream out, int blockBytes) throws IOException {
+        writer.setSyncInterval(Math.max(MIN_AVRO_SYNC_INTERVAL, Math.min(blockBytes, MAX_AVRO_SYNC_INTERVAL)));
+        writer.create(MESSAGE, out);
+        writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL); // Avro never ends a block by itself
+    }
+
+    /**
      * A segment's Avro file in memory, in blocks of about {@code blockBytes}, with its summary.
      */
     static byte[] encode(Collection<RawdataMessage> messages, long segment, UUID previousId, int blockBytes) {
@@ -112,8 +129,7 @@ final class AvroSegments {
         long headerEnd;
         long previousBlockStart = 0;
         try (DataFileWriter<GenericRecord> writer = writer(segment, previousId)) {
-            writer.setSyncInterval(MAX_AVRO_SYNC_INTERVAL);
-            writer.create(MESSAGE, out);
+            create(writer, out, blockBytes);
             blockStart = writer.sync();
             headerEnd = blockStart;
             long bytes = 0;
