@@ -6,7 +6,7 @@
     <!-- Parent and aggregator of every module. All modules share this version and are released together. -->
     <groupId>io.descoped.rawdata</groupId>
     <artifactId>rawdata-client-project</artifactId>
-    <version>3.0.1-SNAPSHOT</version>
+    <version>3.0.1</version>
     <packaging>pom</packaging>
 
     <name>Rawdata Client Project</name>
@@ -39,7 +39,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Reproducible builds: every jar entry gets this time, so the same tag builds the same bytes.
              release:prepare sets it to the release time. -->
-        <project.build.outputTimestamp>2026-11-19T09:25:45Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-11-19T14:56:34Z</project.build.outputTimestamp>
 
         <!-- Dependency versions. Kept as properties, not in dependencyManagement, so that importing
              rawdata-client-bom (which inherits this POM) manages the rawdata modules only. -->
@@ -85,7 +85,7 @@
         <connection>scm:git:git://github.com/descoped/rawdata-client-project.git</connection>
         <developerConnection>scm:git:git@github.com:descoped/rawdata-client-project.git</developerConnection>
         <url>https://github.com/descoped/rawdata-client-project</url>
-        <tag>HEAD</tag>
+        <tag>v3.0.1</tag>
     </scm>
 
     <profiles>
