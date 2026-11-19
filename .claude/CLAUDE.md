@@ -72,8 +72,9 @@ this repository.
 - **Always the latest stable version** of every library, plugin, action and engine (PostgreSQL 18). Pre-releases
   (milestones, RCs, alphas) only on request. Old and outdated code and configuration is removed, not carried along.
 - **Releases only with the owner's go-ahead.** A release (`release:prepare`/`release:perform`, an upload to the
-  Central Portal) is made by the owner or on his explicit word. As of 2026-11-17 the owner's Central Portal publishing
-  limit is used up, so nothing is uploaded until he says it is possible again.
+  Central Portal) is made by the owner or on his explicit word. Since 2026-11-19 namespace `io.descoped` has an OSS
+  exemption: 18 releases, 80 MB and 1000 files a month, for all Descoped projects together. The Portal counts each
+  module as a release, so one rawdata release uses 9.
 - **Publishing.** Only releases are published, by hand, through the Central Portal (profiles `central,sign`). **No
   SNAPSHOTs** are published, by CI or by hand: the Portal's free tier limits monthly publishing (owner's decision,
   2026-11-17). CI publishes nothing to Central. Maven 3.10 sends a server's credentials only to the hosts it knows for
