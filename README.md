@@ -233,6 +233,25 @@ you change a design.
 
 Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do not open a public issue.
 
+## History
+
+The rawdata client began in April 2019 in the Data Collection department of Statistics Norway (SSB), during SSB's
+2017–2021 modernisation programme. It was the storage of SSB's Data Collector: harvested data from external
+sources was streamed into rawdata topics exactly as it arrived, the raw data in the name, before any processing.
+
+SSB published the work under the Apache License 2.0 on `github.com/statisticsnorway`, one repository per module:
+`rawdata-client-api`, `rawdata-client-provider-postgres`, `rawdata-client-provider-gcs` and `rawdata-copy-util`.
+SSB has since removed those repositories from GitHub. Descoped continues the project from a fork, still under
+Apache 2.0:
+
+- 2024: the packages moved to `io.descoped`, and 2.0.0 was released.
+- 2026: the module repositories were merged into this one, with their full history and tags (for example
+  `rawdata-client-api/2.0.0`). 3.0.0 is the first version built here.
+
+Ove Ranheim created the client, and [Kim Christian Gaarder](https://github.com/kimcs) was its main co-author. Rupinder
+Kaur, Hadrien Kohl, Øyvind Strømmen and other SSB colleagues contributed; `git log` has every contribution.
+
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE). The code was first written and published by Statistics Norway (SSB)
+under the same license; see [History](#history).
