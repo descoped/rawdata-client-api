@@ -82,6 +82,11 @@ code. Java 17 or newer.
   - a leftover that no longer fits is kept as `*.invalid`;
   - a lock file keeps a buffer folder to one process;
   - reads are pinned to the object they opened (the GCS generation, the S3 ETag, the file on disk);
+  - every upload carries its CRC32C, so GCS and S3 refuse bytes damaged on the way; a create that finds its segment
+    taken compares the size and CRC32C before it downloads anything;
+  - uploads across topics adapt to throttling (AIMD: start at 4, one more per round of uploads at the limit, half when
+    an upload gets a 429 or 503 or times out) up to `avro-file.upload.max-concurrency` (default 16); each running
+    upload holds its window in memory;
   - `avro-file.max.pending-uploads` (default 4) bounds the windows waiting for upload.
   - `avro-file.close-timeout-seconds` (default 30) bounds how long `close()` waits for the uploads; what is not
     uploaded by then stays on disk for the next writer.
@@ -94,8 +99,8 @@ code. Java 17 or newer.
     `gcs.credential-provider` (`service-account`, the default, `compute-engine`, and now `application-default` and
     `none`);
   - they now have defaults (60 s, 64 MiB, 512 KiB, 1 s) and are read with dynamic-configuration's value rules;
-  - new: `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds`, `gcs.prefix`, `gcs.endpoint`, and
-    `s3.listing.min-interval-seconds` for `s3`.
+  - new: `avro-file.max.pending-uploads`, `avro-file.close-timeout-seconds`, `avro-file.upload.max-concurrency`,
+    `gcs.prefix`, `gcs.endpoint`, and `s3.listing.min-interval-seconds` for `s3`.
 - Metadata keys are at most 127 bytes (`filesystem`) or about 500 bytes (`gcs`, `s3`).
 - `gcs` no longer uses Google's client libraries: it talks to GCS's JSON API on the JDK's `java.net.http`, and does
   Google's OAuth 2.0 itself (service account keys, gcloud user credentials, the metadata server, and Application

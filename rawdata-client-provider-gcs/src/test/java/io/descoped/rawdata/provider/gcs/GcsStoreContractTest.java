@@ -37,7 +37,7 @@ class GcsStoreContractTest extends AvroStoreContractTest {
         assertArrayEquals(new byte[]{2, 3}, opened.read(1, 2));
         String name = "store/" + topic + "/segments/0000000000000000000.avro";
         long generation = client.generation(FakeGcs.BUCKET, name).orElseThrow();
-        assertTrue(client.upload(FakeGcs.BUCKET, name, "avro/binary", new byte[]{9, 9, 9}, generation));
+        assertTrue(client.upload(FakeGcs.BUCKET, name, "avro/binary", new byte[]{9, 9, 9}, generation, false));
         assertThrows(IOException.class, () -> opened.read(0, 3));
     }
 }

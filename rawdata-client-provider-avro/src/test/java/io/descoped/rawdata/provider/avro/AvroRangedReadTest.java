@@ -126,7 +126,7 @@ class AvroRangedReadTest {
      */
     private List<UUID> write(CountingStore store) {
         List<UUID> ids = new ArrayList<>();
-        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 16 * 1024, 4, 30), 10)) {
+        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 16 * 1024, 4, 30, 16), 10)) {
             RawdataProducer producer = client.producer(TOPIC);
             for (int segment = 0; segment < SEGMENTS; segment++) {
                 for (int call = 0; call < CALLS_PER_SEGMENT; call++) {
@@ -159,7 +159,7 @@ class AvroRangedReadTest {
     }
 
     private AvroRawdataClient client(CountingStore store) {
-        return new AvroRawdataClient(store, new AvroUploadWindow(folder.resolve("reader"), 3600, 1 << 20, 64, 4, 30), 10);
+        return new AvroRawdataClient(store, new AvroUploadWindow(folder.resolve("reader"), 3600, 1 << 20, 64, 4, 30, 16), 10);
     }
 
     /**
@@ -242,7 +242,7 @@ class AvroRangedReadTest {
                 0, io.descoped.rawdata.api.RawdataIds.beginningOfTime(), 64); // its header holds every key
         CountingStore store = new CountingStore();
         RawdataMessage tricky = RawdataMessage.builder().position("tricky").put("payload", header).build();
-        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30), 10)) {
+        try (AvroRawdataClient client = new AvroRawdataClient(store, new AvroUploadWindow(folder, 3600, Long.MAX_VALUE, 64, 4, 30, 16), 10)) {
             client.producer(TOPIC).publish(tricky, message("after"));
             client.flush(TOPIC);
             assertEquals("after", client.lastMessage(TOPIC).position());

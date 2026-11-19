@@ -72,6 +72,7 @@ public RawdataClient initialize(Map<String, String> configuration) {
 | `open(topic, segment)` | return the segment, or empty: its size, and `read(offset, length)` for ranges, cut short only at its end. Pin it to the object found now (a generation, an ETag, a file key), so a replaced object fails the read. It must hold no connection or file: readers drop it without closing. `read(topic, segment)` is a default method on top of it. |
 | `exists(topic, segment)` | say whether it exists; it is called often, so make it cheap (a HEAD, a stat) |
 | `metadataNames`, `readMetadata`, `writeMetadata`, `deleteMetadata` | keep a topic's metadata entries. A write replaces the value atomically, and a delete of a missing entry does nothing. |
+| `onThrottled(listener)` | optional: call the listener on each throttled response (a 429, a 503, a timeout), also one you retry, so the client lowers its upload concurrency |
 | `close()` | release clients and pools; called once, by the client |
 
 What to watch:

@@ -106,12 +106,14 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
             throw new IllegalArgumentException("Configuration '" + SSE_KMS_KEY_ID + "' needs '" + SSE + "' aws:kms");
         }
         IdentityProvider<? extends AwsCredentialsIdentity> credentials = credentials(configuration);
+        S3Throttling throttling = new S3Throttling();
         S3ClientBuilder builder = S3Client.builder()
                 .httpClientBuilder(UrlConnectionHttpClient.builder()
                         .connectionTimeout(Duration.ofSeconds(10))
                         .socketTimeout(Duration.ofMinutes(5)))
                 .credentialsProvider(credentials)
-                .overrideConfiguration(override -> override.retryStrategy(retry -> retry.maxAttempts(MAX_ATTEMPTS)))
+                .overrideConfiguration(override -> override.retryStrategy(retry -> retry.maxAttempts(MAX_ATTEMPTS))
+                        .addExecutionInterceptor(throttling))
                 .forcePathStyle(pathStyle(configuration, bucket));
         String region = AvroConfiguration.optional(configuration, REGION, null);
         if (region != null) {
@@ -131,7 +133,7 @@ public final class S3RawdataClientInitializer implements RawdataClientInitialize
             }
             throw e;
         }
-        return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable), window, pollInterval);
+        return new AvroRawdataClient(new S3AvroStore(s3, bucket, prefix, encryption, kmsKeyId, closeable, throttling), window, pollInterval);
     }
 
     private static boolean pathStyle(Map<String, String> configuration, String bucket) {

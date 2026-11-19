@@ -33,6 +33,7 @@ consumers need the messages.
 | `avro-file.sync.interval` | `524288` (512 KiB) | the size of an Avro block |
 | `avro-file.max.pending-uploads` | `4` | sealed windows that may wait for upload before `publish` waits |
 | `avro-file.close-timeout-seconds` | `30` | the longest `close()` waits for the uploads |
+| `avro-file.upload.max-concurrency` | `16` | the most uploads of a client at once, across its topics |
 
 Values are read as [dynamic-configuration](https://github.com/descoped/dynamic-configuration) reads them:
 - numbers are strict: `60`, not `60s` and not ` 60`;
@@ -73,6 +74,19 @@ shared tests use it.
   when it is uploaded. The writer fails with `RawdataWriterConflictException`. Its windows not yet uploaded are kept
   as `*.invalid` files and never deleted. Every later publish of that client to the topic fails (see
   [one writer per topic](../contract.md#one-writer-per-topic)).
+- **Throttling.** A client runs at most a few uploads at once across its topics, and adapts (AIMD):
+  - it starts at 4;
+  - it adds one after a round of uploads at the limit (as many successful uploads as the limit, while uploads keep
+    it full), up to `avro-file.upload.max-concurrency`. A limit that uploads don't reach doesn't grow;
+  - it halves when an upload is throttled (GCS 429 or 503, S3 503 `SlowDown`) or times out, at most once a second.
+    Only uploads count: a consumer's read or a busy metadata entry says nothing about the bucket's upload capacity.
+
+  A topic's own uploads still run one at a time, in order.
+- **Memory.** Each running upload holds its window in memory, so uploads take up to
+  `avro-file.upload.max-concurrency` × `avro-file.max.bytes` of heap: 1 GiB at the defaults (16 × 64 MiB). Size the
+  heap for it, or lower either.
+- **Damaged uploads.** Every upload carries its CRC32C (`X-Goog-Hash` on GCS, `x-amz-checksum-crc32c` on S3), and the
+  store refuses bytes that changed on the way; the upload is then retried.
 - **One process per buffer folder.** A writer holds a lock file in its topic's folder. A second client using the
   same folder fails with "in use".
 

@@ -1,5 +1,6 @@
 package io.descoped.rawdata.provider.gcs;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
 import io.descoped.rawdata.provider.avro.AvroStore;
 
 import java.io.IOException;
@@ -16,9 +17,11 @@ import java.util.TreeSet;
  * has its name ({@code ifGenerationMatch=0}), so two writers never both create it, and readers see a whole object or
  * none.
  * <p>
- * The client retries a failed upload. If an upload succeeded but its response was lost, the retry fails its
- * precondition; the store then reads the object, and if it holds the bytes it uploaded (an Avro file carries a random
- * sync marker, so no other writer's file is the same) the segment counts as created.
+ * Every upload carries its CRC32C ({@code X-Goog-Hash}), so GCS refuses bytes damaged on the way. The client retries
+ * a failed upload. If an upload succeeded but its response was lost, the retry fails its precondition; the store then
+ * compares the object's size and CRC32C with its own, and only if they match reads the object. If it holds the bytes
+ * it uploaded (an Avro file carries a random sync marker, so no other writer's file is the same) the segment counts
+ * as created. Another writer's segment is so told apart without downloading it.
  * <p>
  * A metadata entry is written with a precondition on the generation it replaces (or that there is none), so the client
  * may retry the upload, for example when GCS limits writes to one object name to about one per second. When another
@@ -45,10 +48,22 @@ final class GcsAvroStore implements AvroStore {
     @Override
     public boolean create(String topic, long segment, byte[] content) throws IOException {
         String name = segment(topic, segment);
-        if (client.upload(bucket, name, "avro/binary", content, 0)) {
+        if (client.upload(bucket, name, "avro/binary", content, 0, true)) {
             return true;
         }
-        return client.download(bucket, name).map(stored -> Arrays.equals(content, stored)).orElse(false); // our own upload, if a retry found it
+        // Taken: by another writer, or by our own upload whose response was lost. The size and CRC32C tell another
+        // writer's segment apart without downloading it; only when they match are the bytes compared.
+        Optional<GcsClient.ObjectInfo> stored = client.info(bucket, name);
+        if (stored.isEmpty() || stored.get().size() != content.length
+                || stored.get().crc32c() != null && !stored.get().crc32c().equals(AvroChecksums.crc32c(content))) {
+            return false;
+        }
+        return client.download(bucket, name).map(bytes -> Arrays.equals(content, bytes)).orElse(false);
+    }
+
+    @Override
+    public void onThrottled(Runnable listener) {
+        client.onThrottled(listener);
     }
 
     /**
@@ -127,7 +142,7 @@ final class GcsAvroStore implements AvroStore {
         String object = metadata(topic, name);
         for (; ; ) {
             OptionalLong current = client.generation(bucket, object);
-            if (client.upload(bucket, object, "application/octet-stream", value, current.orElse(0))) {
+            if (client.upload(bucket, object, "application/octet-stream", value, current.orElse(0), false)) {
                 return;
             }
             // another writer changed the entry meanwhile; write again over its value

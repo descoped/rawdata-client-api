@@ -53,6 +53,7 @@ public final class AvroRawdataClient implements RawdataClient {
     private final AvroStore store;
     private final AvroUploadWindow window;
     private final long pollIntervalMillis;
+    private final AvroUploadLimiter limiter;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<Object> open = ConcurrentHashMap.newKeySet(); // producers and consumers
     private final Map<String, Tail> tails = new ConcurrentHashMap<>(); // the last segment seen of each topic
@@ -90,6 +91,8 @@ public final class AvroRawdataClient implements RawdataClient {
             throw new IllegalArgumentException("The poll interval must be 1 ms or more: " + pollIntervalMillis);
         }
         this.pollIntervalMillis = pollIntervalMillis;
+        this.limiter = new AvroUploadLimiter(window.maxUploadConcurrency());
+        store.onThrottled(limiter::throttled);
     }
 
     @Override
@@ -217,6 +220,10 @@ public final class AvroRawdataClient implements RawdataClient {
 
     AvroStore store() {
         return store;
+    }
+
+    AvroUploadLimiter limiter() {
+        return limiter;
     }
 
     ExecutorService executor() {

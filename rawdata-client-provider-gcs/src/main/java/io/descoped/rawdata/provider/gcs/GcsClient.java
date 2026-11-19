@@ -3,17 +3,21 @@ package io.descoped.rawdata.provider.gcs;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.descoped.rawdata.provider.avro.AvroChecksums;
+
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.OptionalLong;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +41,8 @@ final class GcsClient {
     private static final int UNAUTHORIZED = 401;
     private static final int NOT_FOUND = 404;
     private static final int PRECONDITION_FAILED = 412;
+    private static final int TOO_MANY_REQUESTS = 429;
+    private static final int SERVICE_UNAVAILABLE = 503;
     private static final int MAX_ATTEMPTS = 6;
     private static final long FIRST_BACKOFF_MILLIS = 200;
     private static final long MAX_BACKOFF_MILLIS = 5_000;
@@ -47,6 +53,7 @@ final class GcsClient {
     private final HttpClient http;
     private final String endpoint;
     private final GcsCredentials credentials;
+    private final AtomicReference<Runnable> throttled = new AtomicReference<>(() -> { });
 
     /**
      * Creates a client.
@@ -68,14 +75,18 @@ final class GcsClient {
      * Uploads an object in one request, if its generation is the given one.
      *
      * @param generation the object's current generation, or 0 for "only if there is no such object"
+     * @param segment    true for a segment: its throttled attempts are reported ({@link #onThrottled})
      * @return true if it was written; false if the precondition failed
      */
-    boolean upload(String bucket, String object, String contentType, byte[] content, long generation) throws IOException {
+    boolean upload(String bucket, String object, String contentType, byte[] content, long generation, boolean segment)
+            throws IOException {
         URI uri = URI.create(endpoint + "/upload/storage/v1/b/" + encode(bucket) + "/o?uploadType=media&name=" + encode(object)
                 + "&ifGenerationMatch=" + generation);
+        String hash = "crc32c=" + AvroChecksums.crc32c(content); // GCS refuses the upload (400) if the bytes it got differ
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri)
                 .header("Content-Type", contentType)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(content)));
+                .header("X-Goog-Hash", hash)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(content)), segment);
         if (response.statusCode() == PRECONDITION_FAILED) {
             return false;
         }
@@ -99,12 +110,21 @@ final class GcsClient {
     }
 
     /**
-     * An object's generation and size.
+     * An object's generation, size and checksum.
      *
      * @param generation the generation
      * @param size       the size in bytes
+     * @param crc32c     the CRC32C as GCS gives it (base64 of the 4 bytes, big-endian), or null if it gave none
      */
-    record ObjectInfo(long generation, long size) {
+    record ObjectInfo(long generation, long size, String crc32c) {
+    }
+
+    /**
+     * Registers what to do when GCS throttles a segment upload (429, 503) or it times out, on any attempt. Other
+     * requests are not reported: they say nothing about the bucket's upload capacity.
+     */
+    void onThrottled(Runnable listener) {
+        this.throttled.set(listener);
     }
 
     /**
@@ -113,14 +133,16 @@ final class GcsClient {
      * @return them, or empty if there is no such object
      */
     Optional<ObjectInfo> info(String bucket, String object) throws IOException {
-        URI uri = URI.create(objectUri(bucket, object) + "?fields=generation,size");
+        URI uri = URI.create(objectUri(bucket, object) + "?fields=generation,size,crc32c");
         HttpResponse<byte[]> response = send(() -> HttpRequest.newBuilder(uri).GET());
         if (response.statusCode() == NOT_FOUND) {
             return Optional.empty();
         }
         expect(response, "Reading the metadata of " + object);
         JsonNode json = JSON.readTree(response.body());
-        return Optional.of(new ObjectInfo(number(json, "generation", object), number(json, "size", object)));
+        JsonNode crc32c = json.path("crc32c");
+        return Optional.of(new ObjectInfo(number(json, "generation", object), number(json, "size", object),
+                crc32c.isTextual() ? crc32c.asText() : null));
     }
 
     private static long number(JsonNode json, String field, String object) throws IOException {
@@ -234,29 +256,59 @@ final class GcsClient {
     }
 
     private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request) throws IOException {
-        HttpResponse<byte[]> response = sendWithRetries(request);
+        return send(request, false);
+    }
+
+    /**
+     * @param reported true if throttled attempts are reported
+     */
+    private HttpResponse<byte[]> send(Supplier<HttpRequest.Builder> request, boolean reported) throws IOException {
+        HttpResponse<byte[]> response = sendWithRetries(request, reported);
         if (response.statusCode() == UNAUTHORIZED && credentials.authorization().isPresent()) {
             credentials.invalidate(); // revoked, or the clock is off: once more with a new token
-            response = sendWithRetries(request);
+            response = sendWithRetries(request, reported);
         }
         return response;
     }
 
-    private HttpResponse<byte[]> sendWithRetries(Supplier<HttpRequest.Builder> request) throws IOException {
+    private HttpResponse<byte[]> sendWithRetries(Supplier<HttpRequest.Builder> request, boolean reported) throws IOException {
+        Runnable throttledAttempt = reported ? () -> throttled.get().run() : () -> { };
         for (int attempt = 1; ; attempt++) {
-            try {
-                HttpResponse<byte[]> response = sendOnce(request);
-                if (!retryable(response.statusCode()) || attempt == MAX_ATTEMPTS) {
-                    return response;
-                }
-            } catch (GcsCredentials.RefusedException e) {
-                throw e;
-            } catch (IOException e) {
-                if (attempt == MAX_ATTEMPTS) {
-                    throw e;
-                }
+            HttpResponse<byte[]> response = attempt(request, throttledAttempt, attempt == MAX_ATTEMPTS);
+            if (response != null) {
+                return response;
             }
             backOff(attempt);
+        }
+    }
+
+    /**
+     * One attempt of a request.
+     *
+     * @return the response, or null to try again
+     */
+    private HttpResponse<byte[]> attempt(Supplier<HttpRequest.Builder> request, Runnable throttledAttempt, boolean last)
+            throws IOException {
+        try {
+            HttpResponse<byte[]> response = sendOnce(request);
+            int status = response.statusCode();
+            if (status == TOO_MANY_REQUESTS || status == SERVICE_UNAVAILABLE) {
+                throttledAttempt.run();
+            }
+            return !retryable(status) || last ? response : null;
+        } catch (GcsCredentials.RefusedException e) {
+            throw e;
+        } catch (HttpTimeoutException e) {
+            throttledAttempt.run();
+            if (last) {
+                throw e;
+            }
+            return null;
+        } catch (IOException e) {
+            if (last) {
+                throw e;
+            }
+            return null;
         }
     }
 
