@@ -74,12 +74,15 @@ this repository.
 - **Releases only with the owner's go-ahead.** A release (`release:prepare`/`release:perform`, an upload to the
   Central Portal) is made by the owner or on his explicit word. As of 2026-11-17 the owner's Central Portal publishing
   limit is used up, so nothing is uploaded until he says it is possible again.
-- **Publishing.** Only releases are published, by hand, through the Central Portal (profiles `central,sign`).
-  **No SNAPSHOTs** are published, by CI or by hand: the Portal's free tier limits monthly publishing (owner's
-  decision, 2026-11-17). CI publishes nothing. Maven 3.10 sends a server's credentials only to the hosts it knows for
+- **Publishing.** Only releases are published, by hand, through the Central Portal (profiles `central,sign`). **No
+  SNAPSHOTs** are published, by CI or by hand: the Portal's free tier limits monthly publishing (owner's decision,
+  2026-11-17). CI publishes nothing to Central. Maven 3.10 sends a server's credentials only to the hosts it knows for
   that id, and the id `central` is bound to Maven Central, so the server `central` in `~/.m2/settings.xml` must list
   `https://central.sonatype.com` in `repositoryOrigins`. `rawdata-copy-util` is a program, excluded from the Central
-  bundle (`excludeArtifacts`); its zip goes on the GitHub release (owner's decision, 2026-11-18).
+  bundle (`excludeArtifacts`); its zip goes on the GitHub release (owner's decision, 2026-11-18). Release tags are
+  `v<version>` (`v3.0.0`). After the release is published on Central, the owner runs `release.yml` (`gh workflow run
+  release.yml -f version=<version>`): it checks the version is on Central, builds the copy tool from the tag and
+  publishes the GitHub release with the CHANGELOG section as notes (owner's decision, 2026-11-19).
 - **SonarCloud**: one project, `descoped_rawdata-client-project`, for the whole reactor.
 
 ## Testing

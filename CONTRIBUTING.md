@@ -108,7 +108,7 @@ client is a lightweight, cheap way to stream over object storage, not a pub/sub 
 
 ## Releases
 
-Releases are made only by the owner. Nothing is published as a SNAPSHOT, and CI publishes nothing. See
+Releases are made only by the owner. Nothing is published as a SNAPSHOT, and CI publishes nothing to Maven Central. See
 [releasing](docs/releasing.md).
 
 ## License

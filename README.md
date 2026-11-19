@@ -193,15 +193,14 @@ SonarCloud (project `descoped_rawdata-client-project`). See [building and testin
 
 ## Release and deploy
 
-- Releases are made **only by the owner**, or on his explicit word, with `release:prepare` and `release:perform`.
-  CI publishes nothing.
+- Releases are made **only by the owner**, or on his explicit word, with `release:prepare` and `release:perform`,
+  signed with his GPG key. CI publishes nothing to Maven Central.
 - The libraries (API, TCK, providers, BOM) go to Maven Central through the Central Portal, with sources, Javadoc
-  and signatures. All modules share one version, and a tag is the bare version, for example `3.0.0`.
+  and signatures. All modules share one version, and the tag is the version with a `v`, for example `v3.0.0`.
 - **No SNAPSHOTs are published**, by CI or by hand: the Central Portal's free tier limits monthly publishing.
-- The copy tool is a program, not a library: `rawdata-copy-<version>.zip` (the jar and `lib/`) goes on the GitHub
-  release for the tag, not on Central and not in the BOM.
-
-See [releasing](docs/releasing.md).
+- After Central, the `Release` workflow publishes the GitHub release for the tag, with the CHANGELOG section as its
+  notes and the copy tool, `rawdata-copy-<version>.zip` (the jar and `lib/`), which is not on Central and not in the
+  BOM. See [releasing](docs/releasing.md).
 
 ## Repository layout
 

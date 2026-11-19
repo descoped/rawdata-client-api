@@ -3,12 +3,12 @@ name: CI
 # One job on JDK 17, the baseline: every build compiles with `release 17`, so the bytecode does not depend on the
 # JDK, and 17 is the oldest runtime users have. Every run: build, tests and Javadoc of every module, and the JPMS
 # smoke test. Pushes to master and release tags, and pull requests from this repository, add coverage and
-# the SonarCloud analysis (not gating; pull requests from forks get no token). CI publishes nothing: releases are
-# made by hand (see .claude/CLAUDE.md), and SNAPSHOTs are not published.
+# the SonarCloud analysis (not gating; pull requests from forks get no token). CI publishes nothing to Maven Central:
+# releases are signed and uploaded by hand (see docs/releasing.md), and SNAPSHOTs are not published.
 on:
   push:
     branches: [master]
-    tags: ['[0-9]+.[0-9]+.[0-9]+']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
     paths-ignore:
       - '**/*.md'
       - 'LICENSE'

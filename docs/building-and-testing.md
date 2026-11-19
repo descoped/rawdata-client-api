@@ -78,7 +78,7 @@ Run it after changing a `module-info`, a dependency or how providers are found.
 ## CI
 
 `.github/workflows/ci.yml`, one job on JDK 17, for pull requests to `master`, pushes to `master` and release tags
-(`3.0.0`). Changes that touch only Markdown files, `.claude/`, `LICENSE` and similar skip it (`paths-ignore`): a
+(`v3.0.0`). Changes that touch only Markdown files, `.claude/`, `LICENSE` and similar skip it (`paths-ignore`): a
 docs-only pull request gets the review, but no build.
 1. `./mvnw verify javadoc:javadoc`, with `-P coverage` for pull requests from this repository and pushes;
 2. the JPMS smoke test;
@@ -88,7 +88,8 @@ docs-only pull request gets the review, but no build.
 `.github/workflows/claude.yml` reviews every pull request. Renovate keeps dependencies, plugins and actions at the
 latest stable versions.
 
-CI publishes nothing.
+CI publishes nothing to Maven Central. `.github/workflows/release.yml`, run by the owner after a release is on
+Central, publishes its GitHub release (see [releasing](releasing.md)).
 
 ## Running against real stores
 
