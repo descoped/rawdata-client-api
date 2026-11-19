@@ -22,7 +22,8 @@ All modules share one version. The tag is the version with a `v`: `v3.0.0`.
 - The checks that CI can't make are done, for example a copy against a real cloud bucket with real credentials.
 - `~/.m2/settings.xml` has the server `central` with the Central Portal token and
   `<repositoryOrigins>https://central.sonatype.com</repositoryOrigins>`. Maven 3.10 only sends a server's credentials
-  to the hosts it knows for that id.
+  to the hosts it knows for that id. On the owner's machine the token is decrypted by `~/.mavenrc`, only for a run
+  with `-P secrets`; without it the upload fails with `401`.
 - GPG signs with its default key, and the key's public part is on a key server Central checks
   (`keys.openpgp.org` or `keyserver.ubuntu.com`).
 
@@ -42,13 +43,14 @@ both commits and the tag. The tag push runs CI on the tag.
 
 ```sh
 java -version                     # 17, as CI and the Release workflow build
-./mvnw release:perform
+MVN_SECRETS=central ./mvnw release:perform -P secrets
 ```
 
 Run it on JDK 17: a newer JDK writes another `Build-Jdk-Spec` into the jars, and the copy tool's jars would no longer be
 the bytes on Central. It checks out the tag into `target/checkout` and runs `deploy -P central,sign`: every artifact is
 signed with your GPG key (gpg-agent asks for the passphrase) and the bundle is uploaded to the Central Portal. It is not
-published: `autoPublish=false`, and the upload waits until the Portal has validated it.
+published: `autoPublish=false`, and the upload waits until the Portal has validated it. The log ends with the
+deployment id and `has been validated`.
 
 ### 3. Publish on Central
 
@@ -78,8 +80,12 @@ If it stops because the version is not on Central yet, run it again later. The r
 ## If something goes wrong
 
 - **`release:prepare` fails before it pushes**: `./mvnw release:rollback`, fix, and prepare again.
-- **`release:perform` fails, or the Portal rejects the deployment**: drop the deployment in the Portal, fix, and run
-  `release:perform` again from the same tag. Nothing is public until you press Publish.
+- **`release:perform` fails, or the Portal rejects the deployment**: drop the deployment in the Portal, if there is
+  one, fix, and run `release:perform` again. `release.properties` still points at the tag, so it builds the same
+  tag; without it, name the tag: `-Dtag=v<version>`. The tag was tested by `release:prepare`, so a rerun can skip the tests: `-Darguments=-DskipTests`. Nothing is
+  public until you press Publish.
+- **The upload fails with `401`**: the token was not sent. Run `release:perform` again with `-P secrets`, and check
+  `repositoryOrigins` and that the token is still valid.
 - **The `Release` workflow fails**: fix the cause and run it again. A rerun updates a release that was created
   already: it uploads the assets again and replaces the notes. It reads the CHANGELOG from the tag, so if the tag has
   no section for the version, create the release by hand: `gh release create v<version>` with the notes and the zip
