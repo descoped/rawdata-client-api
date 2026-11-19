@@ -1,0 +1,85 @@
+name: Release
+
+# The GitHub release of a version that is already on Maven Central. Run by the owner, by hand, after the Central
+# deployment is published (see docs/releasing.md):
+#
+#   gh workflow run release.yml -f version=3.0.0
+#
+# It builds the copy tool from the tag v<version> and publishes the GitHub release for that tag, with the
+# CHANGELOG section of the version as its notes and the copy tool's zip and its SHA-256 attached. It publishes
+# nothing to Maven Central: releases are signed with the owner's GPG key and uploaded from his machine.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The released version, for example 3.0.0 (the tag is v3.0.0)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  github-release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the version
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be like 3.0.0, was '$VERSION'"
+            exit 1
+          fi
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Check that the version is on Maven Central
+        run: |
+          pom="https://repo1.maven.org/maven2/io/descoped/rawdata/rawdata-client-api/$VERSION/rawdata-client-api-$VERSION.pom"
+          if ! curl --silent --fail --head --output /dev/null "$pom"; then
+            echo "::error::$VERSION is not on Maven Central yet. Publish the deployment in the Central Portal, wait until it is synced, and run this again."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880  # v6.3.0
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      # The build is reproducible: the jars in the zip are the bytes that are on Maven Central.
+      - name: Build the copy tool
+        run: ./mvnw --batch-mode --no-transfer-progress -pl rawdata-copy-util -am package -DskipTests
+
+      - name: Release notes from the CHANGELOG
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## " { if (found) exit; if ($2 == v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no section '## $VERSION'"
+            exit 1
+          fi
+
+      - name: Publish the GitHub release
+        run: |
+          zip="rawdata-copy-util/target/rawdata-copy-$VERSION.zip"
+          (cd "$(dirname "$zip")" && sha256sum "$(basename "$zip")" > "$(basename "$zip").sha256")
+          gh release create "$TAG" "$zip" "$zip.sha256" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md"

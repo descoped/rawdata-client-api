@@ -20,8 +20,8 @@ If you want to copy topics from your own Java code instead, you do not need this
 | Distributed as | `rawdata-copy-<version>.zip` on the GitHub release |
 
 The tool is a program, not a library. It is **not** published to Maven Central and **not** in `rawdata-client-bom`:
-the root POM leaves it out of the Central bundle. Each release gets a zip on its GitHub release page, made by the
-owner along with the release (see [Releasing](../releasing.md)). No SNAPSHOT builds are published anywhere.
+the root POM leaves it out of the Central bundle. Each release gets a zip on its GitHub release page, built from
+the release tag by the `Release` workflow (see [Releasing](../releasing.md)). No SNAPSHOT builds are published anywhere.
 
 The zip holds one folder:
 
