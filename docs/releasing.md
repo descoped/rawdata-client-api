@@ -82,9 +82,10 @@ If it stops because the version is not on Central yet, run it again later. The r
 - **`release:prepare` fails before it pushes**: `./mvnw release:rollback`, fix, and prepare again.
 - **`release:perform` fails, or the Portal rejects the deployment**: drop the deployment in the Portal, if there is
   one, fix, and run `release:perform` again. `release.properties` still points at the tag, so it builds the same
-  tag. The tag was tested by `release:prepare`, so a rerun can skip the tests: `-Darguments=-DskipTests`. Nothing is
+  tag; without it, name the tag: `-Dtag=v<version>`. The tag was tested by `release:prepare`, so a rerun can skip the tests: `-Darguments=-DskipTests`. Nothing is
   public until you press Publish.
-- **The upload fails with `401`**: the token was not loaded. Run `release:perform` again with `-P secrets`.
+- **The upload fails with `401`**: the token was not sent. Run `release:perform` again with `-P secrets`, and check
+  `repositoryOrigins` and that the token is still valid.
 - **The `Release` workflow fails**: fix the cause and run it again. A rerun updates a release that was created
   already: it uploads the assets again and replaces the notes. It reads the CHANGELOG from the tag, so if the tag has
   no section for the version, create the release by hand: `gh release create v<version>` with the notes and the zip
