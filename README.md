@@ -12,9 +12,6 @@ topic also has a small metadata store, for example for checkpoints. Applications
 choose the store by configuration: PostgreSQL, Avro files in a folder, Google Cloud Storage or Amazon S3. Consumers
 are pulled: the application takes one message, or a batch of the size it chooses.
 
-Version 3.0.0 is in progress on `master`; the last release is 2.0.0. 3.0 is a clean break from 2.x: it does not read
-data written by 2.x, and there is no migration path. See the [CHANGELOG](CHANGELOG.md).
-
 | Module | What it is |
 |---|---|
 | [`rawdata-client-api`](docs/modules/rawdata-client-api.md) | the API, the provider service, the `spi` base classes, and the `memory` and `discard` providers |
@@ -232,6 +229,11 @@ you change a design.
 ## Security
 
 Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do not open a public issue.
+
+## Changelog
+
+What changed in each release is in the [CHANGELOG](CHANGELOG.md). 3.0.0 is a clean break from 2.x: it does not
+read data written by 2.x.
 
 ## History
 
