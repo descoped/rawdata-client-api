@@ -23,7 +23,7 @@ tool that copies topics between providers. One Maven reactor, group `io.descoped
 
 Until 2026-11 every module was a repository of its own; their histories were imported here with `git filter-repo`
 (old tags prefixed with the module name, e.g. `rawdata-client-api/2.0.0`). 3.0.0 is the first version built from
-this repository, and the work toward it is under way module by module.
+this repository.
 
 ## Invariants (never violate)
 

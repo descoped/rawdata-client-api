@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0 (unreleased)
+## 3.0.0
 
 A clean break from 2.x: the modules now live in one repository and are released together; ids, the reading API,
 storage layouts and some configuration changed. 3.0 does not read data written by 2.x, and there is no migration
