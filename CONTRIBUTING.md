@@ -61,7 +61,7 @@ suites, coverage (`-P coverage`) and the IDE setup.
 - **Owner decisions the code keeps:** one process writes a topic; consumers are pulled, with no reactive streams;
   ids are UUIDv7 ordered by `RawdataIds.ORDER`, never by `UUID.compareTo`; topic names are validated and never
   spliced into SQL, file paths or object names.
-- **3.0.0 is a clean break from 2.x.** No compatibility shims, deprecated aliases or migration code.
+- **No backward compatibility with 2.x.** No compatibility shims, deprecated aliases or migration code.
 - **Remove what is outdated.** Old code and configuration is removed, not carried along.
 
 ## Tests
@@ -95,8 +95,8 @@ add a library.
 - Update the docs in the same pull request as the code: the module's page in [`docs/modules/`](docs/modules), and
   [concepts](docs/concepts.md), [the contract](docs/contract.md) or [the tutorial](docs/tutorial.md) when what an
   application sees changes.
-- Add a line to the `3.0.0 (unreleased)` section, or the next unreleased section, of the [CHANGELOG](CHANGELOG.md)
-  for every change an application or a contributor notices.
+- Add a line to the unreleased section at the top of the [CHANGELOG](CHANGELOG.md) for every change an
+  application or a contributor notices.
 - Write as the existing docs do: plain, direct English, short sentences, Markdown wrapped at 120 characters, headings
   in sentence case. Every claim must be true of the code.
 

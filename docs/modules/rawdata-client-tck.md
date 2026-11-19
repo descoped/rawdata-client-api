@@ -22,7 +22,7 @@ the provider service and `AvroStore`, is [Writing a provider](../writing-a-provi
 |---|---|
 | groupId | `io.descoped.rawdata` |
 | artifactId | `rawdata-client-tck` |
-| version | managed by `rawdata-client-bom` (3.0.0 and later) |
+| version | managed by `rawdata-client-bom` |
 | JPMS module | `io.descoped.rawdata.tck` (an `open` module) |
 | Scope | `test`: it is a test library |
 

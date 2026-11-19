@@ -29,10 +29,6 @@ You need:
 - **JDK 17 or newer.** `java -version` should print 17 or higher.
 - **Maven 3.9 or newer.** `mvn -version` should print it, and the JDK above.
 
-**Version 3.0.0 is not released yet**, and snapshots are never published. Until it is, build the rawdata client
-yourself and use its snapshot version: clone the repository, run `./mvnw install -DskipTests` in it, and set
-`rawdata.version` to `3.0.0-SNAPSHOT` in the POM below.
-
 ## Step 1: create the project
 
 Make an empty folder, for example `rawdata-tutorial`, and work in it for the rest of the tutorial.
