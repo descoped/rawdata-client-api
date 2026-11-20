@@ -52,7 +52,7 @@ echo "== stores"
 containers=()
 cleanup() { [ ${#containers[@]} -eq 0 ] || docker rm -f "${containers[@]}" > /dev/null; }
 trap cleanup EXIT
-postgres="$(docker run -d -p 127.0.0.1::5432 -e POSTGRES_USER=rdc -e POSTGRES_PASSWORD=rdc -e POSTGRES_DB=rdc postgres:18-alpine)"
+postgres="$(docker run -d -p 127.0.0.1::5432 -e POSTGRES_USER=rdc -e POSTGRES_PASSWORD=rdc -e POSTGRES_DB=rdc postgres:19-alpine)"
 containers+=("$postgres")
 gcs="$(docker run -d -p 127.0.0.1::4443 fsouza/fake-gcs-server:1.56.1 -scheme http -port 4443 -backend memory)"
 containers+=("$gcs")
